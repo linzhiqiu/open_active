@@ -28,8 +28,8 @@ class Trainer(object):
         self.trainer_machine = self._init_trainer_machine()
         self.label_picker = self._init_label_picker()
         
-    def train_new_round(self, s_train):
-        self.trainer_machine.train_new_round(s_train)
+    def train_new_round(self, s_train, seen_classes):
+        self.trainer_machine.train_new_round(s_train, seen_classes)
 
     def select_new_data(self, s_train, seen_classes):
         return self.label_picker.select_new_data(s_train, seen_classes)
@@ -58,8 +58,7 @@ class Trainer(object):
             trainer_machine_class = Network
         else:
             raise NotImplementedError()
-        return trainer_machine_class(self,
-                                     self.config,
+        return trainer_machine_class(self.config,
                                      self.train_instance)
 
     def _init_label_picker(self):
@@ -67,7 +66,6 @@ class Trainer(object):
             label_picker_class = UncertaintyMeasure
         else:
             raise NotImplementedError()
-        return label_picker_class(self,
-                                  self.config,
+        return label_picker_class(self.config,
                                   self.train_instance,
                                   self.trainer_machine)

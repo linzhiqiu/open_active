@@ -1,4 +1,6 @@
 import os
+import torch
+from torch.utils.data import DataLoader
 
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
@@ -20,5 +22,37 @@ def save_checkpoint(ckpt_dir, checkpoint, epoch=0):
                                                               epoch)
                ))
 
+def get_subset_dataloaders(dataset, samples, target_transform, batch_size, workers=0, shuffle=True):
+    """ Return a dict of dataloaders. Key 'train' refers
+    to the train set loader
+    """
+    dataloaders = {}
+    train_subset = torch.utils.data.Subset(dataset, samples)
+    train_subset.dataset.target_transform = target_transform
+    train_loader = DataLoader(
+                       train_subset,
+                       batch_size=batch_size,
+                       shuffle=shuffle,
+                       num_workers=workers,
+                       pin_memory=True,
+                   )
+    dataloaders['train'] = train_loader
+    return dataloaders
+
+def get_test_loader(dataset, target_transform, batch_size, workers=0):
+    """ Return a dict of dataloaders. Key 'train' refers
+    to the train set loader
+    """
+    dataset.target_transform = target_transform
+    test_loader = DataLoader(
+                      dataset,
+                      batch_size=batch_size,
+                      shuffle=False,
+                      num_workers=workers,
+                      pin_memory=True,
+                  )
+    return test_loader
+
 def get_experiment_name(config):
-    raise NotImplementedError()
+    import pdb; pdb.set_trace()  # breakpoint 3217d269 //
+    return "test_run"
