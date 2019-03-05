@@ -17,7 +17,7 @@ INIT_TRAIN_SET_CONFIG = {
     'CIFAR100' : {
         'default' : {
             'num_classes' : 50,
-            'sample_per_class' : 12,
+            'sample_per_class' : 10,
             'use_random_classes' : False
         }
     }
@@ -26,8 +26,9 @@ INIT_TRAIN_SET_CONFIG = {
 def get_dataset_factory(data, data_path, init_mode):
     return DatasetFactory(data, data_path, init_mode)
 
-class DatasetFactory():
+class DatasetFactory(object):
     def __init__(self, data, data_path, init_mode):
+        super(DatasetFactory, self).__init__()
         self.data = data
         self.data_path = data_path
         self.init_mode = init_mode
