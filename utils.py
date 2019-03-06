@@ -1,6 +1,20 @@
-import os
+import os, sys
 import torch
 from torch.utils.data import DataLoader
+
+class SetPrintMode:
+    def __init__(self, hidden=False):
+        self.hidden = hidden
+
+    def __enter__(self):
+        if self.hidden:
+            self._original_stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        if self.hidden:
+            sys.stdout = self._original_stdout
 
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
@@ -54,5 +68,26 @@ def get_test_loader(dataset, target_transform, batch_size, workers=0):
     return test_loader
 
 def get_experiment_name(config):
-    import pdb; pdb.set_trace()  # breakpoint 3217d269 //
-    return "test_run"
+    name = [config.data]
+    name += ['rounds', str(config.max_rounds), 'budget', str(config.budget), 'init', config.init_mode]
+    name += [config.label_picker]
+
+    if config.label_picker == "uncertainty_measure":
+        name += [config.uncertainty_measure]
+    else:
+        raise NotImplementedError()
+
+    name += ['baseline', config.trainer]
+    name += [config.arch, 'pretrained', str(config.pretrained)]
+    name += ["lr", str(config.lr), config.optim, "mt", str(config.momentum), "wd", str(config.wd)]
+    name += ["epoch", str(config.epochs), "batch", str(config.batch)]
+    if config.lr_decay_step != None:
+        name += ['lrdecay', str(config.lr_decay_ratio), 'per', str(config.lr_decay_step)]
+
+    if config.trainer == "network":
+        name += ['openset_softmax', config.network_eval_mode, str(config.network_eval_threshold)]
+    else:
+        raise NotImplementedError()
+    name = "_".join(name)
+
+    return name

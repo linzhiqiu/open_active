@@ -10,11 +10,11 @@ from collections import OrderedDict
 from tqdm import tqdm
 
 import models
-from utils import get_subset_dataloaders, get_test_loader
+from utils import get_subset_dataloaders, get_test_loader, SetPrintMode
 
 PRETRAINED_MODEL_PATH = {
-    'cifar10' : {
-        'ResNet50' : "", # ?
+    'CIFAR10' : {
+        'ResNet50' : "./downloaded_models/resnet101/ckpt.t7", # Run pytorch_cifar.py for 200 epochs
     }
 }
 
@@ -79,127 +79,143 @@ class Network(TrainerMachine):
 
     def train_new_round(self, s_train, seen_classes, start_epoch=0):
         self._train_mode()
+        with SetPrintMode(hidden=not self.config.verbose):
+            target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                          seen_classes)
+            
+            dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                 list(s_train),
+                                                 target_mapping_func,
+                                                 batch_size=self.config.batch,
+                                                 workers=self.config.workers)
+            
+            self._update_fc_layer(len(seen_classes))
+            self.optimizer = self._get_network_optimizer()
+            self.scheduler = self._get_network_scheduler()
 
-        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                      seen_classes)
-        
-        dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                             s_train,
-                                             target_mapping_func,
-                                             batch_size=self.config.batch,
-                                             workers=self.config.workers)
-        
-        self._update_fc_layer(len(seen_classes))
+            criterion = nn.CrossEntropyLoss()
+            avg_loss = 0.
+            avg_acc = 0.
 
-        criterion = nn.CrossEntropyLoss()
+            for epoch in range(start_epoch, self.max_epochs):
+                print('Epoch {}/{}'.format(epoch, self.max_epochs - 1))
+                print('-' * 10)
 
-        for epoch in range(start_epoch, self.max_epochs):
-            print('Epoch {}/{}'.format(epoch, self.max_epochs - 1))
-            print('-' * 10)
+                for phase in dataloaders.keys():
+                    if phase == "train":
+                        self.scheduler.step()
+                        self.model.train()
+                    else:
+                        self.model.eval()
 
-            for phase in dataloaders.keys():
-                if phase == "train":
-                    self.scheduler.step()
-                    self.model.train()
-                else:
-                    self.model.eval()
+                    running_loss = 0.0
+                    running_corrects = 0.
+                    count = 0
 
-                running_loss = 0.0
-                running_corrects = 0.
-                count = 0
+                    if self.config.verbose:
+                        pbar = tqdm(dataloaders[phase], ncols=80)
+                    else:
+                        pbar = dataloaders[phase]
 
-                pbar = tqdm(dataloaders[phase], ncols=80)
+                    for batch, data in enumerate(pbar):
+                        inputs, labels = data
+                        count += inputs.size(0)
+                        
+                        inputs = inputs.to(self.device)
+                        labels = labels.to(self.device)
 
+                        self.optimizer.zero_grad()
+
+                        with torch.set_grad_enabled(phase == 'train'):
+                            outputs = self.model(inputs)
+                            _, preds = torch.max(outputs, 1)
+                            loss = criterion(outputs, labels)
+
+                            if phase == 'train':
+                                loss.backward()
+                                self.optimizer.step()
+
+                        # statistics
+                        running_loss += loss.item() * inputs.size(0)
+                        running_corrects += torch.sum(preds == labels.data)
+                        if self.config.verbose:
+                            pbar.set_postfix(loss=running_loss/count, 
+                                             acc=float(running_corrects)/count)
+
+                    avg_loss = running_loss/count
+                    avg_acc = float(running_corrects)/count
+                    print(f"Epoch {epoch} => "
+                          f"Loss {avg_loss}, Accuracy {avg_acc}")
+                print()
+        print(f"Train => {self.max_epochs} epochs => "
+              f"Loss {avg_loss}, Accuracy {avg_acc}")
+
+    def eval(self, test_dataset, seen_classes):
+        self._eval_mode()
+        with SetPrintMode(hidden=not self.config.verbose):
+            target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                          seen_classes)
+            dataloader = get_test_loader(test_dataset,
+                                         target_mapping_func,
+                                         batch_size=self.config.batch,
+                                         workers=self.config.workers)
+            # running_loss = 0.0
+
+            open_set_criterion = self._get_open_set_crit_func()
+            open_set_prediction = self._get_open_set_pred_func()
+
+            if self.config.verbose:
+                pbar = tqdm(dataloader, ncols=80)
+            else:
+                pbar = dataloader
+
+            performance_dict = {'acc' : {'corrects' : 0., 'count' : 0.},
+                                'open_acc' : {'corrects' : 0., 'count' : 0.},
+                                'mult_acc' : {'corrects' : 0., 'count' : 0.}}
+
+            with torch.no_grad():
                 for batch, data in enumerate(pbar):
                     inputs, labels = data
-                    count += inputs.size(0)
+                    performance_dict['acc']['count'] += inputs.size(0)
                     
                     inputs = inputs.to(self.device)
                     labels = labels.to(self.device)
 
-                    self.optimizer.zero_grad()
-
-                    with torch.set_grad_enabled(phase == 'train'):
-                        outputs = self.model(inputs)
-                        _, preds = torch.max(outputs, 1)
-                        loss = criterion(outputs, labels)
-
-                        if phase == 'train':
-                            loss.backward()
-                            self.optimizer.step()
+                    outputs = self.model(inputs)
+                    preds = open_set_prediction(outputs)
+                    # loss = open_set_criterion(outputs, labels)
 
                     # statistics
-                    running_loss += loss.item() * inputs.size(0)
-                    running_corrects += torch.sum(preds == labels.data)
-                    pbar.set_postfix(loss=running_loss/count, 
-                                     acc=float(running_corrects)/count)
+                    # running_loss += loss.item() * inputs.size(0)
+                    performance_dict['acc']['corrects'] += torch.sum(preds == labels.data)
+                    open_indices = labels == -1
+                    mult_indices = labels > -1
+                    performance_dict['open_acc']['count'] += float(torch.sum(open_indices))
+                    performance_dict['mult_acc']['count'] += float(torch.sum(mult_indices))
+                    performance_dict['open_acc']['corrects'] = torch.sum(
+                                                                   torch.masked_select(
+                                                                       (preds==labels.data),
+                                                                       open_indices
+                                                                   )
+                                                               ).float()
+                    performance_dict['mult_acc']['corrects'] = torch.sum(
+                                                                   torch.masked_select(
+                                                                       (preds==labels.data),
+                                                                       mult_indices
+                                                                   )
+                                                               ).float()
 
-                print(f"Epoch {epoch} => "
-                      f"Loss {running_loss/count}, Accuracy {float(running_corrects)/count}")
+                    batch_result = get_acc_from_performance_dict(performance_dict)
+                    if self.config.verbose:
+                        pbar.set_postfix(batch_result)
 
-            print()
-
-    def eval(self, test_dataset, seen_classes):
-        self._eval_mode()
-        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                      seen_classes)
-        dataloader = get_test_loader(test_dataset,
-                                     target_mapping_func,
-                                     batch_size=self.config.batch,
-                                     workers=self.config.workers)
-        # running_loss = 0.0
-        running_corrects = 0.
-        count = 0
-        mult_count = 0
-        mult_corrects = 0.
-        open_count = 0
-        open_corrects = 0.
-
-        open_set_criterion = self._get_open_set_crit_func()
-        open_set_prediction = self._get_open_set_pred_func()
-
-        pbar = tqdm(dataloader, ncols=80)
-
-        with torch.no_grad():
-            for batch, data in enumerate(pbar):
-                inputs, labels = data
-                count += inputs.size(0)
-                
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-
-                outputs = self.model(inputs)
-                preds = open_set_prediction(outputs)
-                # loss = open_set_criterion(outputs, labels)
-
-                # statistics
-                # running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-                open_indices = labels == -1
-                mult_indices = labels > -1
-                open_count += float(torch.sum(open_indices))
-                mult_count += float(torch.sum(mult_indices))
-                open_corrects = torch.sum(
-                                    torch.masked_select(
-                                        (preds==labels.data),
-                                        open_indices
-                                    )
-                                ).float()
-                mult_corrects = torch.sum(
-                                    torch.masked_select(
-                                        (preds==labels.data),
-                                        mult_indices
-                                    )
-                                ).float()
-                pbar.set_postfix(acc=float(running_corrects/count),
-                                 open_acc=float(open_corrects/open_count),
-                                 mult_acc=float(mult_corrects/mult_count))
-
-            multi_class_acc = float(mult_corrects/mult_count)
-            open_set_acc = float(open_corrects/open_count)
-            print(f"Test => "
-                  f"Accuracy {float(running_corrects)/count}, "
-                  f"Open-S Acc {open_set_acc}, Mul-C Acc {multi_class_acc}")
+                epoch_result = get_acc_from_performance_dict(performance_dict)
+                acc = epoch_result['acc']
+                multi_class_acc = epoch_result['mult_acc']
+                open_set_acc = epoch_result['open_acc']
+        print(f"Test => "
+              f"Overall Acc {acc}, "
+              f"Open-S Acc {open_set_acc}, Mul-C Acc {multi_class_acc}")
         return multi_class_acc, open_set_acc
 
     def _get_open_set_pred_func(self):
@@ -245,25 +261,36 @@ class Network(TrainerMachine):
         """ Get the regular softmax network model
         """
         model = getattr(models, self.config.arch)()
-        if self.config.pretrained == 'cifar10':
+        if self.config.pretrained != None:
+            state_dict = self._get_pretrained_model_state_dict()
+            model.load_state_dict(state_dict)
+            del state_dict
+        else:
+            print("Using random initialized model")
+        return model.to(self.device)
+
+    def _get_pretrained_model_state_dict(self):
+        if self.config.pretrained == 'CIFAR10':
             if self.config.arch == 'ResNet50':
-                print("Use pretrained ResNet50 model trained on cifar10 that achieved ? error rate")
+                print("Use pretrained ResNet50 model trained on cifar10 that achieved .86 acc")
+                state_dict = torch.load(
+                    PRETRAINED_MODEL_PATH[self.config.pretrained][self.config.arch]
+                )['net']
+                new_state_dict = OrderedDict()
+                for k, v in state_dict.items():
+                    if 'module.' == k[:7]:
+                        name = k[7:] # remove `module.`
+                    else:
+                        name = k
+                    if "linear." == name[:7]:
+                        name = "fc." + name[7:]
+                    new_state_dict[name] = v
+                del state_dict
+                return new_state_dict
             else:
                 raise ValueError("Pretrained Model not prepared")
-            import pdb; pdb.set_trace()  # breakpoint e400f66d //
-            # state_dict = torch.load(
-            #                  PRETRAINED_MODEL_PATH[self.config.pretrained][self.config.arch]
-            #              )['state_dict']
-
-            # # load params
-            # model.load_state_dict(
-            #     state_dict
-            # )
-            # del state_dict
-            print("Need to adjust the final layer size")
         else:
-            raise ValueError("Random initialized model not supported")
-        return model.to(self.device)
+            raise ValueError("Pretrained Model not prepared")
         
     def _get_network_optimizer(self):
         """ Get softmax network optimizer
@@ -313,10 +340,11 @@ class Network(TrainerMachine):
         else:
             raise NotImplementedError()
 
-
-
-# model.load_state_dict(checkpoint['state_dict'], strict=False)
-#         optimizer.load_state_dict(checkpoint['optimizer'])
-#         scheduler.load_state_dict(checkpoint['scheduler'])
-#         print("=> loaded checkpoint '{}' (round {})"
-#               .format(config.resume, checkpoint['round']))
+def get_acc_from_performance_dict(dict):
+    result_dict = {}
+    for k in dict.keys():
+        if dict[k]['count'] == 0:
+            result_dict[k] = "N/A"
+        else:
+            result_dict[k] = float(dict[k]['corrects']/dict[k]['count'])
+    return result_dict

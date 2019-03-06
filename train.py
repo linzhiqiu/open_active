@@ -29,7 +29,7 @@ def main():
                           train_samples, 
                           train_labels, 
                           classes)
-
+    
     if not config.resume:
         # Begin from scratch
         start_round = 0
@@ -40,10 +40,11 @@ def main():
         ckpt_dir = os.path.join(config.ckpt_dir, log_name)
         utils.makedirs(ckpt_dir)
 
+        writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
         # logger save all performance data, and write to tensorboard every epoch/round
         logger = get_logger(log_name=log_name,
                             ckpt_dir=ckpt_dir,
-                            writer=SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir)))
+                            writer=writer)
         
         logger.init_round(s_train, seen_classes)
 
@@ -65,18 +66,29 @@ def main():
 
         log_name, ckpt_dir = checkpoint['log_name'], checkpoint['ckpt_dir']
 
+        writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
         logger.load_checkpoint(checkpoint['logger_checkpoint'])
+
         
     # The main loop
     for round_i in range(start_round, config.max_rounds):
         trainer.train_new_round(s_train, seen_classes)
 
         multi_class_acc, open_set_acc = trainer.eval(test_dataset, seen_classes)
-
+        
+        
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
-        import pdb; pdb.set_trace()  # breakpoint 84d6fcd2 //
 
-        seen_classes = seen_classes.union(t_classes)
+
+        new_seen_classes = seen_classes.union(t_classes)
+        classes_diff = new_seen_classes.difference(seen_classes)
+        seen_classes = new_seen_classes
+        
+        print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
+        writer.add_scalar("/multi_class_acc", multi_class_acc, round_i)
+        writer.add_scalar("/open_set_acc", open_set_acc, round_i)
+        writer.add_scalar("/seen_classes", len(seen_classes), round_i)
+        
         assert len(set(s_train)) == len(s_train)
         assert len(set(t_train)) == len(t_train)
         s_train = set(s_train).union(set(t_train))

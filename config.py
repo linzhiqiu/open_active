@@ -72,10 +72,10 @@ training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
                           choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50'], default='ResNet50',
                           help='CNN architecture (default: ResNet50)')
 training_arg.add_argument('--pretrained',
-                          choices=[None, 'cifar10'],
-                          default='cifar10',
+                          choices=[None, 'CIFAR10'],
+                          default=None,
                           help='Whether the model is pretrained.')
-training_arg.add_argument('--lr', default=0.01, type=float,
+training_arg.add_argument('--lr', default=0.1, type=float,
                           help='learning rate (default: 0.01)')
 training_arg.add_argument('--optim', default="sgd", choices=["sgd", "adam"], type=str,
                           help='optimizer (default: sgd)')
@@ -93,12 +93,12 @@ training_arg.add_argument("--amsgrad",
 #                           help="Whether to shuffle the dataset each epoch")
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')
-training_arg.add_argument('--epochs', type=int, default=10,
-                          help='number of total epochs to run (default: 10)')
+training_arg.add_argument('--epochs', type=int, default=50,
+                          help='number of total epochs to run (default: 50)')
 training_arg.add_argument('--start_epoch', default=0, type=int,
                           help='manual epoch number (useful on restarts) (default: 0)')
-training_arg.add_argument('--batch', default=256, type=int,
-                          help='mini-batch size (default: 256)')
+training_arg.add_argument('--batch', default=128, type=int,
+                          help='mini-batch size (default: 128)')
 training_arg.add_argument("--lr_decay_step", type=int, default=None,
                           nargs="+",
                           help="After [lr_decay_step] epochs, decay the learning rate by [lr_decay_ratio].")
@@ -113,7 +113,7 @@ training_arg.add_argument('--resume', default='', type=str, metavar='PATH',
 open_act_arg = add_argument_group('Open Active Learning Param.')
 # Should be different according to datasets
 open_act_arg.add_argument('--max_rounds',
-                          default=5,
+                          default=50,
                           type=int,
                           help='The number of rounds to play.')
 open_act_arg.add_argument('--budget',
@@ -136,7 +136,8 @@ exp_vs_acc_arg.add_argument('--label_picker',
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
 uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                       default='least_confident',
-                                      choices=['least_confident', 
+                                      choices=['least_confident',
+                                               'most_confident', 
                                                'margin_sampling',
                                                'entropy'],
                                       )
@@ -152,7 +153,7 @@ misc_arg.add_argument('--logs_dir', type=str, default='./logs/',
                       help='Directory to store Tensorboard logs')
 misc_arg.add_argument('--debug', action="store_true",
                       help="Whether to use the debug mode")
-misc_arg.add_argument('--verbose', action='store_true', default=True, 
+misc_arg.add_argument('--verbose', action='store_true', default=False, 
                       help='chatty')
 
 

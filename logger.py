@@ -39,6 +39,5 @@ class Logger(object):
         self.open_acc.append(open_set_acc)
 
     def finish(self):
-        import pdb; pdb.set_trace()  # breakpoint c5717a8d //
         pass
         

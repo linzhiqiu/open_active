@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
+import sys
 import trainer_machine
 from utils import get_subset_dataloaders
 
@@ -29,18 +30,16 @@ def least_confident(outputs):
     score, _ = torch.max(softmax_outputs, 1)
     return score
 
+def most_confident(outputs):
+    softmax_outputs = F.softmax(outputs, dim=1)
+    score, _ = torch.max(softmax_outputs, 1)
+    return -score
+
 class UncertaintyMeasure(LabelPicker):
     def __init__(self, *args, **kwargs):
         super(UncertaintyMeasure, self).__init__(*args, **kwargs)
         assert self.config.label_picker == 'uncertainty_measure'
-        if self.config.uncertainty_measure == 'least_confident':
-            self.measure_func = least_confident
-        elif self.config.uncertainty_measure == 'margin_sampling':
-            raise NotImplementedError()
-        elif self.config.uncertainty_measure == 'entropy':
-            raise NotImplementedError()
-        else:
-            raise NotImplementedError()
+        self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
 
     def get_checkpoint(self):
         # TODO: Add something meaningful
@@ -90,4 +89,7 @@ class UncertaintyMeasure(LabelPicker):
             return t_train, t_classes
         else:
             raise NotImplementedError()
+
+if __name__ == '__main__':
+    import pdb; pdb.set_trace()  # breakpoint a576792d //
 
