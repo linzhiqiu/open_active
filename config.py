@@ -113,11 +113,11 @@ training_arg.add_argument('--resume', default='', type=str, metavar='PATH',
 open_act_arg = add_argument_group('Open Active Learning Param.')
 # Should be different according to datasets
 open_act_arg.add_argument('--max_rounds',
-                          default=50,
+                          default=500,
                           type=int,
                           help='The number of rounds to play.')
 open_act_arg.add_argument('--budget',
-                          default=500,
+                          default=20,
                           type=int,
                           help='The budget constraint for each round.')
 

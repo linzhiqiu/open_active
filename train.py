@@ -86,7 +86,8 @@ def main():
         
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
         writer.add_scalar("/multi_class_acc", multi_class_acc, round_i)
-        writer.add_scalar("/open_set_acc", open_set_acc, round_i)
+        if isinstance(open_set_acc, float):
+            writer.add_scalar("/open_set_acc", open_set_acc, round_i)
         writer.add_scalar("/seen_classes", len(seen_classes), round_i)
         
         assert len(set(s_train)) == len(s_train)

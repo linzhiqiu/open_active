@@ -12,8 +12,8 @@ class SetPrintMode:
             sys.stdout = open(os.devnull, 'w')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
         if self.hidden:
+            sys.stdout.close()
             sys.stdout = self._original_stdout
 
 def makedirs(dir_name):

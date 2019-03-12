@@ -192,18 +192,18 @@ class Network(TrainerMachine):
                     mult_indices = labels > -1
                     performance_dict['open_acc']['count'] += float(torch.sum(open_indices))
                     performance_dict['mult_acc']['count'] += float(torch.sum(mult_indices))
-                    performance_dict['open_acc']['corrects'] = torch.sum(
-                                                                   torch.masked_select(
-                                                                       (preds==labels.data),
-                                                                       open_indices
-                                                                   )
-                                                               ).float()
-                    performance_dict['mult_acc']['corrects'] = torch.sum(
-                                                                   torch.masked_select(
-                                                                       (preds==labels.data),
-                                                                       mult_indices
-                                                                   )
-                                                               ).float()
+                    performance_dict['open_acc']['corrects'] += torch.sum(
+                                                                    torch.masked_select(
+                                                                        (preds==labels.data),
+                                                                        open_indices
+                                                                    )
+                                                                ).float()
+                    performance_dict['mult_acc']['corrects'] += torch.sum(
+                                                                    torch.masked_select(
+                                                                        (preds==labels.data),
+                                                                        mult_indices
+                                                                    )
+                                                                ).float()
 
                     batch_result = get_acc_from_performance_dict(performance_dict)
                     if self.config.verbose:
