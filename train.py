@@ -23,7 +23,7 @@ def main():
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
     
-    # contains train() eval() load_checkpoint() functions
+    # trainer contains train() eval() load_checkpoint() functions
     trainer = get_trainer(config, 
                           train_dataset, 
                           train_samples, 
@@ -64,27 +64,36 @@ def main():
 
         trainer.load_checkpoint(checkpoint['trainer_checkpoint'])
 
-        log_name, ckpt_dir = checkpoint['log_name'], checkpoint['ckpt_dir']
+        log_name = checkpoint['logger_checkpoint']['log_name']
+        ckpt_dir = checkpoint['logger_checkpoint']['ckpt_dir']
 
         writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
+        logger = get_logger(log_name=log_name,
+                            ckpt_dir=ckpt_dir,
+                            writer=writer)
         logger.load_checkpoint(checkpoint['logger_checkpoint'])
 
         
     # The main loop
     for round_i in range(start_round, config.max_rounds):
-        trainer.train_new_round(s_train, seen_classes)
-
-        multi_class_acc, open_set_acc = trainer.eval(test_dataset, seen_classes)
+        print(f"Round [{round_i}]")
         
+        train_loss, train_acc = trainer.train_new_round(s_train, seen_classes)
+        print(f"Train => {round_i} round => "
+              f"Loss {train_loss}, Accuracy {train_acc}")
+        writer.add_scalar("/train_acc", train_acc, round_i)
+
+        overall_acc, multi_class_acc, open_set_acc = trainer.eval(test_dataset, seen_classes)
         
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
-
 
         new_seen_classes = seen_classes.union(t_classes)
         classes_diff = new_seen_classes.difference(seen_classes)
         seen_classes = new_seen_classes
         
+
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
+        writer.add_scalar("/overall_acc", overall_acc, round_i)
         writer.add_scalar("/multi_class_acc", multi_class_acc, round_i)
         if isinstance(open_set_acc, float):
             writer.add_scalar("/open_set_acc", open_set_acc, round_i)

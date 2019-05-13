@@ -1,4 +1,4 @@
-from trainer_machine import Network
+from trainer_machine import Network, OSDNNetwork, OSDNNetworkModified
 from label_picker import UncertaintyMeasure
 
 def get_trainer(config, train_dataset, train_samples, train_labels, classes):
@@ -29,7 +29,7 @@ class Trainer(object):
         self.label_picker = self._init_label_picker()
         
     def train_new_round(self, s_train, seen_classes):
-        self.trainer_machine.train_new_round(s_train, seen_classes)
+        return self.trainer_machine.train_new_round(s_train, seen_classes)
 
     def select_new_data(self, s_train, seen_classes):
         return self.label_picker.select_new_data(s_train, seen_classes)
@@ -56,14 +56,21 @@ class Trainer(object):
         """
         if self.config.trainer == 'network':
             trainer_machine_class = Network
+        elif self.config.trainer == 'osdn':
+            trainer_machine_class = OSDNNetwork
+        elif self.config.trainer == 'osdn_modified':
+            trainer_machine_class = OSDNNetworkModified
         else:
             raise NotImplementedError()
         return trainer_machine_class(self.config,
                                      self.train_instance)
 
     def _init_label_picker(self):
-        if self.config.label_picker == 'uncertainty_measure':
-            label_picker_class = UncertaintyMeasure
+        if self.config.trainer in ['network', 'osdn', 'osdn_modified']:
+            if self.config.label_picker == 'uncertainty_measure':
+                label_picker_class = UncertaintyMeasure
+            else:
+                raise NotImplementedError()
         else:
             raise NotImplementedError()
         return label_picker_class(self.config,

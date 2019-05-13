@@ -54,8 +54,7 @@ def get_subset_dataloaders(dataset, samples, target_transform, batch_size, worke
     return dataloaders
 
 def get_test_loader(dataset, target_transform, batch_size, workers=0):
-    """ Return a dict of dataloaders. Key 'train' refers
-    to the train set loader
+    """ Return test loader
     """
     dataset.target_transform = target_transform
     test_loader = DataLoader(
@@ -83,9 +82,17 @@ def get_experiment_name(config):
     name += ["epoch", str(config.epochs), "batch", str(config.batch)]
     if config.lr_decay_step != None:
         name += ['lrdecay', str(config.lr_decay_ratio), 'per', str(config.lr_decay_step)]
-
+    
+    name += os.sep
     if config.trainer == "network":
         name += ['openset_softmax', config.network_eval_mode, str(config.network_eval_threshold)]
+    elif config.trainer in ['osdn','osdn_modified']:
+        name += ['osdn_openmax' if not config.trainer == 'osdn_modified' else 'osdn_modified', 
+                 "distance", config.distance_metric,
+                 "threshold", str(config.osdn_eval_threshold),
+                 "alpha", config.alpha_rank,
+                 "tailsize", config.weibull_tail_size,
+                 'mav', config.mav_features_selection]
     else:
         raise NotImplementedError()
     name = "_".join(name)

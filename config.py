@@ -52,19 +52,54 @@ preprocess_arg.add_argument('--random_flip',
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
-                          choices=['network', 'open_set_network'],
+                          choices=['network', 'osdn', # Open Set Deep Network
+                                   'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
+                          ],
                           )
 
 network_args = add_argument_group('Network Trainer Machine Param.')
 network_args.add_argument('--network_eval_mode',
                           default='threshold',
-                          choices=['threshold'],
+                          choices=['threshold',
+                                   'dynamic_threshold', # dynamic threshold adjust the open set threshold based on information of new instances
+                                  ],
                           help='How to perform open set recognition with Network Trainer'
                           )
 network_args.add_argument('--network_eval_threshold',
                           default=0.5,
                           type=float,
                           help='If max class probility < threshold, then classify to unseen class')
+
+osdn_args = add_argument_group('OSDN Trainer Machine Param.')
+osdn_args.add_argument('--distance_metric',
+                       default='eucos',
+                       choices=['eu', 'cos', 'eucos'],
+                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by 200.'
+                       )
+osdn_args.add_argument('--weibull_tail_size',
+                       default='fixed_20',
+                       choices=['fixed_20'],
+                       help='How to fit the weibull distribution. Default is using the largest 20 (or fewer) per category, as in official OSDN repo.'
+                       )
+osdn_args.add_argument('--alpha_rank',
+                       default='fixed_10',
+                       choices=['fixed_10','fixed_20', 'fixed_40'],
+                       help='The alpha rank. Default is using the largest 10 (or fewer) per category as in official OSDN repo.'
+                       )
+osdn_args.add_argument('--osdn_eval_threshold',
+                       default=0.5,
+                       type=float,
+                       help='(OSDN setting) If max class probability < threshold, then classify new example to unseen class')
+osdn_args.add_argument('--mav_features_selection',
+                       default='correct',
+                       choices=['correct', 'all', 'none_correct_then_all'],
+                       help='Determine how features are selected to generate the mean activation vector.')
+# osdn_args.add_argument('--osdn_eval_mode',
+#                        default='threshold',
+#                        choices=['threshold'],
+#                        help='How to perform open set recognition with Network Trainer'
+#                        )
+
 
 
 training_arg = add_argument_group('Network Training Param.')
@@ -141,7 +176,6 @@ uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                                'margin_sampling',
                                                'entropy'],
                                       )
-
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--device', type=str, default='cuda',
                       help='Which device to use.')
@@ -155,7 +189,6 @@ misc_arg.add_argument('--debug', action="store_true",
                       help="Whether to use the debug mode")
 misc_arg.add_argument('--verbose', action='store_true', default=False, 
                       help='chatty')
-
 
 def get_config():
     config, unparsed = parser.parse_known_args()

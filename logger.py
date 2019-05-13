@@ -25,6 +25,15 @@ class Logger(object):
                 'multi_class_acc' : self.mult_acc,
                 'open_set_acc' : self.open_acc}
 
+    def load_checkpoint(self, checkpoint):
+        self.log_name = checkpoint['log_name']
+        self.ckpt_dir = checkpoint['ckpt_dir']
+        self.round = checkpoint['round']
+        self.s_train = checkpoint['s_train']
+        self.seen_classes = checkpoint['seen_classes']
+        self.multi_class_acc = checkpoint['multi_class_acc']
+        self.open_set_acc = checkpoint['open_set_acc']
+
     def init_round(self, s_train, seen_classes):
         """ Initialize 
         """
