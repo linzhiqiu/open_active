@@ -70,6 +70,9 @@ def most_confident(outputs):
     score, _ = torch.max(softmax_outputs, 1)
     return -score
 
+def random_query(outputs):
+    return torch.rand(outputs.size(0), device=outputs.device)
+
 class UncertaintyMeasure(LabelPicker):
     def __init__(self, *args, **kwargs):
         super(UncertaintyMeasure, self).__init__(*args, **kwargs)
@@ -78,7 +81,7 @@ class UncertaintyMeasure(LabelPicker):
         if isinstance(self.trainer_machine, trainer_machine.Network):
             self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
         elif isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
-            assert self.config.uncertainty_measure in ['least_confident', 'most_confident']
+            assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query']
             def openmax_measure_func(outputs):
                 openmax_outputs = self.trainer_machine.compute_open_max(outputs)[0]
                 score, _ = torch.max(openmax_outputs, 1)
@@ -86,6 +89,8 @@ class UncertaintyMeasure(LabelPicker):
                     return score
                 elif self.config.uncertainty_measure == 'most_confident':
                     return -score
+                elif self.config.uncertainty_measure == 'random_query':
+                    return torch.rand_like(score, device=score.device)
             self.measure_func = openmax_measure_func
         else:
             raise NotImplementedError()

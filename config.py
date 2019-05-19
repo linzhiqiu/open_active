@@ -83,7 +83,7 @@ osdn_args.add_argument('--weibull_tail_size',
                        )
 osdn_args.add_argument('--alpha_rank',
                        default='fixed_10',
-                       choices=['fixed_10','fixed_20', 'fixed_40'],
+                       choices=['fixed_5', 'fixed_10','fixed_20', 'fixed_40'],
                        help='The alpha rank. Default is using the largest 10 (or fewer) per category as in official OSDN repo.'
                        )
 osdn_args.add_argument('--osdn_eval_threshold',
@@ -172,7 +172,8 @@ uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
 uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                       default='least_confident',
                                       choices=['least_confident',
-                                               'most_confident', 
+                                               'most_confident',
+                                               'random_query',
                                                'margin_sampling',
                                                'entropy'],
                                       )
