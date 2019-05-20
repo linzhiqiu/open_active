@@ -22,11 +22,13 @@ def makedirs(dir_name):
     else:
         print(f"{dir_name} already exists.")
 
-def get_checkpoint(round, s_train, seen_classes, trainer, logger):
+def get_checkpoint(round, s_train, open_examples, seen_classes, open_classes, trainer, logger):
     return {'round' : round,
             'trainer_checkpoint' : trainer.get_checkpoint(),
             's_train' : s_train,
+            'open_examples' : open_examples,
             'seen_classes' : seen_classes,
+            'open_classes' : open_classes,
             'logger_checkpoint' : logger.get_checkpoint()}
 
 def save_checkpoint(ckpt_dir, checkpoint, epoch=0):

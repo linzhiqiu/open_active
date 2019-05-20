@@ -13,7 +13,7 @@ def get_target_unmapping_dict(classes, seen_classes):
             classes: The list of all classes
             seen_classes: The set of all seen classes
     """
-    seen_classes = list(seen_classes)
+    seen_classes = sorted(list(seen_classes))
     mapping = {idx : -1 if idx not in seen_classes else seen_classes.index(idx)
                for idx in classes}
     unmapping = {mapping[true_index] : true_index for true_index in mapping.keys()}
@@ -107,12 +107,12 @@ class UncertaintyMeasure(LabelPicker):
         self.model = self.trainer_machine.model
         self.unmapping = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
 
-        unlabeled_pool = self.train_instance.train_samples.difference(s_train)
+        unlabeled_pool = self.train_instance.query_samples.difference(s_train)
         unlabeled_pool = list(unlabeled_pool)
-        unseen_classes = self.train_instance.classes.difference(seen_classes)
+        unseen_classes = self.train_instance.query_classes.difference(seen_classes)
         if len(unlabeled_pool) < self.config.budget:
             print("Remaining data is fewer than the budget constraint. Label all.")
-            return unlabeled_pool, self.trainer_machine.classes
+            return unlabeled_pool, unseen_classes
 
         dataloader = get_subset_dataloaders(self.train_instance.train_dataset,
                                             unlabeled_pool,

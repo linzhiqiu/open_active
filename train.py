@@ -23,17 +23,18 @@ def main():
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
     
-    # trainer contains train() eval() load_checkpoint() functions
-    trainer = get_trainer(config, 
-                          train_dataset, 
-                          train_samples, 
-                          train_labels, 
-                          classes)
-    
     if not config.resume:
         # Begin from scratch
         start_round = 0
-        s_train, seen_classes = dataset_factory.get_init_train_set() # Get initial training set, seen classes
+        s_train, open_samples, seen_classes, open_classes = dataset_factory.get_init_train_set() # Get initial training set, seen classes
+        # trainer contains train() eval() load_checkpoint() functions
+        trainer = get_trainer(config,
+                              train_dataset, 
+                              train_samples,
+                              open_samples,
+                              train_labels,
+                              classes,
+                              open_classes)
 
         log_name = "{}_{}".format(utils.get_experiment_name(config), 
                                   time.strftime("%Y-%m-%d %H:%M"))
@@ -41,14 +42,15 @@ def main():
         utils.makedirs(ckpt_dir)
 
         writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
+        print(ckpt_dir + os.sep + log_name)
         # logger save all performance data, and write to tensorboard every epoch/round
         logger = get_logger(log_name=log_name,
                             ckpt_dir=ckpt_dir,
                             writer=writer)
         
-        logger.init_round(s_train, seen_classes)
+        logger.init_round(s_train, open_samples, seen_classes, open_classes)
 
-        checkpoint = utils.get_checkpoint(start_round, s_train, seen_classes, trainer, logger)
+        checkpoint = utils.get_checkpoint(start_round, s_train, open_samples, seen_classes, open_classes, trainer, logger)
                     
         utils.save_checkpoint(ckpt_dir, checkpoint)
     else:
@@ -60,7 +62,15 @@ def main():
         checkpoint = torch.load(config.resume)
 
         start_round = checkpoint['round']
-        s_train, seen_classes = checkpoint['s_train'], checkpoint['seen_classes']
+        s_train, open_samples, seen_classes, open_classes = checkpoint['s_train'], checkpoint['open_samples'], checkpoint['seen_classes'], checkpoint['open_classes']
+        # trainer contains train() eval() load_checkpoint() functions
+        trainer = get_trainer(config,
+                              train_dataset,
+                              train_samples,
+                              open_samples,
+                              train_labels,
+                              classes,
+                              open_classes)
 
         trainer.load_checkpoint(checkpoint['trainer_checkpoint'])
 
@@ -83,7 +93,7 @@ def main():
               f"Loss {train_loss}, Accuracy {train_acc}")
         writer.add_scalar("/train_acc", train_acc, round_i)
 
-        overall_acc, multi_class_acc, open_set_acc = trainer.eval(test_dataset, seen_classes)
+        acc_results = trainer.eval(test_dataset, seen_classes)
         
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 
@@ -93,19 +103,18 @@ def main():
         
 
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
-        writer.add_scalar("/overall_acc", overall_acc, round_i)
-        writer.add_scalar("/multi_class_acc", multi_class_acc, round_i)
-        if isinstance(open_set_acc, float):
-            writer.add_scalar("/open_set_acc", open_set_acc, round_i)
+        for acc_key in acc_results.keys():
+            if isinstance(acc_results[acc_key], float):
+                writer.add_scalar("/"+acc_key, acc_results[acc_key], round_i)
         writer.add_scalar("/seen_classes", len(seen_classes), round_i)
         
         assert len(set(s_train)) == len(s_train)
         assert len(set(t_train)) == len(t_train)
         s_train = set(s_train).union(set(t_train))
 
-        logger.log_round(round_i, s_train, seen_classes, multi_class_acc, open_set_acc)
+        logger.log_round(round_i, s_train, seen_classes, acc_results)
         
-        checkpoint = utils.get_checkpoint(round_i, s_train, seen_classes, trainer, logger)
+        checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)
         utils.save_checkpoint(ckpt_dir, checkpoint)
 
     logger.finish()

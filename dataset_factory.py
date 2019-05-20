@@ -16,8 +16,9 @@ SUPPORTED_DATASETS = ['CIFAR10', 'CIFAR100']
 INIT_TRAIN_SET_CONFIG = {
     'CIFAR100' : {
         'default' : {
-            'num_classes' : 50,
-            'sample_per_class' : 10,
+            'num_init_classes' : 40,
+            'sample_per_class' : 12, # initially 40 x 12 = 480 samples
+            'num_open_classes' : 20, # So num_unseen_classes = 100 - 30 - 20 = 50
             'use_random_classes' : False
         }
     }
@@ -50,17 +51,20 @@ class DatasetFactory(object):
         return self.test_samples, self.test_labels, self.classes
 
     def get_init_train_set(self):
+        '''Return s_train (list of sample indices), open_samples (set of sample indices), seen_classes (set), hold_out_open_classes (set)
+        '''
         return select_init_train_set(self.data,
                                      self.init_mode,
                                      self.train_labels,
                                      self.classes)
 
 def select_init_train_set(data, init_mode, labels, classes):
-    """ Returns the initial training set (in indices), and seen classes (set)
+    """ Returns the initial training set (in indices), hold-out open set (in indices), seen classes (set), and hold-out open classes (set)
     """
     assert data in SUPPORTED_DATASETS
     if data == 'CIFAR100':
         init_conf = INIT_TRAIN_SET_CONFIG[data][init_mode]
+        assert len(classes) - init_conf['num_open_classes'] - init_conf['num_init_classes'] >= 0
         class_to_indices = {}
         for class_i in classes:
             class_to_indices[class_i] = []
@@ -68,12 +72,16 @@ def select_init_train_set(data, init_mode, labels, classes):
             class_to_indices[label_i].append(index)
 
         s_train = []
+        open_samples = []
         if init_conf['use_random_classes']:
             raise NotImplementedError()
         else:
-            for class_i in range(init_conf['num_classes']):
+            for class_i in range(init_conf['num_init_classes']):
                 s_train += class_to_indices[class_i][:init_conf['sample_per_class']]
-            return s_train, set(range(init_conf['num_classes']))
+            for open_class_i in range(len(classes))[-init_conf['num_open_classes']:]:
+                open_samples += class_to_indices[open_class_i]
+            assert len(open_samples) == len(set(open_samples))
+            return s_train, set(open_samples), set(range(init_conf['num_init_classes'])), set(range(len(classes))[-init_conf['num_open_classes']:])
     else:
         raise NotImplementedError()
     

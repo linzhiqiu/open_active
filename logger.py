@@ -13,8 +13,7 @@ class Logger(object):
         self.round = 0
         self.s_train = None
         self.seen_classes = None
-        self.mult_acc = []
-        self.open_acc = []
+        self.acc_results_list = []
 
     def get_checkpoint(self):
         return {'log_name' : self.log_name,
@@ -22,8 +21,8 @@ class Logger(object):
                 'round' : self.round,
                 's_train' : self.s_train,
                 'seen_classes' : self.seen_classes,
-                'multi_class_acc' : self.mult_acc,
-                'open_set_acc' : self.open_acc}
+                'open_classes' : self.open_classes,
+                'acc_results_list' : self.acc_results_list}
 
     def load_checkpoint(self, checkpoint):
         self.log_name = checkpoint['log_name']
@@ -31,21 +30,22 @@ class Logger(object):
         self.round = checkpoint['round']
         self.s_train = checkpoint['s_train']
         self.seen_classes = checkpoint['seen_classes']
-        self.multi_class_acc = checkpoint['multi_class_acc']
-        self.open_set_acc = checkpoint['open_set_acc']
+        self.open_classes = checkpoint['open_classes']
+        self.acc_results_list = checkpoint['acc_results_list']
 
-    def init_round(self, s_train, seen_classes):
+    def init_round(self, s_train, open_examples, seen_classes, open_classes):
         """ Initialize 
         """
         self.s_train = s_train
+        self.open_examples = open_examples
         self.seen_classes = seen_classes
+        self.open_classes = open_classes
 
-    def log_round(self, round_i, s_train, seen_classes, multi_class_acc, open_set_acc):
+    def log_round(self, round_i, s_train, seen_classes, acc_results):
         self.round = round_i
         self.s_train = s_train
         self.seen_classes = seen_classes
-        self.mult_acc.append(multi_class_acc)
-        self.open_acc.append(open_set_acc)
+        self.acc_results_list.append(acc_results)
 
     def finish(self):
         pass

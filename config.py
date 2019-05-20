@@ -156,11 +156,11 @@ open_act_arg.add_argument('--budget',
                           type=int,
                           help='The budget constraint for each round.')
 
-init_s_arg = add_argument_group('Initial Training Set Param.')
-init_s_arg.add_argument('--init_mode',
-                        default='default',
-                        choices=['default'],
-                        help="How to select the initial training set")
+setting_arg = add_argument_group('Setting Param.')
+setting_arg.add_argument('--init_mode',
+                         default='default',
+                         choices=['default'],
+                         help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
 exp_vs_acc_arg.add_argument('--label_picker',

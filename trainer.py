@@ -1,29 +1,35 @@
 from trainer_machine import Network, OSDNNetwork, OSDNNetworkModified
 from label_picker import UncertaintyMeasure
 
-def get_trainer(config, train_dataset, train_samples, train_labels, classes):
-    return Trainer(config, train_dataset, train_samples, train_labels, classes)
+def get_trainer(config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
+    return Trainer(config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes)
 
 
 class TrainingInstance(object):
     """ A data class holding all resources for training
     """
-    def __init__(self, train_dataset, train_samples, train_labels, classes):
+    def __init__(self, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
         super(TrainingInstance, self).__init__()
         self.train_dataset = train_dataset
         self.train_samples = train_samples
+        self.open_samples = open_samples
+        self.query_samples = train_samples.difference(open_samples)
         self.train_labels = train_labels
         self.classes = classes
+        self.open_classes = open_classes
+        self.query_classes = classes.difference(open_classes)
 
 
 class Trainer(object):
-    def __init__(self, config, train_dataset, train_samples, train_labels, classes):
+    def __init__(self, config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
         super(Trainer, self).__init__()
         self.config = config
-        self.train_instance = TrainingInstance(train_dataset, 
+        self.train_instance = TrainingInstance(train_dataset,
                                                train_samples,
+                                               open_samples,
                                                train_labels,
-                                               classes)
+                                               classes,
+                                               open_classes)
 
         self.trainer_machine = self._init_trainer_machine()
         self.label_picker = self._init_label_picker()

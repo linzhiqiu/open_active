@@ -16,27 +16,37 @@ from osdn_utils import eu_distance, cos_distance
 
 import libmr
 
+OPEN_CLASS_INDEX = -2 # The index for hold out open set class examples
+UNSEEN_CLASS_INDEX = -1 # The index for unseen open set class examples
+
 PRETRAINED_MODEL_PATH = {
     'CIFAR10' : {
         'ResNet50' : "./downloaded_models/resnet101/ckpt.t7", # Run pytorch_cifar.py for 200 epochs
     }
 }
 
-def get_target_mapping_func(classes, seen_classes):
-    """ Return a function that map seen_classes indices to 0-len(seen_classes). Unseen classes
-        are mapped to -1. Always return the same indices as long as seen classes is the same.
+def get_target_mapping_func(classes, seen_classes, open_classes):
+    """ Return a function that map seen_classes indices to 0-len(seen_classes). 
+        If not in hold-out open classes, unseen classes
+        are mapped to -1. Hold-out open classes are mapped to -2.
+        Always return the same indices as long as seen classes is the same.
         Args:
             classes: The list of all classes
             seen_classes: The set of all seen classes
+            open_classes: The set of all open classes
     """
-    seen_classes = list(seen_classes)
-    mapping = {idx : -1 if idx not in seen_classes else seen_classes.index(idx)
+    seen_classes = sorted(list(seen_classes))
+    open_classes = sorted(list(open_classes))
+    mapping = {idx : OPEN_CLASS_INDEX if idx in open_classes else 
+                     UNSEEN_CLASS_INDEX if idx not in seen_classes else 
+                     seen_classes.index(idx)
                for idx in classes}
     return lambda idx : mapping[idx]
 
 def prepare_train_loaders(train_instance, s_train, seen_classes, batch_size=32, workers=0):
     target_mapping_func = get_target_mapping_func(train_instance.classes,
-                                                  seen_classes)
+                                                  seen_classes,
+                                                  train_instance.open_classes)
     
     dataloaders = get_subset_dataloaders(train_instance.train_dataset,
                                          list(s_train),
@@ -229,7 +239,8 @@ class Network(TrainerMachine):
         with SetPrintMode(hidden=not self.config.verbose):
         # with SetPrintMode(hidden=False):
             target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                          seen_classes)
+                                                          seen_classes,
+                                                          self.train_instance.open_classes)
             dataloader = get_test_loader(test_dataset,
                                          target_mapping_func,
                                          batch_size=self.config.batch,
@@ -241,69 +252,125 @@ class Network(TrainerMachine):
             else:
                 pbar = dataloader
 
-            performance_dict = {'acc' : {'corrects' : 0., 'count' : 0.},
-                                'open_acc' : {'corrects' : 0., 'count' : 0.},
-                                'mult_acc' : {'open' : 0., 'corrects' : 0., 'count' : 0.}}
+            performance_dict = {'train_class_acc' : {'corrects' : 0., 'not_seen' : 0., 'count' : 0.}, # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
+                                'unseen_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all unseen open class examples.
+                                'overall_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all examples. Counting accuracy of unseen open examples.
+                                'holdout_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of hold out open class examples
+                                'seen_closed_acc' : {'open' : 0., 'corrects' : 0., 'count' : 0.}, # Accuracy of seen class examples
+                                'all_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all open class examples (unseen open + hold-out open)
+                                }
 
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
                     inputs, labels = data
-                    performance_dict['acc']['count'] += inputs.size(0)
                     
                     inputs = inputs.to(self.device)
                     labels = labels.to(self.device)
+                    labels_for_openset_pred = torch.where(
+                                                  labels == OPEN_CLASS_INDEX,
+                                                  torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
+                                                  labels
+                                              ) # This change hold out open set examples' indices to unseen open set examples indices
 
                     outputs = self.model(inputs)
-                    preds = open_set_prediction(outputs)
+                    preds = open_set_prediction(outputs) # Open set index == UNSEEN_CLASS_INDEX
                     # loss = open_set_criterion(outputs, labels)
 
                     # statistics
                     # running_loss += loss.item() * inputs.size(0)
-                    performance_dict['acc']['corrects'] += float(torch.sum(preds == labels.data))
-                    open_indices = labels == -1
-                    mult_indices = labels > -1
-                    performance_dict['open_acc']['count'] += float(torch.sum(open_indices))
-                    performance_dict['mult_acc']['count'] += float(torch.sum(mult_indices))
-                    performance_dict['open_acc']['corrects'] += torch.sum(
-                                                                    torch.masked_select(
-                                                                        (preds==labels.data),
-                                                                        open_indices
-                                                                    )
-                                                                ).float()
-                    performance_dict['mult_acc']['corrects'] += torch.sum(
-                                                                    torch.masked_select(
-                                                                        (preds==labels.data),
-                                                                        mult_indices
-                                                                    )
-                                                                ).float()
-                    performance_dict['mult_acc']['open'] += torch.sum(
-                                                                torch.masked_select(
-                                                                    (preds==-1),
-                                                                    mult_indices
-                                                                )
-                                                            ).float()
+                    performance_dict['overall_acc']['count'] += inputs.size(0)
+                    performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
+                    
+                    unseen_open_indices = labels == UNSEEN_CLASS_INDEX
+                    seen_closed_indices = labels >= 0
+                    hold_out_open_indices = labels == OPEN_CLASS_INDEX
+                    train_class_indices = unseen_open_indices | seen_closed_indices
+                    all_open_indices = unseen_open_indices | hold_out_open_indices
+                    assert torch.sum(unseen_open_indices & seen_closed_indices & hold_out_open_indices) == 0
+                    
+                    performance_dict['train_class_acc']['count'] += float(torch.sum(train_class_indices))
+                    performance_dict['unseen_open_acc']['count'] += float(torch.sum(unseen_open_indices))
+                    performance_dict['holdout_open_acc']['count'] += float(torch.sum(hold_out_open_indices))
+                    performance_dict['seen_closed_acc']['count'] += float(torch.sum(seen_closed_indices))
+                    performance_dict['all_open_acc']['count'] += float(torch.sum(all_open_indices))
+
+                    performance_dict['train_class_acc']['not_seen'] += torch.sum(
+                                                                           unseen_open_indices
+                                                                       ).float()
+                    performance_dict['train_class_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               seen_closed_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['unseen_open_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               unseen_open_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['holdout_open_acc']['corrects'] += torch.sum(
+                                                                            torch.masked_select(
+                                                                                (preds==labels_for_openset_pred.data),
+                                                                                hold_out_open_indices
+                                                                            )
+                                                                        ).float()
+                    performance_dict['seen_closed_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               seen_closed_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['seen_closed_acc']['open'] += torch.sum(
+                                                                       torch.masked_select(
+                                                                           (preds==UNSEEN_CLASS_INDEX),
+                                                                           seen_closed_indices
+                                                                       )
+                                                                   ).float()
+                    performance_dict['all_open_acc']['corrects'] += torch.sum(
+                                                                        torch.masked_select(
+                                                                            (preds==labels_for_openset_pred.data),
+                                                                            all_open_indices
+                                                                        )
+                                                                    ).float()
 
                     batch_result = get_acc_from_performance_dict(performance_dict)
                     if self.config.verbose:
                         pbar.set_postfix(batch_result)
 
                 epoch_result = get_acc_from_performance_dict(performance_dict)
-                acc = epoch_result['acc']
-                multi_class_acc = epoch_result['mult_acc']
-                open_set_acc = epoch_result['open_acc']
-                total_count = performance_dict['open_acc']['count'] + performance_dict['mult_acc']['count']
-                open_count = performance_dict['open_acc']['count']
-                open_corrects = performance_dict['open_acc']['corrects']
-                mult_count = performance_dict['mult_acc']['count']
-                mult_corrects = performance_dict['mult_acc']['corrects']
-                mult_open = performance_dict['mult_acc']['open']
+                train_class_acc = epoch_result['train_class_acc']
+                unseen_open_acc = epoch_result['unseen_open_acc']
+                overall_acc = epoch_result['overall_acc']
+                holdout_open_acc = epoch_result['holdout_open_acc']
+                seen_closed_acc = epoch_result['seen_closed_acc']
+                all_open_acc = epoch_result['all_open_acc']
+
+                overall_count = performance_dict['overall_acc']['count']
+                train_class_count = performance_dict['train_class_acc']['count']
+                unseen_open_count = performance_dict['unseen_open_acc']['count']
+                holdout_open_count = performance_dict['holdout_open_acc']['count']
+                seen_closed_count = performance_dict['seen_closed_acc']['count']
+                all_open_count = performance_dict['all_open_acc']['count']
+
+                train_class_corrects = performance_dict['train_class_acc']['corrects']
+                unseen_open_corrects = performance_dict['unseen_open_acc']['corrects']
+                seen_closed_corrects = performance_dict['seen_closed_acc']['corrects']
+
+                train_class_notseen = performance_dict['train_class_acc']['not_seen']
+                seen_closed_open = performance_dict['seen_closed_acc']['open']
+
         print(f"Test => "
-              f"Overall Acc {acc}, "
-              f"Open-Set Acc {open_set_acc}, Multi-Class Acc {multi_class_acc}")
-        print(f"Test Details => "
-              f"Total Examples {total_count}, "
-              f"Open-Set [{open_corrects}/{open_count} corrects], Multi-Class [{mult_corrects}/{mult_count} corrects | [{mult_open}/{mult_count}] as open set]")
-        return acc, multi_class_acc, open_set_acc
+              f"Training Class Acc {train_class_acc}, "
+              f"Hold-out Open-Set Acc {holdout_open_acc}")
+        print(f"Details => "
+              f"Overall Acc {overall_acc}, "
+              f"Overall Open-Set Acc {all_open_acc}, Overall Seen-Class Acc {seen_closed_acc}")
+        print(f"Training Classes Accuracy Details => "
+              f"Total {train_class_count} from training classes, "
+              f"[{train_class_notseen} == {unseen_open_count}] not in seen classes, "
+              f"Seen-Class [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
+        return epoch_result
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold']
@@ -331,7 +398,7 @@ class Network(TrainerMachine):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
             preds = torch.where(softmax_max < threshold, 
-                                torch.LongTensor([-1]).to(outputs.device), 
+                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -630,10 +697,9 @@ class OSDNNetwork(Network):
         self._update_open_set_stats(openmax_max, openmax_preds)
         # Return the prediction
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
-                            torch.LongTensor([-1]).to(outputs.device),
+                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
-
 
     def _get_open_set_pred_func(self):
         """ Caveat: Open set class is represented as -1.
@@ -733,7 +799,7 @@ class OSDNNetworkModified(OSDNNetwork):
         # First update the open set stats
         self._update_open_set_stats(openmax_max, openmax_preds)
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
-                            torch.LongTensor([-1]).to(outputs.device),
+                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
 
