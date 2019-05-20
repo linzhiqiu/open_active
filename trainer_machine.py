@@ -367,9 +367,8 @@ class Network(TrainerMachine):
               f"Overall Acc {overall_acc}, "
               f"Overall Open-Set Acc {all_open_acc}, Overall Seen-Class Acc {seen_closed_acc}")
         print(f"Training Classes Accuracy Details => "
-              f"Total {train_class_count} from training classes, "
-              f"[{train_class_notseen} == {unseen_open_count}] not in seen classes, "
-              f"Seen-Class [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
+              f"[{train_class_notseen}/{train_class_count}] not in seen classes, "
+              f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
         return epoch_result
 
     def _get_open_set_pred_func(self):

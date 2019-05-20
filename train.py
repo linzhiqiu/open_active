@@ -36,8 +36,9 @@ def main():
                               classes,
                               open_classes)
 
-        log_name = "{}_{}".format(utils.get_experiment_name(config), 
-                                  time.strftime("%Y-%m-%d %H:%M"))
+        log_name = "{}{}{}".format(utils.get_experiment_name(config),
+                                   os.sep,
+                                   time.strftime("%Y-%m-%d %H:%M"))
         ckpt_dir = os.path.join(config.ckpt_dir, log_name)
         utils.makedirs(ckpt_dir)
 

@@ -69,23 +69,23 @@ def get_test_loader(dataset, target_transform, batch_size, workers=0):
     return test_loader
 
 def get_experiment_name(config):
-    name = [config.data]
+    name_str = ''
+
+    name = []
+    name += [config.data]
     name += ['rounds', str(config.max_rounds), 'budget', str(config.budget), 'init', config.init_mode]
+    name_str += "_".join(name) + os.sep
+    
+    name = []
     name += [config.label_picker]
 
     if config.label_picker == "uncertainty_measure":
         name += [config.uncertainty_measure]
     else:
         raise NotImplementedError()
+    name_str += "_".join(name) + os.sep
 
-    name += ['baseline', config.trainer]
-    name += [config.arch, 'pretrained', str(config.pretrained)]
-    name += ["lr", str(config.lr), config.optim, "mt", str(config.momentum), "wd", str(config.wd)]
-    name += ["epoch", str(config.epochs), "batch", str(config.batch)]
-    if config.lr_decay_step != None:
-        name += ['lrdecay', str(config.lr_decay_ratio), 'per', str(config.lr_decay_step)]
-    
-    name += os.sep
+    name = []
     if config.trainer == "network":
         name += ['openset_softmax', config.network_eval_mode, str(config.network_eval_threshold)]
     elif config.trainer in ['osdn','osdn_modified']:
@@ -96,7 +96,16 @@ def get_experiment_name(config):
                  "tailsize", config.weibull_tail_size,
                  'mav', config.mav_features_selection]
     else:
-        raise NotImplementedError()
-    name = "_".join(name)
+        raise NotImplementedError()   
+    name_str += "_".join(name) + os.sep
 
-    return name
+    name = []
+    name += ['baseline', config.trainer]
+    name += [config.arch, 'pretrained', str(config.pretrained)]
+    name += ["lr", str(config.lr), config.optim, "mt", str(config.momentum), "wd", str(config.wd)]
+    name += ["epoch", str(config.epochs), "batch", str(config.batch)]
+    if config.lr_decay_step != None:
+        name += ['lrdecay', str(config.lr_decay_ratio), 'per', str(config.lr_decay_step)]
+    name_str += "_".join(name)
+
+    return name_str
