@@ -11,49 +11,13 @@ from tqdm import tqdm
 import copy
 
 import models
-from utils import get_subset_dataloaders, get_test_loader, SetPrintMode
+from instance_info import BasicInfoCollector
+from utils import get_subset_dataloaders, get_loader, SetPrintMode, get_target_mapping_func
 from osdn_utils import eu_distance, cos_distance
 
+from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
+
 import libmr
-
-OPEN_CLASS_INDEX = -2 # The index for hold out open set class examples
-UNSEEN_CLASS_INDEX = -1 # The index for unseen open set class examples
-
-PRETRAINED_MODEL_PATH = {
-    'CIFAR10' : {
-        'ResNet50' : "./downloaded_models/resnet101/ckpt.t7", # Run pytorch_cifar.py for 200 epochs
-    }
-}
-
-def get_target_mapping_func(classes, seen_classes, open_classes):
-    """ Return a function that map seen_classes indices to 0-len(seen_classes). 
-        If not in hold-out open classes, unseen classes
-        are mapped to -1. Hold-out open classes are mapped to -2.
-        Always return the same indices as long as seen classes is the same.
-        Args:
-            classes: The list of all classes
-            seen_classes: The set of all seen classes
-            open_classes: The set of all open classes
-    """
-    seen_classes = sorted(list(seen_classes))
-    open_classes = sorted(list(open_classes))
-    mapping = {idx : OPEN_CLASS_INDEX if idx in open_classes else 
-                     UNSEEN_CLASS_INDEX if idx not in seen_classes else 
-                     seen_classes.index(idx)
-               for idx in classes}
-    return lambda idx : mapping[idx]
-
-def prepare_train_loaders(train_instance, s_train, seen_classes, batch_size=32, workers=0):
-    target_mapping_func = get_target_mapping_func(train_instance.classes,
-                                                  seen_classes,
-                                                  train_instance.open_classes)
-    
-    dataloaders = get_subset_dataloaders(train_instance.train_dataset,
-                                         list(s_train),
-                                         target_mapping_func,
-                                         batch_size=batch_size,
-                                         workers=workers)
-    return dataloaders
 
 class NoSeenClassException(Exception):
     def __init__(self, message):
@@ -63,8 +27,8 @@ class NoUnseenClassException(Exception):
     def __init__(self, message):
         self.message = message
 
-def get_dynamic_threshold(log):
-    assert type(log) == list and len(log) > 0
+def get_dynamic_threshold(log : list):
+    assert len(log) > 0
     log_copy = log.copy() # To avoid sorting the original list
     log_copy.sort(key= lambda x: x.softmax_score)
 
@@ -171,7 +135,7 @@ class TrainerMachine(object):
     def train_new_round(self, s_train, seen_classes):
         raise NotImplementedError()
 
-    def eval(self, test_dataset, seen_classes):
+    def eval(self, test_dataset):
         raise NotImplementedError()
 
     def train_mode(self):
@@ -184,14 +148,24 @@ class Network(TrainerMachine):
     def __init__(self, *args, **kwargs):
         super(Network, self).__init__(*args, **kwargs)
         self.epoch = 0
+        self.round = 0
         self.max_epochs = self.config.epochs
         self.device = self.config.device
         self.model = self._get_network_model()
         self.optimizer = self._get_network_optimizer()
         self.scheduler = self._get_network_scheduler()
+        self.seen_classes = set()
+        if self.config.pseudo_open_set != None:
+            self.pseudo_open_set = self.config.pseudo_open_set
+            self.pseudo_open_set_rounds = self.config.pseudo_open_set_rounds
+            print(f"Using the first {self.pseudo_open_set} as pseudo classes for {self.pseudo_open_set_rounds} rounds.")
+            self.pseudo_open_set_classes = set([i for i in range(self.pseudo_open_set)])
+        else:
+            self.pseudo_open_set_classes = set() # No pseudo open set classes
 
     def get_checkpoint(self):
         return {
+            'round' : self.round,
             'epoch' : self.epoch,
             'arch' : self.config.arch,
             'model' : self.model.state_dict(),
@@ -209,23 +183,79 @@ class Network(TrainerMachine):
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.scheduler.load_state_dict(checkpoint['scheduler'])
 
+    def _get_criterion(self, dataloader):
+        assert self.config.class_weight in ['uniform', 'class_imbalanced']
+        if self.config.class_weight == 'uniform':
+            weight = None
+            print('Using uniform class weight.')
+        elif self.config.class_weight == 'class_imbalanced':
+            weight = torch.zeros(len(self.seen_classes))
+            total = 0.0
+            for _, data in enumerate(tqdm(dataloader, ncols=80)):
+                _, labels = data
+                for label_i in labels:
+                    weight[label_i] += 1.
+                    total += 1.
+            weight = total / weight
+            weight = weight / weight.min() # TODO: Figure out whether or not need this min()
+
+            from utils import get_target_unmapping_dict
+            class_weight_info = {}
+            unmap_dict = get_target_unmapping_dict(self.train_instance.classes, self.seen_classes)
+            for i, w_i in enumerate(weight):
+                class_weight_info[unmap_dict[i]] = float(w_i)
+            print(f'Using class weight: {class_weight_info}')
+        return nn.CrossEntropyLoss(weight=weight)
+
+    def _filter_pseudo_open_set(self, samples : list, all_seen_class : set):
+        for pseudo_open_class in self.pseudo_open_set_classes:
+            assert pseudo_open_class in all_seen_class
+
+        if len(self.pseudo_open_set_classes) > 0:
+            # Remove pseudo open class examples from training
+            remaining_seen_classes = all_seen_class.difference(self.pseudo_open_set_classes)
+            # pseudo_open_samples = list(filter(lambda x : self.train_instance.train_labels[x] in self.pseudo_open_set_classes, samples))
+            remaining_samples = list(filter(lambda x : self.train_instance.train_labels[x] in remaining_seen_classes, samples))
+        return remaining_samples, remaining_seen_classes
+
+
     def train_new_round(self, s_train, seen_classes, start_epoch=0):
         self._train_mode()
-        with SetPrintMode(hidden=not self.config.verbose):
-            dataloaders = prepare_train_loaders(self.train_instance, s_train, seen_classes, batch_size=self.config.batch, workers=self.config.workers)
+        # make sure all previous seen classes are still in
+        for seen_i in self.seen_classes:
+            assert seen_i in seen_classes
+        self.round += 1
+        if self.round <= self.pseudo_open_set_rounds:
+            self.curr_full_train_set = s_train.copy() # Save for self._get_open_pred_func()
+            s_train, seen_classes = self._filter_pseudo_open_set(s_train, seen_classes)
+        if self.round > self.pseudo_open_set_rounds:
+            self.pseudo_open_set_classes = [] # Reset once no longer needs pseudo_open_set
+        
+        self.seen_classes = seen_classes # Update seen classes
+        self.target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                           self.seen_classes,
+                                                           self.train_instance.open_classes)
             
-            self._update_fc_layer(len(seen_classes))
-            self.optimizer = self._get_network_optimizer()
-            self.scheduler = self._get_network_scheduler()
+        self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                  list(s_train),
+                                                  [], # TODO: Make a validation set
+                                                  self.target_mapping_func,
+                                                  batch_size=self.config.batch,
+                                                  workers=self.config.workers)
+        
+        self._update_fc_layer(len(self.seen_classes))
+        self.optimizer = self._get_network_optimizer()
+        self.scheduler = self._get_network_scheduler()
 
-            criterion = nn.CrossEntropyLoss()
+        self.criterion = self._get_criterion(self.dataloaders['train']).to(self.device) # Need self.dataloaders
 
+        with SetPrintMode(hidden=not self.config.verbose):
             loss, acc = train_epochs(
                             self.model,
-                            dataloaders,
+                            self.dataloaders,
                             self.optimizer,
                             self.scheduler,
-                            criterion,
+                            self.criterion,
                             device=self.device,
                             start_epoch=start_epoch,
                             max_epochs=self.max_epochs,
@@ -233,18 +263,25 @@ class Network(TrainerMachine):
                         )
             return loss, acc
 
-    def eval(self, test_dataset, seen_classes):
+    def eval(self, test_dataset):
         self._eval_mode()
+        # if self.round <= self.pseudo_open_set_rounds:
+        #     # TODO: If remove seen class from eval() args then don't need this
+        #     _, seen_classes = self._filter_pseudo_open_set([], seen_classes)
+
+        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                      self.seen_classes,
+                                                      self.train_instance.open_classes)
+        dataloader = get_loader(test_dataset,
+                                target_mapping_func,
+                                shuffle=False,
+                                batch_size=self.config.batch,
+                                workers=self.config.workers)
+
         open_set_prediction = self._get_open_set_pred_func()
+
         with SetPrintMode(hidden=not self.config.verbose):
         # with SetPrintMode(hidden=False):
-            target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                          seen_classes,
-                                                          self.train_instance.open_classes)
-            dataloader = get_test_loader(test_dataset,
-                                         target_mapping_func,
-                                         batch_size=self.config.batch,
-                                         workers=self.config.workers)
             # running_loss = 0.0
 
             if self.config.verbose:
@@ -372,7 +409,7 @@ class Network(TrainerMachine):
         return epoch_result
 
     def _get_open_set_pred_func(self):
-        assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold']
+        assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
         if self.config.network_eval_mode == 'threshold':
             threshold = self.config.network_eval_threshold
         elif self.config.network_eval_mode == 'dynamic_threshold':
@@ -393,6 +430,29 @@ class Network(TrainerMachine):
                     print(f"No unseen class instances. Threshold set to {threshold}")
                 else:
                     print(f"Threshold set to {threshold} based on all existing instances.")
+        elif self.config.network_eval_threshold == 'pseuopen_threshold':
+            if self.round >= self.pseudo_open_set_rounds:
+                unmap_dict = get_target_unmapping_dict(self.train_instance.classes, self.seen_classes)
+                info_collector = BasicInfoCollector(self.round, unmap_dict, self.seen_classes)
+                    
+                dataloader = get_subset_dataloader(self.train_instance.train_dataset,
+                                                   list(self.curr_full_train_set),
+                                                   self.target_mapping_func,
+                                                   shuffle=False,
+                                                   batch_size=self.config.batch,
+                                                   workers=self.config.workers)
+                _, info = info_collector.gather_instance_info(dataloader, self.model, device=self.device)
+        
+                assert len(info) > 0
+                self.pseuopen_threshold = get_dynamic_threshold(info)
+                print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
+            else:
+                print(f"Using prior pseudo open set threshold of {self.pseuopen_threshold}")
+
+            threshod = self.pseuopen_threshold
+
+
+
         def open_set_prediction(outputs):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
@@ -402,23 +462,23 @@ class Network(TrainerMachine):
             return preds
         return open_set_prediction
 
-    def _get_open_set_crit_func(self):
-        print('Ignore open set samples. TODO: Define a better criterion')
-        def open_set_criterion(outputs, labels):
-            # outputs = torch.where(
-            #               labels > -1, 
-            #               outputs,
-            #               torch.LongTensor([0]).expand_as(outputs).to(outputs.device)
-            #           )
-            # outputs = outputs.nonzero()
-            # labels = torch.where(
-            #               labels > -1, 
-            #               labels,
-            #               torch.LongTensor([0]).expand_as(labels).to(outputs.device)
-            #           )
-            # labels = labels.nonzero()
-            return nn.CrossEntropyLoss()(outputs, labels)
-        return None
+    # def _get_open_set_crit_func(self):
+    #     print('Ignore open set samples. TODO: Define a better criterion')
+    #     def open_set_criterion(outputs, labels):
+    #         # outputs = torch.where(
+    #         #               labels > -1, 
+    #         #               outputs,
+    #         #               torch.LongTensor([0]).expand_as(outputs).to(outputs.device)
+    #         #           )
+    #         # outputs = outputs.nonzero()
+    #         # labels = torch.where(
+    #         #               labels > -1, 
+    #         #               labels,
+    #         #               torch.LongTensor([0]).expand_as(labels).to(outputs.device)
+    #         #           )
+    #         # labels = labels.nonzero()
+    #         return nn.CrossEntropyLoss()(outputs, labels)
+    #     return None
 
     def _train_mode(self):
         self.model.train()
@@ -544,31 +604,11 @@ class OSDNNetwork(Network):
 
     def train_new_round(self, s_train, seen_classes, start_epoch=0):
         # Below are the same as Network class
-        self._train_mode()
-        with SetPrintMode(hidden=not self.config.verbose):
-            dataloaders = prepare_train_loaders(self.train_instance, s_train, seen_classes, batch_size=self.config.batch, workers=self.config.workers)
-            
-            self._update_fc_layer(len(seen_classes))
-            self.optimizer = self._get_network_optimizer()
-            self.scheduler = self._get_network_scheduler()
-
-            criterion = nn.CrossEntropyLoss()
-
-            loss, acc = train_epochs(
-                            self.model,
-                            dataloaders,
-                            self.optimizer,
-                            self.scheduler,
-                            criterion,
-                            device=self.device,
-                            start_epoch=start_epoch,
-                            max_epochs=self.max_epochs,
-                            verbose=self.config.verbose
-                        )
+        loss, acc = super(OSDNNetwork, self).train_new_round(s_train, seen_classes, start_epoch=start_epoch)
         # Below are gathering information for later open set recognition
         # Note that the index of the self.training_features is the index of the seen class in the current softmax layer prediction. Not the original indices
-        training_features = self._gather_correct_features(dataloaders['train'],
-                                                          num_seen_classes=len(seen_classes),
+        training_features = self._gather_correct_features(self.dataloaders['train'],
+                                                          num_seen_classes=len(self.seen_classes),
                                                           mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
         self.weibull_distributions = self._gather_weibull_distribution(training_features,
                                                                        distance_metric=self.distance_metric,
@@ -710,12 +750,12 @@ class OSDNNetwork(Network):
         """
         return lambda outputs : self.compute_open_max(outputs)[0]
 
-    def eval(self, test_dataset, seen_classes):
+    def eval(self, test_dataset):
         assert self.weibull_distributions != None
-        assert len(self.weibull_distributions.keys()) == len(seen_classes)
-        self.num_seen_classes = len(seen_classes)
+        assert len(self.weibull_distributions.keys()) == len(self.seen_classes)
+        self.num_seen_classes = len(self.seen_classes)
         self._reset_open_set_stats() # Open set status is the summary of 1/ Number of threshold reject 2/ Number of Open Class reject
-        eval_result = super(OSDNNetwork, self).eval(test_dataset, seen_classes)
+        eval_result = super(OSDNNetwork, self).eval(test_dataset)
         print(f"Rejection details: Total rejects {self.open_set_stats['total_reject']}. "
               f"By threshold ({self.osdn_eval_threshold}) {self.open_set_stats['threshold_reject']}. "
               f"By being open class {self.open_set_stats['open_class_reject']}. "

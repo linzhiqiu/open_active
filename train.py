@@ -43,7 +43,7 @@ def main():
         utils.makedirs(ckpt_dir)
 
         writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
-        print(ckpt_dir + os.sep + log_name)
+        print(ckpt_dir)
         # logger save all performance data, and write to tensorboard every epoch/round
         logger = get_logger(log_name=log_name,
                             ckpt_dir=ckpt_dir,
@@ -94,7 +94,7 @@ def main():
               f"Loss {train_loss}, Accuracy {train_acc}")
         writer.add_scalar("/train_acc", train_acc, round_i)
 
-        acc_results = trainer.eval(test_dataset, seen_classes)
+        acc_results = trainer.eval(test_dataset)
         
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 

@@ -4,43 +4,14 @@ from tqdm import tqdm
 
 import sys
 import trainer_machine
-from utils import get_subset_dataloaders
-
-def get_target_unmapping_dict(classes, seen_classes):
-    """ Return a dictionary that map 0-len(seen_classes) to true seen_classes indices.
-        Always return the same indices as long as seen classes (which is a set) is the same.
-        Args:
-            classes: The list of all classes
-            seen_classes: The set of all seen classes
-    """
-    seen_classes = sorted(list(seen_classes))
-    mapping = {idx : -1 if idx not in seen_classes else seen_classes.index(idx)
-               for idx in classes}
-    unmapping = {mapping[true_index] : true_index for true_index in mapping.keys()}
-    if -1 in unmapping.keys():
-        del unmapping[-1]
-    return unmapping
-
-class InstanceInfo(object):
-    def __init__(self):
-        super(InstanceInfo, self).__init__()
-
-class BasicInstanceInfo(InstanceInfo):
-    """ Store the most basic information of a new instance to be added
-    """
-    def __init__(self, round_index, true_label, predicted_label, softmax_score, seen):
-        super(BasicInstanceInfo, self).__init__()
-        self.round_index = round_index
-        self.true_label = true_label
-        self.predicted_label = predicted_label
-        self.softmax_score = softmax_score
-        self.seen = seen # -1 if unseen, 1 if seen
+from instance_info import BasicInfoCollector
+from utils import get_subset_loader, get_target_unmapping_dict
 
 class LabelPicker(object):
     """Abstract class"""
     def __init__(self, config, train_instance, trainer_machine):
         super(LabelPicker, self).__init__()
-        self.round = 0 # To keep track of the new instances added each round
+        self.round = trainer_machine.round # To keep track of the new instances added each round
         self.config = config
         self.train_instance = train_instance
         self.trainer_machine = trainer_machine # Should have a variable log to store all new instance's information
@@ -103,7 +74,6 @@ class UncertaintyMeasure(LabelPicker):
         pass
 
     def select_new_data(self, s_train, seen_classes):
-        self.round += 1
         self.model = self.trainer_machine.model
         self.unmapping = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
 
@@ -114,29 +84,24 @@ class UncertaintyMeasure(LabelPicker):
             print("Remaining data is fewer than the budget constraint. Label all.")
             return unlabeled_pool, unseen_classes
 
-        dataloader = get_subset_dataloaders(self.train_instance.train_dataset,
-                                            unlabeled_pool,
-                                            None, # target transform is None
-                                            self.config.batch,
-                                            workers=self.config.workers,
-                                            shuffle=False)['train']
-        pbar = tqdm(dataloader, ncols=80)
-        # Score each examples in the unlabeled pool
-        scores = torch.Tensor().to(self.config.device)
-        info = []
-        with torch.no_grad():
-            for batch, data in enumerate(pbar):
-                inputs, labels = data
-                
-                inputs = inputs.to(self.config.device)
+        dataloader = get_subset_loader(self.train_instance.train_dataset,
+                                       unlabeled_pool,
+                                       None, # target transform is None,
+                                       batch_size=self.config.batch,
+                                       shuffle=False,
+                                       workers=workers)
 
-                outputs = self.model(inputs)
-                scores_batch_i = self.measure_func(outputs)
-                # batch_instances_info is a list of information for every example in this batch.
-                batch_instances_info = self._get_batch_instances_info(outputs, labels, seen_classes)
-                info += batch_instances_info
-
-                scores = torch.cat((scores,scores_batch_i))
+        info_collector = BasicInfoCollector(
+                             self.trainer_machine.round,
+                             self.unmapping,
+                             seen_classes,
+                             self.measure_func
+                         )
+        scores, info = info_collector.gather_instance_info(
+                           dataloader,
+                           model,
+                           device=self.config.device
+                       )
 
         sorted_scores, rankings = torch.sort(scores, descending=False)
         rankings = list(rankings[:self.config.budget])
@@ -149,20 +114,6 @@ class UncertaintyMeasure(LabelPicker):
             t_train.add(new_sample)
             t_classes.add(self.train_instance.train_labels[new_sample])
         return t_train, t_classes
-
-    def _get_batch_instances_info(self, outputs, labels, seen_classes):
-        # Return a list with length == outputs.size(0). Each element is the information of that specific example.
-        # Each element is represented by (round_index, true_label, predicted_label, softmax_score, -1 if in unseen class else 1)
-        batch_instances_info = []
-        softmax_outputs = F.softmax(outputs, dim=1)
-        prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
-        for i in range(outputs.size(0)):
-            prob_score_i = float(prob_scores[i])
-            predicted_label_i = int(self.unmapping[int(predicted_labels[i])])
-            label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round, label_i, predicted_label_i, prob_score_i, label_i in seen_classes)
-            batch_instances_info.append(instance_info)
-        return batch_instances_info
 
 
 if __name__ == '__main__':

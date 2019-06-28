@@ -57,11 +57,19 @@ trainer_args.add_argument('--trainer',
                           ],
                           )
 
+trainer_args = add_argument_group('Imbalanced dataset Param.')
+trainer_args.add_argument('--class_weight',
+                          default='uniform',
+                          choices=['uniform', 'class_imbalanced' # Weight of each class is Total_Num/Total_Num_of_class
+                          ],
+                          )
+
 network_args = add_argument_group('Network Trainer Machine Param.')
 network_args.add_argument('--network_eval_mode',
                           default='threshold',
                           choices=['threshold',
                                    'dynamic_threshold', # dynamic threshold adjust the open set threshold based on information of new instances
+                                   'pseopen_threshold', # adjust the open set threshold based on pseudo open class examples
                                   ],
                           help='How to perform open set recognition with Network Trainer'
                           )
@@ -177,6 +185,23 @@ uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                                'margin_sampling',
                                                'entropy'],
                                       )
+
+pseudo_open_arg = add_argument_group('Pseudo-open set hyper tuning Param.')
+pseudo_open_arg.add_argument('--pseudo_open_set',
+                             default=None,
+                             choices=[None,
+                                      5,
+                                      10],
+                             type=int,
+                             help='The number of pseudo-open set class (from training class). None if not using any.'
+                            )
+pseudo_open_arg.add_argument('--pseudo_open_set_rounds',
+                             default=1,
+                             type=int,
+                             help='How many rounds that we perform pseudo open set hyper-tuning.'
+                            )
+
+
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--device', type=str, default='cuda',
                       help='Which device to use.')

@@ -40,7 +40,7 @@ class DatasetFactory(object):
         self.test_samples, self.test_labels, self.classes = generate_dataset_info(self.data,
                                                                                   self.test_dataset,
                                                                                   mode='test')
-
+ 
     def get_dataset(self):
         return self.train_dataset, self.test_dataset
 

@@ -2,6 +2,8 @@ import os, sys
 import torch
 from torch.utils.data import DataLoader
 
+import global_setting # include some constant value
+
 class SetPrintMode:
     def __init__(self, hidden=False):
         self.hidden = hidden
@@ -38,35 +40,84 @@ def save_checkpoint(ckpt_dir, checkpoint, epoch=0):
                                                               epoch)
                ))
 
-def get_subset_dataloaders(dataset, samples, target_transform, batch_size, workers=0, shuffle=True):
-    """ Return a dict of dataloaders. Key 'train' refers
-    to the train set loader
+def get_loader(dataset, target_transform, batch_size=1, shuffle=False, workers=0):
+    # TODO: Affirm that changing dataset.target_transform is okay.
+    dataset.target_transform = target_transform
+    loader = DataLoader(
+                 dataset,
+                 batch_size=batch_size,
+                 shuffle=shuffle,
+                 num_workers=workers,
+                 pin_memory=True,
+             )
+    return loader
+
+def get_subset_loader(dataset, samples, target_transform, batch_size=1, shuffle=False, workers=0):
+    subset = torch.utils.data.Subset(dataset, samples)
+    subset.dataset.target_transform = target_transform
+    loader = DataLoader(
+                 subset,
+                 batch_size=batch_size,
+                 shuffle=shuffle,
+                 num_workers=workers,
+                 pin_memory=True
+             )
+    return loader
+
+def get_subset_dataloaders(dataset, train_samples, val_samples, target_transform, batch_size, workers=0, shuffle=True):
+    """ Return a dict of train/val dataloaders.
     """
     dataloaders = {}
-    train_subset = torch.utils.data.Subset(dataset, samples)
-    train_subset.dataset.target_transform = target_transform
-    train_loader = DataLoader(
-                       train_subset,
-                       batch_size=batch_size,
-                       shuffle=shuffle,
-                       num_workers=workers,
-                       pin_memory=True,
-                   )
-    dataloaders['train'] = train_loader
+    if len(train_samples) > 0:
+        dataloaders['train'] = get_subset_loader(dataset,
+                                                 train_samples,
+                                                 target_transform,
+                                                 batch_size=batch_size,
+                                                 shuffle=shuffle,
+                                                 workers=workers)
+
+    if len(val_samples) > 0:
+        dataloaders['val'] = get_subset_loader(dataset,
+                                               val_samples,
+                                               target_transform,
+                                               batch_size=batch_size,
+                                               shuffle=False,
+                                               workers=workers)
+
     return dataloaders
 
-def get_test_loader(dataset, target_transform, batch_size, workers=0):
-    """ Return test loader
+def get_target_mapping_func(classes, seen_classes, open_classes):
+    """ Return a function that map seen_classes indices to 0-len(seen_classes). 
+        If not in hold-out open classes, unseen classes
+        are mapped to -1. Hold-out open classes are mapped to -2.
+        Always return the same indices as long as seen classes is the same.
+        Args:
+            classes: The list of all classes
+            seen_classes: The set of all seen classes
+            open_classes: The set of all hold-out open classes
     """
-    dataset.target_transform = target_transform
-    test_loader = DataLoader(
-                      dataset,
-                      batch_size=batch_size,
-                      shuffle=False,
-                      num_workers=workers,
-                      pin_memory=True,
-                  )
-    return test_loader
+    seen_classes = sorted(list(seen_classes))
+    open_classes = sorted(list(open_classes))
+    mapping = {idx : global_setting.OPEN_CLASS_INDEX if idx in open_classes else 
+                     global_setting.UNSEEN_CLASS_INDEX if idx not in seen_classes else 
+                     seen_classes.index(idx)
+               for idx in classes}
+    return lambda idx : mapping[idx]
+
+def get_target_unmapping_dict(classes, seen_classes):
+    """ Return a dictionary that map 0-len(seen_classes) to true seen_classes indices.
+        Always return the same indices as long as seen classes (which is a set) is the same.
+        Args:
+            classes: The list of all classes
+            seen_classes: The set of all seen classes
+    """
+    seen_classes = sorted(list(seen_classes))
+    mapping = {idx : -1 if idx not in seen_classes else seen_classes.index(idx)
+               for idx in classes}
+    unmapping = {mapping[true_index] : true_index for true_index in mapping.keys()}
+    if -1 in unmapping.keys():
+        del unmapping[-1]
+    return unmapping
 
 def get_experiment_name(config):
     name_str = ''
@@ -96,7 +147,10 @@ def get_experiment_name(config):
                  "tailsize", config.weibull_tail_size,
                  'mav', config.mav_features_selection]
     else:
-        raise NotImplementedError()   
+        raise NotImplementedError()
+    name += ['classweight', config.class_weight]
+    if config.pseudo_open_set != None:
+        name += ['pseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds)]
     name_str += "_".join(name) + os.sep
 
     name = []
