@@ -69,7 +69,7 @@ network_args.add_argument('--network_eval_mode',
                           default='threshold',
                           choices=['threshold',
                                    'dynamic_threshold', # dynamic threshold adjust the open set threshold based on information of new instances
-                                   'pseopen_threshold', # adjust the open set threshold based on pseudo open class examples
+                                   'pseuopen_threshold', # adjust the open set threshold based on pseudo open class examples
                                   ],
                           help='How to perform open set recognition with Network Trainer'
                           )

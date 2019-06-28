@@ -89,7 +89,7 @@ class UncertaintyMeasure(LabelPicker):
                                        None, # target transform is None,
                                        batch_size=self.config.batch,
                                        shuffle=False,
-                                       workers=workers)
+                                       workers=self.config.workers)
 
         info_collector = BasicInfoCollector(
                              self.trainer_machine.round,
@@ -99,7 +99,7 @@ class UncertaintyMeasure(LabelPicker):
                          )
         scores, info = info_collector.gather_instance_info(
                            dataloader,
-                           model,
+                           self.model,
                            device=self.config.device
                        )
 

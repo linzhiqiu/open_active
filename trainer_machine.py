@@ -12,7 +12,7 @@ import copy
 
 import models
 from instance_info import BasicInfoCollector
-from utils import get_subset_dataloaders, get_loader, SetPrintMode, get_target_mapping_func
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
 from osdn_utils import eu_distance, cos_distance
 
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
@@ -199,7 +199,6 @@ class Network(TrainerMachine):
             weight = total / weight
             weight = weight / weight.min() # TODO: Figure out whether or not need this min()
 
-            from utils import get_target_unmapping_dict
             class_weight_info = {}
             unmap_dict = get_target_unmapping_dict(self.train_instance.classes, self.seen_classes)
             for i, w_i in enumerate(weight):
@@ -430,17 +429,17 @@ class Network(TrainerMachine):
                     print(f"No unseen class instances. Threshold set to {threshold}")
                 else:
                     print(f"Threshold set to {threshold} based on all existing instances.")
-        elif self.config.network_eval_threshold == 'pseuopen_threshold':
-            if self.round >= self.pseudo_open_set_rounds:
+        elif self.config.network_eval_mode == 'pseuopen_threshold':
+            if self.round <= self.pseudo_open_set_rounds:
                 unmap_dict = get_target_unmapping_dict(self.train_instance.classes, self.seen_classes)
                 info_collector = BasicInfoCollector(self.round, unmap_dict, self.seen_classes)
                     
-                dataloader = get_subset_dataloader(self.train_instance.train_dataset,
-                                                   list(self.curr_full_train_set),
-                                                   self.target_mapping_func,
-                                                   shuffle=False,
-                                                   batch_size=self.config.batch,
-                                                   workers=self.config.workers)
+                dataloader = get_subset_loader(self.train_instance.train_dataset,
+                                               list(self.curr_full_train_set),
+                                               self.target_mapping_func,
+                                               shuffle=False,
+                                               batch_size=self.config.batch,
+                                               workers=self.config.workers)
                 _, info = info_collector.gather_instance_info(dataloader, self.model, device=self.device)
         
                 assert len(info) > 0
@@ -449,7 +448,7 @@ class Network(TrainerMachine):
             else:
                 print(f"Using prior pseudo open set threshold of {self.pseuopen_threshold}")
 
-            threshod = self.pseuopen_threshold
+            threshold = self.pseuopen_threshold
 
 
 

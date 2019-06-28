@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 
 class InstanceInfo(object):
@@ -19,14 +20,14 @@ class BasicInstanceInfo(InstanceInfo):
 class InfoCollector(object):
     ''' A class that collect list of InstanceInfo (optionally a tensor of scores that can be used to sort the instances)
     '''
-    def __init__(self, *args, **kwargs):
-        super(InstanceInfo, self).__init__(*args, **kwargs)
+    def __init__(self):
+        super(InfoCollector, self).__init__()
 
     def gather_instance_info(self, dataloader, model):
         raise NotImplementedError()
 
 class BasicInfoCollector(InfoCollector):
-    def __init__(self, round_index, unmapping_dict, seen_classes, measure_func=lambda x:0.0):
+    def __init__(self, round_index, unmapping_dict, seen_classes, measure_func=lambda x:torch.Tensor([0])):
         '''Args:
             measure_func : Input --> a batch of outputs, Output --> A tensor of float scores
         '''
@@ -36,7 +37,7 @@ class BasicInfoCollector(InfoCollector):
         self.unmapping_dict = unmapping_dict
         self.measure_func = measure_func
 
-    def _basic_batch_instances_info_func(outputs, labels):
+    def _basic_batch_instances_info_func(self, outputs, labels):
         '''A func takes a batch of outputs, labels,
            then output a list of InstanceInfo objects
         '''
@@ -75,7 +76,7 @@ class BasicInfoCollector(InfoCollector):
 
                 outputs = model(inputs)
 
-                scores_batch_i = self.measure_func(outputs)
+                scores_batch_i = self.measure_func(outputs).to(device)
                 scores = torch.cat((scores,scores_batch_i))
 
                 # batch_instances_info is a list of information for every example in this batch.

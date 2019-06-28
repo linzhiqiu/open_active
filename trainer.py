@@ -40,8 +40,8 @@ class Trainer(object):
     def select_new_data(self, s_train, seen_classes):
         return self.label_picker.select_new_data(s_train, seen_classes)
 
-    def eval(self, test_dataset, seen_classes):
-        return self.trainer_machine.eval(test_dataset, seen_classes)
+    def eval(self, test_dataset):
+        return self.trainer_machine.eval(test_dataset)
 
     def get_checkpoint(self):
         """ Return a dictionary of all necessary gadgets in order to resume training
