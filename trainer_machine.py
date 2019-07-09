@@ -27,10 +27,12 @@ class NoUnseenClassException(Exception):
     def __init__(self, message):
         self.message = message
 
-def get_dynamic_threshold(log : list):
+def get_dynamic_threshold(log : list, metric='softmax'):
     assert len(log) > 0
+    assert metric in ['softmax', 'entropy']
+    assert hasattr(log[0], metric)
     log_copy = log.copy() # To avoid sorting the original list
-    log_copy.sort(key= lambda x: x.softmax_score)
+    log_copy.sort(key= lambda x: getattr(x, metric))
 
     num_seen = 0
     num_unseen = 0
@@ -45,14 +47,14 @@ def get_dynamic_threshold(log : list):
     if num_unseen == 0:
         raise NoUnseenClassException("No new instances from unseen class")
 
-    candidates = [(log_copy[0].softmax_score, num_unseen)] # A list of tuple of potential candidates. Each tuple is (threshold, number of errors)
+    candidates = [(getattr(log_copy[0], metric), num_unseen)] # A list of tuple of potential candidates. Each tuple is (threshold, number of errors)
     for index, instance in enumerate(log_copy[1:]):
         # index is the index of the last item
         if log_copy[index].seen == 1:
             new_error = candidates[-1][1] + 1
         else:
             new_error = candidates[-1][1] - 1
-        candidates.append((instance.softmax_score, new_error))
+        candidates.append((getattr(instance, metric), new_error))
 
     candidates.sort(key=lambda x: x[1])
     print(f"Find threshold {candidates[0][0]} with total error {candidates[0][1]}/{num_seen + num_unseen}")
@@ -67,8 +69,8 @@ def train_epochs(model, dataloaders, optimizer, scheduler, criterion, device='cu
     avg_acc = 0.
 
     for epoch in range(start_epoch, max_epochs):
-        print('Epoch {}/{}'.format(epoch, max_epochs - 1))
-        print('-' * 10)
+        # print('Epoch {}/{}'.format(epoch, max_epochs - 1))
+        # print('-' * 10)
         for phase in dataloaders.keys():
             if phase == "train":
                 scheduler.step()
@@ -108,13 +110,14 @@ def train_epochs(model, dataloaders, optimizer, scheduler, criterion, device='cu
                     running_corrects += torch.sum(preds == labels.data)
                     if verbose:
                         pbar.set_postfix(loss=running_loss/count, 
-                                         acc=float(running_corrects)/count)
+                                         acc=float(running_corrects)/count,
+                                         epoch=epoch)
 
                 avg_loss = running_loss/count
                 avg_acc = float(running_corrects)/count
-                print(f"Epoch {epoch} => "
-                      f"Loss {avg_loss}, Accuracy {avg_acc}")
-            print()
+                # print(f"Epoch {epoch} => "
+                #       f"Loss {avg_loss}, Accuracy {avg_acc}")
+            # print()
 
     return avg_loss, avg_acc
 
@@ -135,7 +138,7 @@ class TrainerMachine(object):
     def train_new_round(self, s_train, seen_classes):
         raise NotImplementedError()
 
-    def eval(self, test_dataset):
+    def eval(self, test_dataset, verbose=False):
         raise NotImplementedError()
 
     def train_mode(self):
@@ -154,13 +157,18 @@ class Network(TrainerMachine):
         self.model = self._get_network_model()
         self.optimizer = self._get_network_optimizer()
         self.scheduler = self._get_network_scheduler()
+
+        # Current training state
         self.seen_classes = set()
+        self.curr_full_train_set = [] 
+
         if self.config.pseudo_open_set != None:
             self.pseudo_open_set = self.config.pseudo_open_set
             self.pseudo_open_set_rounds = self.config.pseudo_open_set_rounds
             print(f"Using the first {self.pseudo_open_set} as pseudo classes for {self.pseudo_open_set_rounds} rounds.")
             self.pseudo_open_set_classes = set([i for i in range(self.pseudo_open_set)])
         else:
+            self.pseudo_open_set_rounds = 0
             self.pseudo_open_set_classes = set() # No pseudo open set classes
 
     def get_checkpoint(self):
@@ -262,28 +270,22 @@ class Network(TrainerMachine):
                         )
             return loss, acc
 
-    def eval(self, test_dataset):
+    def eval(self, test_dataset, verbose=False):
         self._eval_mode()
-        # if self.round <= self.pseudo_open_set_rounds:
-        #     # TODO: If remove seen class from eval() args then don't need this
-        #     _, seen_classes = self._filter_pseudo_open_set([], seen_classes)
-
-        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                      self.seen_classes,
-                                                      self.train_instance.open_classes)
+        # target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+        #                                               self.seen_classes,
+        #                                               self.train_instance.open_classes)
         dataloader = get_loader(test_dataset,
-                                target_mapping_func,
+                                self.target_mapping_func,
                                 shuffle=False,
                                 batch_size=self.config.batch,
                                 workers=self.config.workers)
 
         open_set_prediction = self._get_open_set_pred_func()
 
-        with SetPrintMode(hidden=not self.config.verbose):
-        # with SetPrintMode(hidden=False):
-            # running_loss = 0.0
+        with SetPrintMode(hidden=not verbose):
 
-            if self.config.verbose:
+            if verbose:
                 pbar = tqdm(dataloader, ncols=80)
             else:
                 pbar = dataloader
@@ -371,7 +373,7 @@ class Network(TrainerMachine):
                                                                     ).float()
 
                     batch_result = get_acc_from_performance_dict(performance_dict)
-                    if self.config.verbose:
+                    if verbose:
                         pbar.set_postfix(batch_result)
 
                 epoch_result = get_acc_from_performance_dict(performance_dict)
@@ -396,20 +398,21 @@ class Network(TrainerMachine):
                 train_class_notseen = performance_dict['train_class_acc']['not_seen']
                 seen_closed_open = performance_dict['seen_closed_acc']['open']
 
-        print(f"Test => "
-              f"Training Class Acc {train_class_acc}, "
-              f"Hold-out Open-Set Acc {holdout_open_acc}")
-        print(f"Details => "
-              f"Overall Acc {overall_acc}, "
-              f"Overall Open-Set Acc {all_open_acc}, Overall Seen-Class Acc {seen_closed_acc}")
-        print(f"Training Classes Accuracy Details => "
-              f"[{train_class_notseen}/{train_class_count}] not in seen classes, "
-              f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
+            print(f"Test => "
+                  f"Training Class Acc {train_class_acc}, "
+                  f"Hold-out Open-Set Acc {holdout_open_acc}")
+            print(f"Details => "
+                  f"Overall Acc {overall_acc}, "
+                  f"Overall Open-Set Acc {all_open_acc}, Overall Seen-Class Acc {seen_closed_acc}")
+            print(f"Training Classes Accuracy Details => "
+                  f"[{train_class_notseen}/{train_class_count}] not in seen classes, "
+                  f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
         return epoch_result
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
         if self.config.network_eval_mode == 'threshold':
+            assert self.config.threshold_metric == "softmax"
             threshold = self.config.network_eval_threshold
         elif self.config.network_eval_mode == 'dynamic_threshold':
             assert type(self.log) == list
@@ -419,7 +422,7 @@ class Network(TrainerMachine):
                 print(f"First round. Use default threshold {threshold}")
             else:
                 try:
-                    threshold = get_dynamic_threshold(self.log)
+                    threshold = get_dynamic_threshold(self.log, metric=self.config.threshold_metric)
                 except NoSeenClassException:
                     # Error when no new instances from seen class
                     threshold = self.config.network_eval_threshold
@@ -429,21 +432,21 @@ class Network(TrainerMachine):
                     print(f"No unseen class instances. Threshold set to {threshold}")
                 else:
                     print(f"Threshold set to {threshold} based on all existing instances.")
-        elif self.config.network_eval_mode == 'pseuopen_threshold':
+        elif self.config.network_eval_mode in ['pseuopen_threshold']:
             if self.round <= self.pseudo_open_set_rounds:
                 unmap_dict = get_target_unmapping_dict(self.train_instance.classes, self.seen_classes)
                 info_collector = BasicInfoCollector(self.round, unmap_dict, self.seen_classes)
                     
                 dataloader = get_subset_loader(self.train_instance.train_dataset,
                                                list(self.curr_full_train_set),
-                                               self.target_mapping_func,
+                                               self.target_mapping_func, # by this time it should map the pseudo open classes to OPEN_INDEX
                                                shuffle=False,
                                                batch_size=self.config.batch,
                                                workers=self.config.workers)
                 _, info = info_collector.gather_instance_info(dataloader, self.model, device=self.device)
         
                 assert len(info) > 0
-                self.pseuopen_threshold = get_dynamic_threshold(info)
+                self.pseuopen_threshold = get_dynamic_threshold(info, metric=self.config.threshold_metric)
                 print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
             else:
                 print(f"Using prior pseudo open set threshold of {self.pseuopen_threshold}")
@@ -455,7 +458,12 @@ class Network(TrainerMachine):
         def open_set_prediction(outputs):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
-            preds = torch.where(softmax_max < threshold, 
+            if self.config.threshold_metric == 'softmax':
+                scores = softmax_max
+            elif self.config.threshold_metric == 'entropy':
+                entropy = (-softmax_outputs*softmax_outputs.log()).sum(dim=1)
+                scores = entropy
+            preds = torch.where(scores < threshold, 
                                 torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
@@ -576,6 +584,7 @@ class OSDNNetwork(Network):
         # So this is subclass from Network class, but has the eval function overwritten.
         super(OSDNNetwork, self).__init__(*args, **kwargs)
         self.distance_metric = self.config.distance_metric
+        assert self.config.threshold_metric == 'softmax'
 
         if self.distance_metric == 'eu':
             self.distance_func = eu_distance
@@ -586,17 +595,25 @@ class OSDNNetwork(Network):
         else:
             raise NotImplementedError()
 
-        if 'fixed' in self.config.weibull_tail_size:
-            self.weibull_tail_size = int(self.config.weibull_tail_size.split("_")[-1])
-        else:
-            raise NotImplementedError()
+        self.openmax_meta_learn = self.config.openmax_meta_learn
+        if self.openmax_meta_learn == None:
+            print("Using fixed OpenMax hyper")
+            if 'fixed' in self.config.weibull_tail_size:
+                self.weibull_tail_size = int(self.config.weibull_tail_size.split("_")[-1])
+            else:
+                raise NotImplementedError()
 
-        if 'fixed' in self.config.alpha_rank: 
-            self.alpha_rank = int(self.config.alpha_rank.split('_')[-1])
-        else:
-            raise NotImplementedError()
+            if 'fixed' in self.config.alpha_rank: 
+                self.alpha_rank = int(self.config.alpha_rank.split('_')[-1])
+            else:
+                raise NotImplementedError()
 
-        self.osdn_eval_threshold = self.config.osdn_eval_threshold
+            self.osdn_eval_threshold = self.config.osdn_eval_threshold
+        else:
+            print("Using meta learning on pseudo-open class examples")
+            self.weibull_tail_size = None
+            self.alpha_rank = None
+            self.osdn_eval_threshold = None
 
         self.mav_features_selection = self.config.mav_features_selection
         self.weibull_distributions = None # The dictionary that contains all weibull related information
@@ -609,10 +626,68 @@ class OSDNNetwork(Network):
         training_features = self._gather_correct_features(self.dataloaders['train'],
                                                           num_seen_classes=len(self.seen_classes),
                                                           mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
+        
+        if self.round <= self.pseudo_open_set_rounds and len(self.pseudo_open_set_classes) > 0:
+            print("Perform cross validation using pseudo open class..")
+            self._meta_learning(training_features)
+        else:
+            print(f"W_TAIL={self.weibull_tail_size}, ALPHA={self.alpha_rank}, THRESHOLD={self.osdn_eval_threshold}")
         self.weibull_distributions = self._gather_weibull_distribution(training_features,
                                                                        distance_metric=self.distance_metric,
                                                                        weibull_tail_size=self.weibull_tail_size) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
+
         return loss, acc
+
+    def _meta_learning(self, training_features):
+        ''' Meta learning on self.curr_full_train_set and self.pseudo_open_set_classes
+            Pick and update the best openmax hyper including:
+                self.weibull_tail_size
+                self.alpha_rank
+                self.osdn_eval_threshold
+        '''
+        from global_setting import OPENMAX_META_LEARN
+        meta_setting = OPENMAX_META_LEARN[self.openmax_meta_learn]
+        list_w_tail_size = meta_setting['weibull_tail_size']
+        list_alpha_rank = meta_setting['alpha_rank']
+        list_threshold = meta_setting['osdn_eval_threshold']
+
+        
+        curr_train_set = torch.utils.data.Subset(
+                             self.train_instance.train_dataset,
+                             self.curr_full_train_set
+                         )
+
+        meta_learn_result = [] # A list of tuple: (acc : float, hyper_setting : dict)
+        for tail_size in list_w_tail_size:
+            for alpha_rank in list_alpha_rank:
+                for threshold in list_threshold:
+                    self.weibull_tail_size = tail_size
+                    self.alpha_rank = alpha_rank
+                    self.osdn_eval_threshold = threshold
+
+                    self.weibull_distributions = self._gather_weibull_distribution(
+                                                     training_features,
+                                                     distance_metric=self.distance_metric,
+                                                     weibull_tail_size=self.weibull_tail_size
+                                                 ) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
+
+                    eval_result = self.eval(curr_train_set, verbose=False)
+                    acc = eval_result['overall_acc']
+                    meta_learn_result.append(
+                        { 'acc':acc,
+                          'tail':tail_size,
+                          'alpha':alpha_rank,
+                          'threshold':threshold
+                        }
+                    )
+        meta_learn_result.sort(reverse=True, key=lambda x:x['acc'])
+        print("Meta Learning result (sorted by acc):")
+        print(meta_learn_result)
+        best_res = meta_learn_result[0]
+        self.weibull_tail_size = best_res['tail']
+        self.alpha_rank = best_res['alpha']
+        self.osdn_eval_threshold = best_res['threshold']
+        print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
 
     def _gather_correct_features(self, train_loader, num_seen_classes=-1, mav_features_selection='correct'):
         assert num_seen_classes > 0
@@ -749,16 +824,17 @@ class OSDNNetwork(Network):
         """
         return lambda outputs : self.compute_open_max(outputs)[0]
 
-    def eval(self, test_dataset):
+    def eval(self, test_dataset, verbose=False):
         assert self.weibull_distributions != None
         assert len(self.weibull_distributions.keys()) == len(self.seen_classes)
         self.num_seen_classes = len(self.seen_classes)
         self._reset_open_set_stats() # Open set status is the summary of 1/ Number of threshold reject 2/ Number of Open Class reject
-        eval_result = super(OSDNNetwork, self).eval(test_dataset)
-        print(f"Rejection details: Total rejects {self.open_set_stats['total_reject']}. "
-              f"By threshold ({self.osdn_eval_threshold}) {self.open_set_stats['threshold_reject']}. "
-              f"By being open class {self.open_set_stats['open_class_reject']}. "
-              f"By both {self.open_set_stats['both_reject']}. ")
+        eval_result = super(OSDNNetwork, self).eval(test_dataset, verbose=verbose)
+        if verbose:
+            print(f"Rejection details: Total rejects {self.open_set_stats['total_reject']}. "
+                  f"By threshold ({self.osdn_eval_threshold}) {self.open_set_stats['threshold_reject']}. "
+                  f"By being open class {self.open_set_stats['open_class_reject']}. "
+                  f"By both {self.open_set_stats['both_reject']}. ")
         return eval_result
 
     def _update_open_set_stats(self, openmax_max, openmax_preds):
@@ -840,7 +916,6 @@ class OSDNNetworkModified(OSDNNetwork):
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
-
 
 
 def get_acc_from_performance_dict(dict):

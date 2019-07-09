@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Act
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data', 
                           default="CIFAR100",
-                          choices=["CIFAR10", "CIFAR100", "MNIST", "IMAGENET12", "TINY-IMAGENET"],
+                          choices=["CIFAR100", "MNIST", "IMAGENET12", "TINY-IMAGENET"],
                           help='Choice of dataset')
 dataset_args.add_argument('--data_path', 
                           default="./data", metavar='PATH',
@@ -37,7 +37,7 @@ preprocess_arg.add_argument('--channel_normalize', action="store_true", default=
                             help="whether or not to normalize the input image (patchs) channel-wise.\
                                   i.e. subtract the mean and divide by standard deviation per channel.")
 preprocess_arg.add_argument('--center_crop', 
-                            type=str2bool, 
+                            type=str2bool,
                             default=False,
                             help='whether or not to center crop the images')
 preprocess_arg.add_argument('--random_crop',
@@ -52,7 +52,9 @@ preprocess_arg.add_argument('--random_flip',
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
-                          choices=['network', 'osdn', # Open Set Deep Network
+                          choices=['network',
+                                   'cluster_network', # Will be using the distance_metric
+                                   'osdn', # Open Set Deep Network
                                    'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
                           ],
                           )
@@ -65,6 +67,10 @@ trainer_args.add_argument('--class_weight',
                           )
 
 network_args = add_argument_group('Network Trainer Machine Param.')
+network_args.add_argument('--threshold_metric',
+                          default='softmax',
+                          choices=['entropy', 'softmax'],
+                          help="Use which score to measure the open set threshold")
 network_args.add_argument('--network_eval_mode',
                           default='threshold',
                           choices=['threshold',
@@ -78,12 +84,9 @@ network_args.add_argument('--network_eval_threshold',
                           type=float,
                           help='If max class probility < threshold, then classify to unseen class')
 
+
+
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')
-osdn_args.add_argument('--distance_metric',
-                       default='eucos',
-                       choices=['eu', 'cos', 'eucos'],
-                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by 200.'
-                       )
 osdn_args.add_argument('--weibull_tail_size',
                        default='fixed_20',
                        choices=['fixed_20'],
@@ -108,6 +111,17 @@ osdn_args.add_argument('--mav_features_selection',
 #                        help='How to perform open set recognition with Network Trainer'
 #                        )
 
+disc_args = add_argument_group('Distance Metric Param.')
+disc_args.add_argument('--distance_metric',
+                       default='eucos',
+                       choices=['eu', 'cos', 'eucos'],
+                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by 200.'
+                       )
+
+cluster_args = add_argument_group('Cluster Network Trainer Machine Param.')
+cluster_args.add_argument('--clustering',
+                          default=['train_means','k_means'],
+                          help='The clustering algorithm to use. train_means use train examples to compute the cluster. k-means use test examples and assign the majority label?')
 
 
 training_arg = add_argument_group('Network Training Param.')
@@ -196,9 +210,14 @@ pseudo_open_arg.add_argument('--pseudo_open_set',
                              help='The number of pseudo-open set class (from training class). None if not using any.'
                             )
 pseudo_open_arg.add_argument('--pseudo_open_set_rounds',
-                             default=1,
+                             default=0,
                              type=int,
                              help='How many rounds that we perform pseudo open set hyper-tuning.'
+                            )
+pseudo_open_arg.add_argument('--openmax_meta_learn',
+                             default=None,
+                             choices=['default'],
+                             help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
 

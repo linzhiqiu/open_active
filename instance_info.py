@@ -9,12 +9,13 @@ class InstanceInfo(object):
 class BasicInstanceInfo(InstanceInfo):
     """ Store the most basic information of a new instance to be added
     """
-    def __init__(self, round_index, true_label, predicted_label, softmax_score, seen):
+    def __init__(self, round_index, true_label, predicted_label, softmax, entropy, seen):
         super(BasicInstanceInfo, self).__init__()
         self.round_index = round_index
         self.true_label = true_label
         self.predicted_label = predicted_label
-        self.softmax_score = softmax_score
+        self.softmax = softmax
+        self.entropy = entropy
         self.seen = seen # -1 if unseen, 1 if seen
 
 class InfoCollector(object):
@@ -42,15 +43,17 @@ class BasicInfoCollector(InfoCollector):
            then output a list of InstanceInfo objects
         '''
         # Return a list with length == outputs.size(0). Each element is the information of that specific example.
-        # Each element is represented by (round_index, true_label, predicted_label, softmax_score, -1 if in unseen class else 1)
+        # Each element is represented by (round_index, true_label, predicted_label, softmax, entropy, -1 if in unseen class else 1)
         batch_instances_info = []
         softmax_outputs = F.softmax(outputs, dim=1)
         prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
         for i in range(outputs.size(0)):
+            softmax_i = softmax_outputs[i]
+            entropy_i = float((-softmax_i*softmax_i.log()).sum())
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, label_i in self.seen_classes)
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, label_i in self.seen_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 

@@ -94,7 +94,7 @@ def main():
               f"Loss {train_loss}, Accuracy {train_acc}")
         writer.add_scalar("/train_acc", train_acc, round_i)
 
-        acc_results = trainer.eval(test_dataset)
+        acc_results = trainer.eval(test_dataset, verbose=True)
         
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 
@@ -115,8 +115,10 @@ def main():
 
         logger.log_round(round_i, s_train, seen_classes, acc_results)
         
-        checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)
-        utils.save_checkpoint(ckpt_dir, checkpoint)
+        if round_i % 20 == 0:
+            # Save every 20 rounds
+            checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)
+            utils.save_checkpoint(ckpt_dir, checkpoint)
 
     logger.finish()
 

@@ -138,14 +138,22 @@ def get_experiment_name(config):
 
     name = []
     if config.trainer == "network":
-        name += ['openset_softmax', config.network_eval_mode, str(config.network_eval_threshold)]
+        name += ['openset', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold)]
     elif config.trainer in ['osdn','osdn_modified']:
         name += ['osdn_openmax' if not config.trainer == 'osdn_modified' else 'osdn_modified', 
-                 "distance", config.distance_metric,
-                 "threshold", str(config.osdn_eval_threshold),
-                 "alpha", config.alpha_rank,
-                 "tailsize", config.weibull_tail_size,
-                 'mav', config.mav_features_selection]
+                 "distance", config.distance_metric,]
+        if config.pseudo_open_set == None:
+            # Using fixed hyper
+            name += ["threshold", str(config.osdn_eval_threshold),
+                     "alpha", config.alpha_rank,
+                     "tailsize", config.weibull_tail_size]
+        else:
+            # Using cross validation/meta learning to decide hyper
+            assert config.openmax_meta_learn != None
+            name += ["metalearn", str(config.openmax_meta_learn)]
+        name += ['mav', config.mav_features_selection]
+    elif config.trainer == 'cluster_network':
+        name += ['cluster_network', config.clustering, config.network_eval_mode, str(config.network_eval_threshold)]
     else:
         raise NotImplementedError()
     name += ['classweight', config.class_weight]
