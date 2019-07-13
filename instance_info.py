@@ -15,7 +15,7 @@ class BasicInstanceInfo(InstanceInfo):
         self.true_label = true_label
         self.predicted_label = predicted_label
         self.softmax = softmax
-        self.entropy = entropy
+        self.entropy = entropy # In fact, negative entropy, so the higher(more pos) the more certain
         self.seen = seen # -1 if unseen, 1 if seen
 
 class InfoCollector(object):
@@ -49,7 +49,7 @@ class BasicInfoCollector(InfoCollector):
         prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
         for i in range(outputs.size(0)):
             softmax_i = softmax_outputs[i]
-            entropy_i = float((-softmax_i*softmax_i.log()).sum())
+            entropy_i = float((softmax_i*softmax_i.log()).sum()) # This is the negative entropy
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])

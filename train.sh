@@ -6,6 +6,8 @@
                     python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10;
                 # Dynamic Softmax Threshold
                     python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode dynamic_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10;
+                # Dynamic Entropy Threshold
+                    python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode dynamic_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10;
                 # OSDN (None correct then select all features) Alpha rank 10, Weibull size 20
                     python train.py CIFAR100 --data_path ./data --trainer osdn --batch 32 --osdn_eval_threshold 0.1 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --alpha_rank fixed_10 --weibull_tail_size fixed_20;
                 # OSDN Modified (None correct then select all features) Alpha rank 10, Weibull size 20
@@ -17,6 +19,8 @@
                     python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10;
                 # Dynamic Softmax Threshold
                     python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode dynamic_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10;
+                # Dynamic Entropy Threshold
+                    python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode dynamic_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10;
                 # OSDN (None correct then select all features) Alpha rank 10, Weibull size 20
                     python train.py CIFAR100 --data_path ./data --trainer osdn --batch 32 --osdn_eval_threshold 0.1 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --distance_metric eucos --alpha_rank fixed_10 --weibull_tail_size fixed_20;
                 # OSDN Modified (None correct then select all features) Alpha rank 10, Weibull sizsee 20
@@ -24,23 +28,31 @@
 
     # Pseudo-openset class and no imbalanced weight
         # Least confident
-            # Softmax
+            # Softmax + round 1
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # Entropy
+            # Entropy + pseudo round 1
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # OSDN (None correct then select all features)
+            # Entropy + pseudo round 5
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 5;
+            # Entropy + max pseudo round 500
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # OSDN (None correct then select all features) + round 1
                 python train.py CIFAR100 --data_path ./data --trainer osdn --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 1 --openmax_meta_learn default;
-            # OSDN Modified (None correct then select all features)
+            # OSDN Modified (None correct then select all features) + round 1
                 python train.py CIFAR100 --data_path ./data --trainer osdn_modified --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 1 --openmax_meta_learn default;
 
         # Most confident
-            # Softmax
+            # Softmax + round 1
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # Entropy
+            # Entropy + pseudo round 1
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # OSDN (None correct then select all features)
+            # Entropy + pseudo round 5
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 5;
+            # Entropy + pseudo round 500
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # OSDN (None correct then select all features) + round 1
                 python train.py CIFAR100 --data_path ./data --trainer osdn --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 1 --openmax_meta_learn default;
-            # OSDN Modified (None correct then select all features)
+            # OSDN Modified (None correct then select all features) + round 1
                 python train.py CIFAR100 --data_path ./data --trainer osdn_modified --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 1 --openmax_meta_learn default;
 
 

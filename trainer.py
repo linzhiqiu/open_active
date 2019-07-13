@@ -33,15 +33,19 @@ class Trainer(object):
 
         self.trainer_machine = self._init_trainer_machine()
         self.label_picker = self._init_label_picker()
-        
-    def train_new_round(self, s_train, seen_classes):
-        return self.trainer_machine.train_new_round(s_train, seen_classes)
+    
+    def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=False):
+        # Start a new round. Train the model using s_train from seen_classes. Then eval on test_dataset.
+        return self.trainer_machine.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=eval_verbose)
+
+    # def train_new_round(self, s_train, seen_classes):
+    #     return self.trainer_machine.train_new_round(s_train, seen_classes)
 
     def select_new_data(self, s_train, seen_classes):
         return self.label_picker.select_new_data(s_train, seen_classes)
 
-    def eval(self, test_dataset, verbose=False):
-        return self.trainer_machine.eval(test_dataset, verbose=verbose)
+    # def eval(self, test_dataset, verbose=False):
+    #     return self.trainer_machine.eval(test_dataset, verbose=verbose)
 
     def get_checkpoint(self):
         """ Return a dictionary of all necessary gadgets in order to resume training

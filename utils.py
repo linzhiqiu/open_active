@@ -158,7 +158,7 @@ def get_experiment_name(config):
         raise NotImplementedError()
     name += ['classweight', config.class_weight]
     if config.pseudo_open_set != None:
-        name += ['pseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds)]
+        name += ['newpseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds)]
     name_str += "_".join(name) + os.sep
 
     name = []

@@ -89,12 +89,13 @@ def main():
     for round_i in range(start_round, config.max_rounds):
         print(f"Round [{round_i}]")
         
-        train_loss, train_acc = trainer.train_new_round(s_train, seen_classes)
+        train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
+        # train_loss, train_acc = trainer.train_new_round(s_train, seen_classes)
         print(f"Train => {round_i} round => "
               f"Loss {train_loss}, Accuracy {train_acc}")
         writer.add_scalar("/train_acc", train_acc, round_i)
 
-        acc_results = trainer.eval(test_dataset, verbose=True)
+        # eval_results = trainer.eval(test_dataset, verbose=True)
         
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 
@@ -104,16 +105,16 @@ def main():
         
 
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
-        for acc_key in acc_results.keys():
-            if isinstance(acc_results[acc_key], float):
-                writer.add_scalar("/"+acc_key, acc_results[acc_key], round_i)
+        for acc_key in eval_results.keys():
+            if isinstance(eval_results[acc_key], float):
+                writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
         writer.add_scalar("/seen_classes", len(seen_classes), round_i)
         
         assert len(set(s_train)) == len(s_train)
         assert len(set(t_train)) == len(t_train)
         s_train = set(s_train).union(set(t_train))
 
-        logger.log_round(round_i, s_train, seen_classes, acc_results)
+        logger.log_round(round_i, s_train, seen_classes, eval_results)
         
         if round_i % 20 == 0:
             # Save every 20 rounds
