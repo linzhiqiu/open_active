@@ -214,9 +214,14 @@ pseudo_open_arg.add_argument('--pseudo_open_set_rounds',
                              type=int,
                              help='How many rounds that we perform pseudo open set hyper-tuning.'
                             )
+pseudo_open_arg.add_argument('--pseudo_open_set_metric',
+                             default='weighted',
+                             choices=['weighted', 'average'],
+                             help='What is a good hyper? (a) weighted by example size. (b) average of closed and open set.'
+                            )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,
-                             choices=['default'],
+                             choices=['default', 'advanced'],
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
