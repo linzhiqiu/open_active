@@ -12,8 +12,8 @@ class BasicInstanceInfo(InstanceInfo):
     def __init__(self, round_index, true_label, predicted_label, softmax, entropy, seen):
         super(BasicInstanceInfo, self).__init__()
         self.round_index = round_index
-        self.true_label = true_label
-        self.predicted_label = predicted_label
+        self.true_label = true_label # in original index
+        self.predicted_label = predicted_label # in original index
         self.softmax = softmax # Caveat: For ClusterInfoCollector, this is just the prob score
         self.entropy = entropy # In fact, negative entropy, so the higher(more pos) the more certain
         self.seen = seen # -1 if unseen, 1 if seen

@@ -97,18 +97,33 @@ def main():
         print(f"Round [{round_i}]")
         
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
-        # train_loss, train_acc = trainer.train_new_round(s_train, seen_classes)
-
-        # eval_results = trainer.eval(test_dataset, verbose=True)
         
+        if round_i == 0 and config.log_first_round:
+            log_strs = utils.get_experiment_name(config).split(os.sep)
+            setting_str = log_strs[0]
+            training_str = '_'.join(log_strs[2:])
+            save_path = os.path.join('first_round', setting_str+".txt")
+            if not os.path.isfile(save_path):
+                with open(save_path, 'w+') as file:
+                    title_str = "|".join(["overall", "closed_set", "open_set", "details"])
+                    file.write(title_str + "\n")
+            with open(save_path, "a") as file:
+                closed_acc = eval_results['seen_closed_acc']
+                open_acc = eval_results['holdout_open_acc']
+                overall_acc = (closed_acc + open_acc) / 2.
+                detail_str = "|".join([f"{overall_acc:.5f}", f"{closed_acc:.5f}", f"{open_acc:.5f}", training_str])
+                file.write(detail_str + "\n")
+            print(f"Check {save_path}. Now exiting.")
+            exit(0)
+
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 
         new_seen_classes = seen_classes.union(t_classes)
         classes_diff = new_seen_classes.difference(seen_classes)
         seen_classes = new_seen_classes
-        
 
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
+
         if config.writer: 
             writer.add_scalar("/train_acc", train_acc, round_i)
             for acc_key in eval_results.keys():
@@ -116,12 +131,14 @@ def main():
                     writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
             writer.add_scalar("/seen_classes", len(seen_classes), round_i)
         
+
         assert len(set(s_train)) == len(s_train)
         assert len(set(t_train)) == len(t_train)
         s_train = list(set(s_train).union(set(t_train)))
 
         logger.log_round(round_i, s_train, seen_classes, eval_results)
         
+
         if round_i % 20 == 0 and config.save_ckpt:
             # Save every 20 rounds
             checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)

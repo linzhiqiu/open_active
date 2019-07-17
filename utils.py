@@ -141,7 +141,9 @@ def get_experiment_name(config):
         name += ['openset', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold)]
     elif config.trainer in ['osdn','osdn_modified']:
         name += ['osdn_openmax' if not config.trainer == 'osdn_modified' else 'osdn_modified', 
-                 "distance", config.distance_metric,]
+                 "distance", config.distance_metric]
+        if 'eu' in config.distance_metric:
+            name += ['div_eu', str(config.div_eu)]
         if config.pseudo_open_set == None:
             # Using fixed hyper
             name += ["threshold", str(config.osdn_eval_threshold),
@@ -154,6 +156,8 @@ def get_experiment_name(config):
         name += ['mav', config.mav_features_selection]
     elif config.trainer == 'cluster':
         name += ['cluster', config.clustering, 'distance', config.distance_metric]
+        if 'eu' in config.distance_metric:
+            name += ['div_eu', str(config.div_eu)]
         if config.clustering == 'rbf_train':
             name += ['gamma', str(config.rbf_gamma)]
         if config.pseudo_open_set == None:

@@ -20,6 +20,12 @@ INIT_TRAIN_SET_CONFIG = {
             'sample_per_class' : 12, # initially 40 x 12 = 480 samples
             'num_open_classes' : 20, # So num_unseen_classes = 100 - 30 - 20 = 50
             'use_random_classes' : False
+        },
+        'open_set' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 500,
+            'num_open_classes' : 10,
+            'use_random_classes' : False
         }
     }
 }

@@ -115,7 +115,12 @@ disc_args = add_argument_group('Distance Metric Param.')
 disc_args.add_argument('--distance_metric',
                        default='eucos',
                        choices=['eu', 'cos', 'eucos'],
-                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by 200.'
+                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by eu_divby.'
+                       )
+disc_args.add_argument('--div_eu',
+                       default=200.,
+                       type=float,
+                       help='EU distance will be divided by this parameter.'
                        )
 
 cluster_args = add_argument_group('Cluster Network Trainer Machine Param.')
@@ -187,7 +192,7 @@ open_act_arg.add_argument('--budget',
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
                          default='default',
-                         choices=['default'],
+                         choices=['default', 'open_set'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
@@ -227,12 +232,14 @@ pseudo_open_arg.add_argument('--pseudo_open_set_metric',
                             )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,
-                             choices=['default', 'advanced', 'morealpha'],
+                             choices=['default', 'advanced', 'morealpha', 'open_set'],
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
 
 misc_arg = add_argument_group('Misc.')
+misc_arg.add_argument('--log_first_round', type=str2bool, default=False, #default='first_round.txt'
+                      help='If True, log first round results to first_round/')
 misc_arg.add_argument('--writer', type=str2bool, default=True,
                       help='Whether or not to use writer')
 misc_arg.add_argument('--save_ckpt', type=str2bool, default=True,

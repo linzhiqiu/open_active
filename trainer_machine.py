@@ -263,7 +263,8 @@ class Network(TrainerMachine):
         info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_seen_classes)
         dataloader = get_subset_loader(self.train_instance.train_dataset,
                                        list(full_train_set),
-                                       self._get_target_mapp_func(pseudo_seen_classes), # it should map the pseudo open classes to OPEN_INDEX
+                                       None, # No target transform is needed! 
+                                       # self._get_target_mapp_func(pseudo_seen_classes), # it should map the pseudo open classes to OPEN_INDEX
                                        shuffle=False,
                                        batch_size=self.config.batch,
                                        workers=self.config.workers)
@@ -451,7 +452,7 @@ class Network(TrainerMachine):
             print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
             threshold = self.pseuopen_threshold
 
-        
+
         def open_set_prediction(outputs):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
@@ -589,10 +590,11 @@ class ClusterNetwork(Network):
             self.cluster_eval_threshold = None
 
         self.distance_metric = self.config.distance_metric
+        self.div_eu = self.config.div_eu
         if self.distance_metric == 'eu':
-            self.distance_func = eu_distance_batch
+            self.distance_func = lambda a, b: eu_distance_batch(a,b,div_eu=self.div_eu)
         elif self.distance_metric == 'eucos':
-            self.distance_func = lambda a, b: eu_distance_batch(a,b) + cos_distance_batch(a,b)
+            self.distance_func = lambda a, b: eu_distance_batch(a,b,div_eu=self.div_eu) + cos_distance_batch(a,b)
         elif self.distance_metric == 'cos':
             self.distance_func = cos_distance_batch
         else:
@@ -645,7 +647,6 @@ class ClusterNetwork(Network):
             print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
             threshold = self.pseuopen_threshold
 
-        import pdb; pdb.set_trace()  # breakpoint 4b8af380 //
         def open_set_prediction(outputs):
             maxs, preds = torch.max(outputs, 1)
             if self.config.threshold_metric == 'softmax':
@@ -665,15 +666,18 @@ class OSDNNetwork(Network):
         # So this is subclass from Network class, but has the eval function overwritten.
         super(OSDNNetwork, self).__init__(*args, **kwargs)
         assert self.config.threshold_metric == 'softmax'
+
+        self.div_eu = self.config.div_eu
         self.distance_metric = self.config.distance_metric
         if self.distance_metric == 'eu':
-            self.distance_func = eu_distance
+            self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu)
         elif self.distance_metric == 'eucos':
-            self.distance_func = lambda a, b: eu_distance(a,b) + cos_distance(a,b)
+            self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
         elif self.distance_metric == 'cos':
             self.distance_func = cos_distance
         else:
             raise NotImplementedError()
+
 
         self.openmax_meta_learn = self.config.openmax_meta_learn
         if self.openmax_meta_learn == None:
@@ -841,7 +845,7 @@ class OSDNNetwork(Network):
                 features_tensor = torch.cat(training_features[index], dim=0)
                 mav = torch.mean(features_tensor, 0)
                 mav_matrix = mav.unsqueeze(0).expand(features_tensor.size(0), -1)
-                eu_distances = torch.sqrt(torch.sum((mav_matrix - features_tensor) ** 2, dim=1)) / 200. # EU distance divided by 200.
+                eu_distances = torch.sqrt(torch.sum((mav_matrix - features_tensor) ** 2, dim=1)) / self.div_eu # EU distance divided by 200.
                 cos_distances = 1 - torch.nn.CosineSimilarity(dim=1)(mav_matrix, features_tensor)
                 eucos_distances = eu_distances + cos_distances
 

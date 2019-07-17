@@ -1,3 +1,43 @@
+# CIFAR100 10 closed + 10 open
+    # Cluster
+        # EUCOS + Pseudo open 5 classes
+            # LR 0.1
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # LR 0.001
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.001 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # LR 0.000001
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.000001 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+        # EU
+            # LR 0.1
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eu --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # LR 0.01
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.01 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eu --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+        # COS
+            # LR 0.1
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric cos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # LR 0.01
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.01 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric cos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+            # LR 0.001
+                python train.py CIFAR100 --verbose True --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.001 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric cos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+    # Softmax Uncertainty 
+        # Threshold 0.1
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer network --batch 32 --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10;
+        # Pseudo open set 5
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer network --batch 32 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --network_eval_mode pseuopen_threshold --pseudo_open_set 5 --pseudo_open_set_rounds 500;   
+    # Entropy Uncertainty
+        # Pseudo open set 5
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+    # OSDN
+        # EUCOS + threshold 0.1
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer osdn --batch 32 --osdn_eval_threshold 0.1 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --alpha_rank fixed_10 --weibull_tail_size fixed_20;
+        # EUCOS + pseudo threshold
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer osdn --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 500 --openmax_meta_learn open_set;
+    # OSDN Modified
+        # EUCOS + threshold 0.1
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer osdn_modified --batch 32 --osdn_eval_threshold 0.1 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --alpha_rank fixed_10 --weibull_tail_size fixed_20;
+        # EUCOS + pseudo threshold
+            python train.py CIFAR100 --verbose False --log_first_round True --init_mode open_set --writer False --save_ckpt False --data_path ./data --trainer osdn_modified --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 500 --openmax_meta_learn open_set;
+
 # Comparison between different methods
     # No imbalanced weight
         # Least confident
@@ -26,12 +66,8 @@
 
     # Pseudo-openset class and no imbalanced weight
         # Least confident
-            # Softmax + round 1
-                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # Entropy + pseudo round 1
-                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
-            # Entropy + pseudo round 5
-                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 5;
+            # Softmax + round 500
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
             # Entropy + max pseudo round 500
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
             # OSDN (None correct then select all features) + round 1
@@ -59,17 +95,19 @@
                     # OSDN Modified (None correct then select all features) + round 500. Still degrade to alpha rank 2
                         python train.py CIFAR100 --data_path ./data --trainer osdn_modified --batch 32 --mav_features_selection none_correct_then_all --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos  --pseudo_open_set 5 --pseudo_open_set_rounds 500 --openmax_meta_learn morealpha --pseudo_open_set_metric weighted;
             # Cluster RBF Train + Pseudo open class
-                # EUCOS
-                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --pseuopen_threshold pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
-                # EU
-                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --pseuopen_threshold pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eu --pseudo_open_set 5 --pseudo_open_set_rounds 500;
-                # COS
-                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --pseuopen_threshold pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric cos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+                # EUCOS LR 0.001
+                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.001 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+                # EUCOS LR 0.000001
+                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.000001 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eucos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+                # EU LR 0.1
+                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric eu --pseudo_open_set 5 --pseudo_open_set_rounds 500;
+                # COS LR 0.1
+                    python train.py CIFAR100 --data_path ./data --trainer cluster  --batch 32 --network_eval_mode pseuopen_threshold --threshold_metric softmax --clustering rbf_train --rbf_gamma 1.0 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure least_confident --pretrained CIFAR10 --distance_metric cos --pseudo_open_set 5 --pseudo_open_set_rounds 500;
 
 
         # Most confident
-            # Softmax + round 1
-                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
+            # Softmax + round 500
+                python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 500;
             # Entropy + pseudo round 1
                 python train.py CIFAR100 --data_path ./data --trainer network --batch 32 --network_eval_mode pseuopen_threshold --network_eval_threshold 0.1 --threshold_metric entropy --arch ResNet50 --lr 0.1 --epochs 50 --uncertainty_measure most_confident --pretrained CIFAR10 --pseudo_open_set 5 --pseudo_open_set_rounds 1;
             # Entropy + pseudo round 5
