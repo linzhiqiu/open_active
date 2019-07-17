@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 import sys
 import trainer_machine
-from instance_info import BasicInfoCollector
+from instance_info import BasicInfoCollector, ClusterInfoCollector
 from utils import get_subset_loader, get_target_unmapping_dict
 
 class LabelPicker(object):
@@ -50,9 +50,12 @@ class UncertaintyMeasure(LabelPicker):
         assert isinstance(self.trainer_machine, trainer_machine.Network)
         assert self.config.label_picker == 'uncertainty_measure'
         if isinstance(self.trainer_machine, trainer_machine.Network):
+            assert self.config.uncertainty_measure in ['least_confident', 'most_confident']
+            self.info_collector_class = BasicInfoCollector
             self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
         elif isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
             assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query']
+            self.info_collector_class = BasicInfoCollector
             def openmax_measure_func(outputs):
                 openmax_outputs = self.trainer_machine.compute_open_max(outputs)[0]
                 score, _ = torch.max(openmax_outputs, 1)
@@ -63,6 +66,18 @@ class UncertaintyMeasure(LabelPicker):
                 elif self.config.uncertainty_measure == 'random_query':
                     return torch.rand_like(score, device=score.device)
             self.measure_func = openmax_measure_func
+        elif isinstance(self.trainer_machine, trainer_machine.ClusterNetwork):
+            assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query']
+            self.info_collector_class = ClusterInfoCollector
+            def cluster_measure_func(outputs):
+                score, _ = torch.max(outputs, 1)
+                if self.config.uncertainty_measure == 'least_confident':
+                    return score
+                elif self.config.uncertainty_measure == 'most_confident':
+                    return -score
+                elif self.config.uncertainty_measure == 'random_query':
+                    return torch.rand_like(score, device=score.device)
+            self.measure_func = cluster_measure_func
         else:
             raise NotImplementedError()
 
@@ -91,7 +106,7 @@ class UncertaintyMeasure(LabelPicker):
                                        shuffle=False,
                                        workers=self.config.workers)
 
-        info_collector = BasicInfoCollector(
+        info_collector = self.info_collector_class(
                              self.trainer_machine.round,
                              self.unmapping,
                              seen_classes,

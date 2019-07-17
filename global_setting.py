@@ -17,5 +17,10 @@ OPENMAX_META_LEARN = {
         'weibull_tail_size' : [10, 20],
         'alpha_rank' : [2, 3, 4, 5, 6, 7, 8, 9, 10],
         'osdn_eval_threshold' : [0.001, 0.01, 0.05, 0.1, 0.15, 0.2, 0.5]
+    },
+    'morealpha' : {
+        'weibull_tail_size' : [10, 20, 50],
+        'alpha_rank' : [2, 5, 10, 15, 20, 25, 30],
+        'osdn_eval_threshold' : [0.001, 0.01, 0.05, 0.1, 0.15, 0.2, 0.5]
     }
 }

@@ -53,7 +53,7 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
                           choices=['network',
-                                   'cluster_network', # Will be using the distance_metric
+                                   'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
                                    'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
                           ],
@@ -120,9 +120,15 @@ disc_args.add_argument('--distance_metric',
 
 cluster_args = add_argument_group('Cluster Network Trainer Machine Param.')
 cluster_args.add_argument('--clustering',
-                          default=['train_means','k_means'],
-                          help='The clustering algorithm to use. train_means use train examples to compute the cluster. k-means use test examples and assign the majority label?')
-
+                          # default=['rbf_train','train_means'],
+                          default=['rbf_train'],
+                          help='The clustering algorithm to use. train_means use train examples to compute the cluster. rbf_train use rbf training objective')
+cluster_args.add_argument('--rbf_gamma',
+                          default=1.0, type=float,
+                          help='The temperature parameter in K(x,x") = exp(-gamma*disc(x,x")).')
+cluster_args.add_argument('--cluster_eval_threshold',
+                          default=0.5, type=float,
+                          help='The threshold to reject open set example.')
 
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
@@ -217,16 +223,20 @@ pseudo_open_arg.add_argument('--pseudo_open_set_rounds',
 pseudo_open_arg.add_argument('--pseudo_open_set_metric',
                              default='weighted',
                              choices=['weighted', 'average'],
-                             help='What is a good hyper? (a) weighted by example size. (b) average of closed and open set.'
+                             help='What is a good hyper? (a) weighted by example size. (b) average of closed and open set. Currently only support OSDNish methods.'
                             )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,
-                             choices=['default', 'advanced'],
+                             choices=['default', 'advanced', 'morealpha'],
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
 
 misc_arg = add_argument_group('Misc.')
+misc_arg.add_argument('--writer', type=str2bool, default=True,
+                      help='Whether or not to use writer')
+misc_arg.add_argument('--save_ckpt', type=str2bool, default=True,
+                      help='Whether or not to save ckpt')
 misc_arg.add_argument('--device', type=str, default='cuda',
                       help='Which device to use.')
 misc_arg.add_argument('--ckpt_dir', type=str, default='./ckpts/',

@@ -150,12 +150,20 @@ def get_experiment_name(config):
         else:
             # Using cross validation/meta learning to decide hyper
             assert config.openmax_meta_learn != None
-            name += ["metalearn", str(config.openmax_meta_learn)]
+            name += ["metalearn", str(config.openmax_meta_learn), 'pseudometric', config.pseudo_open_set_metric]
         name += ['mav', config.mav_features_selection]
-    elif config.trainer == 'cluster_network':
-        name += ['cluster_network', config.clustering, config.network_eval_mode, str(config.network_eval_threshold)]
+    elif config.trainer == 'cluster':
+        name += ['cluster', config.clustering, 'distance', config.distance_metric]
+        if config.clustering == 'rbf_train':
+            name += ['gamma', str(config.rbf_gamma)]
+        if config.pseudo_open_set == None:
+            name += ['threshold', str(config.cluster_eval_threshold)]
+        else:
+            name += ['threshold', 'metalearn']
     else:
         raise NotImplementedError()
+
+    # if config.trainer in ["network", "osdn", "osdn_modified"]:
     name += ['classweight', config.class_weight]
     if config.pseudo_open_set != None:
         name += ['newpseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds)]

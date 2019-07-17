@@ -40,10 +40,17 @@ def main():
                                    os.sep,
                                    time.strftime("%Y-%m-%d %H:%M"))
         ckpt_dir = os.path.join(config.ckpt_dir, log_name)
-        utils.makedirs(ckpt_dir)
+        if config.save_ckpt:
+            utils.makedirs(ckpt_dir)
+            print(ckpt_dir)
+        else:
+            print("Warning: Not saving.")
 
-        writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
-        print(ckpt_dir)
+        if config.writer:
+            writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
+        else:
+            writer = None
+            print("Not writing to tensorboard")
         # logger save all performance data, and write to tensorboard every epoch/round
         logger = get_logger(log_name=log_name,
                             ckpt_dir=ckpt_dir,
@@ -53,7 +60,7 @@ def main():
 
         checkpoint = utils.get_checkpoint(start_round, s_train, open_samples, seen_classes, open_classes, trainer, logger)
                     
-        utils.save_checkpoint(ckpt_dir, checkpoint)
+        if config.save_ckpt: utils.save_checkpoint(ckpt_dir, checkpoint)
     else:
         # Begin from the checkpoint
         if not os.path.isfile(config.resume):
@@ -91,9 +98,6 @@ def main():
         
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
         # train_loss, train_acc = trainer.train_new_round(s_train, seen_classes)
-        print(f"Train => {round_i} round => "
-              f"Loss {train_loss}, Accuracy {train_acc}")
-        writer.add_scalar("/train_acc", train_acc, round_i)
 
         # eval_results = trainer.eval(test_dataset, verbose=True)
         
@@ -105,18 +109,20 @@ def main():
         
 
         print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
-        for acc_key in eval_results.keys():
-            if isinstance(eval_results[acc_key], float):
-                writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
-        writer.add_scalar("/seen_classes", len(seen_classes), round_i)
+        if config.writer: 
+            writer.add_scalar("/train_acc", train_acc, round_i)
+            for acc_key in eval_results.keys():
+                if isinstance(eval_results[acc_key], float):
+                    writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
+            writer.add_scalar("/seen_classes", len(seen_classes), round_i)
         
         assert len(set(s_train)) == len(s_train)
         assert len(set(t_train)) == len(t_train)
-        s_train = set(s_train).union(set(t_train))
+        s_train = list(set(s_train).union(set(t_train)))
 
         logger.log_round(round_i, s_train, seen_classes, eval_results)
         
-        if round_i % 20 == 0:
+        if round_i % 20 == 0 and config.save_ckpt:
             # Save every 20 rounds
             checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)
             utils.save_checkpoint(ckpt_dir, checkpoint)
