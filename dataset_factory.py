@@ -11,24 +11,7 @@ from torch.utils.data import SubsetRandomSampler
 import numpy as np
 import copy
 
-SUPPORTED_DATASETS = ['CIFAR10', 'CIFAR100']
-
-INIT_TRAIN_SET_CONFIG = {
-    'CIFAR100' : {
-        'default' : {
-            'num_init_classes' : 40,
-            'sample_per_class' : 12, # initially 40 x 12 = 480 samples
-            'num_open_classes' : 20, # So num_unseen_classes = 100 - 30 - 20 = 50
-            'use_random_classes' : False
-        },
-        'open_set' : {
-            'num_init_classes' : 10,
-            'sample_per_class' : 500,
-            'num_open_classes' : 10,
-            'use_random_classes' : False
-        }
-    }
-}
+from global_setting import SUPPORTED_DATASETS, INIT_TRAIN_SET_CONFIG
 
 def get_dataset_factory(data, data_path, init_mode):
     return DatasetFactory(data, data_path, init_mode)

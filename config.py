@@ -53,6 +53,7 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
                           choices=['network',
+                                   'gan',
                                    'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
                                    'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
@@ -69,7 +70,7 @@ trainer_args.add_argument('--class_weight',
 network_args = add_argument_group('Network Trainer Machine Param.')
 network_args.add_argument('--threshold_metric',
                           default='softmax',
-                          choices=['entropy', 'softmax'],
+                          choices=['entropy', 'softmax', 'gaussian'],
                           help="Use which score to measure the open set threshold")
 network_args.add_argument('--network_eval_mode',
                           default='threshold',
@@ -123,6 +124,30 @@ disc_args.add_argument('--div_eu',
                        help='EU distance will be divided by this parameter.'
                        )
 
+gan_args = add_argument_group('GAN Param.')
+gan_args.add_argument('--gan_player',
+                       default='single',
+                       choices=['single', # All classes trained together, one GAN
+                                'multiple', # #class GANs, use all D
+                                ],
+                       help='How many GANs are trained'
+                       )
+gan_args.add_argument('--gan_mode',
+                       default='ImageLevelGAN',
+                       choices=['ImageLevelGAN', 'MultiLabelImageLevelGAN', 'FeatureLevelGAN'],
+                       help='GAN mode. MultiLabel version only available with single player'
+                       )
+gan_args.add_argument('--gan_setup',
+                       default='standard',
+                       choices=['standard'],
+                       help='For image level it is a standard DCGAN.'
+                     )
+gan_args.add_argument('--gan_multi',
+                       default='all',
+                       choices=['all', 'highest', 'lowest'],
+                       help='In multi GAN setting, which discriminator to use. Score based on softmax',
+                     )
+
 cluster_args = add_argument_group('Cluster Network Trainer Machine Param.')
 cluster_args.add_argument('--clustering',
                           # default=['rbf_train','train_means'],
@@ -134,6 +159,9 @@ cluster_args.add_argument('--rbf_gamma',
 cluster_args.add_argument('--cluster_eval_threshold',
                           default=0.5, type=float,
                           help='The threshold to reject open set example.')
+cluster_args.add_argument('--cluster_level',
+                          default='after_fc', choices=['after_fc', 'before_fc'],
+                          help='Where to take the feature')
 
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
@@ -192,7 +220,7 @@ open_act_arg.add_argument('--budget',
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
                          default='default',
-                         choices=['default', 'open_set'],
+                         choices=['default', 'open_set_leave_one_out'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
@@ -215,6 +243,7 @@ pseudo_open_arg = add_argument_group('Pseudo-open set hyper tuning Param.')
 pseudo_open_arg.add_argument('--pseudo_open_set',
                              default=None,
                              choices=[None,
+                                      1,
                                       5,
                                       10],
                              type=int,
@@ -227,8 +256,13 @@ pseudo_open_arg.add_argument('--pseudo_open_set_rounds',
                             )
 pseudo_open_arg.add_argument('--pseudo_open_set_metric',
                              default='weighted',
-                             choices=['weighted', 'average'],
+                             choices=['weighted', 'average', '7_3'],
                              help='What is a good hyper? (a) weighted by example size. (b) average of closed and open set. Currently only support OSDNish methods.'
+                            )
+pseudo_open_arg.add_argument('--pseudo_same_network',
+                             default=False,
+                             type=str2bool,
+                             help='For debugging purpose. Use same network for pseudo training and actual training.',
                             )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,

@@ -27,5 +27,66 @@ OPENMAX_META_LEARN = {
         'weibull_tail_size' : [10, 20, 50],
         'alpha_rank' : [2, 3, 4, 5],
         'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
+    },
+}
+
+SUPPORTED_DATASETS = ['CIFAR10', 'CIFAR100']
+
+INIT_TRAIN_SET_CONFIG = {
+'CIFAR100' : {
+        'default' : {
+            'num_init_classes' : 40,
+            'sample_per_class' : 12, # initially 40 x 12 = 480 samples
+            'num_open_classes' : 20, # So num_unseen_classes = 100 - 30 - 20 = 50
+            'use_random_classes' : False
+        },
+        'open_set_leave_one_out' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 500,
+            'num_open_classes' : 10,
+            'use_random_classes' : False
+        },
+    }
+}
+
+GAN_STANDARD_SETUP = {
+                         'nc' : 3,
+                         'nz' : 100,
+                         'ngf' : 64,
+                         'ndf' : 64,
+                         'optim' : 'Adam',
+                         'lr' : 0.0002,
+                         'beta1' : 0.5,
+                         'num_epochs' : 5,
+                     }
+
+FEATURE_GAN_STANDARD_SETUP = {
+                                 'nc' : 100,
+                                 'nz' : 2048,
+                                 'ngf' : 512,
+                                 'ndf' : 512,
+                                 'optim' : 'Adam',
+                                 'lr' : 0.0002,
+                                 'beta1' : 0.5,
+                                 'num_epochs' : 5,
+                             }
+
+# Below are param for GAN training
+GAN_SETUP_DICT = {
+    'single' : {
+        'ImageLevelGAN' : {
+            'standard' : GAN_STANDARD_SETUP
+        },
+        'FeatureLevelGAN' : {
+            'standard' : FEATURE_GAN_STANDARD_SETUP
+        }
+    },
+    'multiple' : {
+        'ImageLevelGAN' : {
+            'standard' : GAN_STANDARD_SETUP
+        },
+        'FeatureLevelGAN' : {
+            'standard' : FEATURE_GAN_STANDARD_SETUP
+        }
     }
 }

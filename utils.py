@@ -137,7 +137,11 @@ def get_experiment_name(config):
     name_str += "_".join(name) + os.sep
 
     name = []
-    if config.trainer == "network":
+    if config.trainer == 'gan':
+        name += ['gan', config.gan_player, 'mode', config.gan_mode, 'setup', config.gan_setup]
+        if config.gan_player == 'multiple':
+            name += ['multi', config.gan_multi]
+    elif config.trainer == "network":
         name += ['openset', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold)]
     elif config.trainer in ['osdn','osdn_modified']:
         name += ['osdn_openmax' if not config.trainer == 'osdn_modified' else 'osdn_modified', 
@@ -152,7 +156,7 @@ def get_experiment_name(config):
         else:
             # Using cross validation/meta learning to decide hyper
             assert config.openmax_meta_learn != None
-            name += ["metalearn", str(config.openmax_meta_learn), 'pseudometric', config.pseudo_open_set_metric]
+            name += ["metalearn", str(config.openmax_meta_learn)]
         name += ['mav', config.mav_features_selection]
     elif config.trainer == 'cluster':
         name += ['cluster', config.clustering, 'distance', config.distance_metric]
@@ -164,13 +168,17 @@ def get_experiment_name(config):
             name += ['threshold', str(config.cluster_eval_threshold)]
         else:
             name += ['threshold', 'metalearn']
+        name += ['metric', config.threshold_metric]
+        name += ['level', config.cluster_level]
     else:
         raise NotImplementedError()
 
     # if config.trainer in ["network", "osdn", "osdn_modified"]:
     name += ['classweight', config.class_weight]
     if config.pseudo_open_set != None:
-        name += ['newpseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds)]
+        name += ['newpseopen', str(config.pseudo_open_set), 'round', str(config.pseudo_open_set_rounds), 'metric', config.pseudo_open_set_metric]
+        if config.pseudo_same_network:
+            name += ['same_network']
     name_str += "_".join(name) + os.sep
 
     name = []
