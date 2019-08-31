@@ -60,6 +60,28 @@ GAN_STANDARD_SETUP = {
                          'num_epochs' : 5,
                      }
 
+GAN_STANDARD_SETUP_20 = {
+                           'nc' : 3,
+                           'nz' : 100,
+                           'ngf' : 64,
+                           'ndf' : 64,
+                           'optim' : 'Adam',
+                           'lr' : 0.0002,
+                           'beta1' : 0.5,
+                           'num_epochs' : 20,
+                       }
+
+GAN_STANDARD_SETUP_100 = {
+                           'nc' : 3,
+                           'nz' : 100,
+                           'ngf' : 64,
+                           'ndf' : 64,
+                           'optim' : 'Adam',
+                           'lr' : 0.0002,
+                           'beta1' : 0.5,
+                           'num_epochs' : 100,
+                       }
+
 FEATURE_GAN_STANDARD_SETUP = {
                                  'nc' : 100,
                                  'nz' : 2048,
@@ -68,14 +90,16 @@ FEATURE_GAN_STANDARD_SETUP = {
                                  'optim' : 'Adam',
                                  'lr' : 0.0002,
                                  'beta1' : 0.5,
-                                 'num_epochs' : 5,
+                                 'num_epochs' : 50,
                              }
 
 # Below are param for GAN training
 GAN_SETUP_DICT = {
     'single' : {
         'ImageLevelGAN' : {
-            'standard' : GAN_STANDARD_SETUP
+            'standard' : GAN_STANDARD_SETUP,
+            '20_epochs' : GAN_STANDARD_SETUP_20,
+            '100_epochs' : GAN_STANDARD_SETUP_100,
         },
         'FeatureLevelGAN' : {
             'standard' : FEATURE_GAN_STANDARD_SETUP
@@ -83,7 +107,29 @@ GAN_SETUP_DICT = {
     },
     'multiple' : {
         'ImageLevelGAN' : {
-            'standard' : GAN_STANDARD_SETUP
+            'standard' : GAN_STANDARD_SETUP,
+            '20_epochs' : GAN_STANDARD_SETUP_20,
+            '100_epochs' : GAN_STANDARD_SETUP_100,
+        },
+        'FeatureLevelGAN' : {
+            'standard' : FEATURE_GAN_STANDARD_SETUP
+        }
+    },
+    'background' : {
+        'ImageLevelGAN' : {
+            'standard' : GAN_STANDARD_SETUP,
+            '20_epochs' : GAN_STANDARD_SETUP_20,
+            '100_epochs' : GAN_STANDARD_SETUP_100,
+        },
+        'FeatureLevelGAN' : {
+            'standard' : FEATURE_GAN_STANDARD_SETUP
+        }
+    },
+    'background_noise' : {
+        'ImageLevelGAN' : {
+            'standard' : GAN_STANDARD_SETUP,
+            '20_epochs' : GAN_STANDARD_SETUP_20,
+            '100_epochs' : GAN_STANDARD_SETUP_100,
         },
         'FeatureLevelGAN' : {
             'standard' : FEATURE_GAN_STANDARD_SETUP

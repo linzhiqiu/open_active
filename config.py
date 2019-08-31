@@ -129,6 +129,8 @@ gan_args.add_argument('--gan_player',
                        default='single',
                        choices=['single', # All classes trained together, one GAN
                                 'multiple', # #class GANs, use all D
+                                'background', # #class discriminators, use background classes
+                                'background_noise', # #class discriminators, use background classes + noisy distribution
                                 ],
                        help='How many GANs are trained'
                        )
@@ -139,7 +141,7 @@ gan_args.add_argument('--gan_mode',
                        )
 gan_args.add_argument('--gan_setup',
                        default='standard',
-                       choices=['standard'],
+                       choices=['standard', '20_epochs', '100_epochs'],
                        help='For image level it is a standard DCGAN.'
                      )
 gan_args.add_argument('--gan_multi',
@@ -244,7 +246,7 @@ pseudo_open_arg.add_argument('--pseudo_open_set',
                              default=None,
                              choices=[None,
                                       1,
-                                      5,
+                                      5, 4, 6,
                                       10],
                              type=int,
                              help='The number of pseudo-open set class (from training class). None if not using any.'
@@ -290,6 +292,8 @@ misc_arg.add_argument('--debug', action="store_true",
                       help="Whether to use the debug mode")
 misc_arg.add_argument('--verbose', action='store_true', default=False, 
                       help='chatty')
+misc_arg.add_argument('--save_gan_output', action='store_true', default=False, 
+                      help='If true, save to gan_output/')
 
 def get_config():
     config, unparsed = parser.parse_known_args()

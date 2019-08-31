@@ -281,7 +281,7 @@ class Network(TrainerMachine):
                                         device=self.device,
                                         start_epoch=start_epoch,
                                         max_epochs=self.max_epochs,
-                                        verbose=self.config.verbose
+                                        verbose=self.config.verbose,
                                     )
         print(f"Train => {self.round} round => "
               f"Loss {train_loss}, Accuracy {train_acc}")

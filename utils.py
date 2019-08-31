@@ -119,6 +119,10 @@ def get_target_unmapping_dict(classes, seen_classes):
         del unmapping[-1]
     return unmapping
 
+def enable_graphite(config):
+    import os
+    config.data_path = os.path.join("/scratch/datasets", config.data_path)
+
 def get_experiment_name(config):
     name_str = ''
 

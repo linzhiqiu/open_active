@@ -18,7 +18,8 @@ import utils
 
 def main():
     config, _ = get_config()
-    
+    if config.graphite:
+        config = utils.enable_graphite(config)
     dataset_factory = get_dataset_factory(config.data, config.data_path, config.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
