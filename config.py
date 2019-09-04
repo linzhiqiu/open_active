@@ -16,6 +16,11 @@ def add_argument_group(name):
 
 parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Active Algorithm')
 
+graphite_args = add_argument_group('Graphite Usage')
+graphite_args.add_argument('--graphite',
+                           default=False, type=str2bool,
+                           help='Enable Graphite.')
+
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data', 
                           default="CIFAR100",
@@ -276,6 +281,8 @@ pseudo_open_arg.add_argument('--openmax_meta_learn',
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--log_first_round', type=str2bool, default=False, #default='first_round.txt'
                       help='If True, log first round results to first_round/')
+misc_arg.add_argument('--log_first_round_thresholds', type=str2bool, default=False, #default='first_round.txt'
+                      help='If True, log first round threshold results to first_round_thresholds/')
 misc_arg.add_argument('--writer', type=str2bool, default=True,
                       help='Whether or not to use writer')
 misc_arg.add_argument('--save_ckpt', type=str2bool, default=True,

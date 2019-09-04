@@ -19,11 +19,13 @@ import utils
 def main():
     config, _ = get_config()
     if config.graphite:
-        config = utils.enable_graphite(config)
+        raise NotImplementedError()
+    #     config = utils.enable_graphite(config)
     dataset_factory = get_dataset_factory(config.data, config.data_path, config.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
     
+    time_stamp = time.strftime("%Y-%m-%d %H:%M")
     if not config.resume:
         # Begin from scratch
         start_round = 0
@@ -39,7 +41,7 @@ def main():
 
         log_name = "{}{}{}".format(utils.get_experiment_name(config),
                                    os.sep,
-                                   time.strftime("%Y-%m-%d %H:%M"))
+                                   time_stamp)
         ckpt_dir = os.path.join(config.ckpt_dir, log_name)
         if config.save_ckpt:
             utils.makedirs(ckpt_dir)
@@ -96,26 +98,46 @@ def main():
     # The main loop
     for round_i in range(start_round, config.max_rounds):
         print(f"Round [{round_i}]")
+
         
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
         
-        if round_i == 0 and config.log_first_round:
-            log_strs = utils.get_experiment_name(config).split(os.sep)
-            setting_str = log_strs[0]
-            training_str = '_'.join(log_strs[2:])
-            save_path = os.path.join('first_round', setting_str+".txt")
-            if not os.path.isfile(save_path):
-                with open(save_path, 'w+') as file:
-                    title_str = "|".join(["overall", "closed_set", "open_set", "details"])
-                    file.write(title_str + "\n")
-            with open(save_path, "a") as file:
-                closed_acc = eval_results['seen_closed_acc']
-                open_acc = eval_results['holdout_open_acc']
-                overall_acc = (closed_acc + open_acc) / 2.
-                detail_str = "|".join([f"{overall_acc:.5f}", f"{closed_acc:.5f}", f"{open_acc:.5f}", training_str])
-                file.write(detail_str + "\n")
-            print(f"Check {save_path}. Now exiting.")
-            exit(0)
+        if round_i == 0:
+            if config.log_first_round_thresholds:
+                log_strs = utils.get_experiment_name(config).split(os.sep)
+                dataset_str = utils.get_data_param(config)
+                method_str = utils.get_method_param(config)
+                training_str = '_'.join(log_strs[2:])
+                save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
+                first_round_thresholds = trainer.get_thresholds_checkpoints()[1]
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                import json
+                json_dict = json.dumps(first_round_thresholds)
+                f = open(os.path.join(save_dir, time_stamp+'.json'),"w+")
+                f.write(json_dict)
+                f.close()
+                exit(0)
+
+            if config.log_first_round:
+                log_strs = utils.get_experiment_name(config).split(os.sep)
+                setting_str = log_strs[0]
+                training_str = '_'.join(log_strs[2:])
+                save_path = os.path.join('first_round', setting_str+".txt")
+                if not os.path.isfile(save_path):
+                    with open(save_path, 'w+') as file:
+                        title_str = "|".join(["overall", "closed_set", "open_set", "details"])
+                        file.write(title_str + "\n")
+                with open(save_path, "a") as file:
+                    closed_acc = eval_results['seen_closed_acc']
+                    open_acc = eval_results['holdout_open_acc']
+                    overall_acc = (closed_acc + open_acc) / 2.
+                    detail_str = "|".join([f"{overall_acc:.5f}", f"{closed_acc:.5f}", f"{open_acc:.5f}", training_str])
+                    file.write(detail_str + "\n")
+                print(f"Check {save_path}. Now exiting.")
+                exit(0)
+            
+
 
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 

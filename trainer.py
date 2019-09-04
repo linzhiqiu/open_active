@@ -39,6 +39,8 @@ class Trainer(object):
         # Start a new round. Train the model using s_train from seen_classes. Then eval on test_dataset.
         return self.trainer_machine.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=eval_verbose)
 
+    def get_thresholds_checkpoints(self):
+        return self.trainer_machine.get_thresholds_checkpoints()
     # def train_new_round(self, s_train, seen_classes):
     #     return self.trainer_machine.train_new_round(s_train, seen_classes)
 

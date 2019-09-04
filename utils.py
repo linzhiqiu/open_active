@@ -123,6 +123,22 @@ def enable_graphite(config):
     import os
     config.data_path = os.path.join("/scratch/datasets", config.data_path)
 
+def get_data_param(config):
+    # For first round thresholds values logging
+    return "_".join([config.data, config.init_mode])
+
+def get_method_param(config):
+    # For first round thresholds values logging
+    if config.trainer == 'network':
+        setting_str = config.threshold_metric
+    elif config.trainer in ['osdn_modified', 'osdn']:
+        setting_str = config.distance_metric
+    elif config.trainer in ['cluster']:
+        setting_str = "_".join([config.clustering, "dist", config.distance_metric, "metric", config.threshold_metric])
+    else:
+        raise NotImplementedError()
+    return "_".join([config.trainer, setting_str])
+
 def get_experiment_name(config):
     name_str = ''
 
