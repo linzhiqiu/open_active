@@ -11,7 +11,7 @@ from tqdm import tqdm
 import copy
 
 import models
-from instance_info import BasicInfoCollector, ClusterInfoCollector
+from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
 
@@ -202,6 +202,7 @@ class Network(TrainerMachine):
             print(f"Using the first {self.pseudo_open_set} as pseudo classes for {self.pseudo_open_set_rounds} rounds.")
             self.pseudo_open_set_classes = set([i for i in range(self.pseudo_open_set)])
         else:
+            self.pseudo_open_set = self.config.pseudo_open_set
             self.pseudo_open_set_rounds = 0
             self.pseudo_open_set_classes = set() # No pseudo open set classes
 
@@ -552,17 +553,17 @@ class Network(TrainerMachine):
     def _eval_mode(self, model):
         model.eval()
 
-    def _get_network_model(self):
-        """ Get the regular softmax network model
-        """
-        model = getattr(models, self.config.arch)()
-        if self.config.pretrained != None:
-            state_dict = self._get_pretrained_model_state_dict()
-            model.load_state_dict(state_dict)
-            del state_dict
-        else:
-            print("Using random initialized model")
-        return model.to(self.device)
+    # def _get_network_model(self):
+    #     """ Get the regular softmax network model
+    #     """
+    #     model = getattr(models, self.config.arch)()
+    #     if self.config.pretrained != None:
+    #         state_dict = self._get_pretrained_model_state_dict()
+    #         model.load_state_dict(state_dict)
+    #         del state_dict
+    #     else:
+    #         print("Using random initialized model")
+    #     return model.to(self.device)
 
     def _get_pretrained_model_state_dict(self):
         if self.config.pretrained == 'CIFAR10':
@@ -665,10 +666,11 @@ class ClusterNetwork(Network):
 
         self.info_collector_class = lambda *args, **kwargs: ClusterInfoCollector(self.gamma, *args, **kwargs)
         # self.criterion_class = lambda **dict: lambda x, y: nn.NLLLoss(weight=dict['weight'])(torch.log(x / x.sum(1, keepdim=True)), y)
-        self.criterion_class = lambda **dict: lambda x, y: nn.CrossEntropyLoss(weight=dict['weight'])(torch.nn.LogSoftmax(dim=1)(x), y)
+        # self.criterion_class = lambda **dict: lambda x, y: nn.CrossEntropyLoss(weight=dict['weight'])(torch.nn.LogSoftmax(dim=1)(x), y)
+        self.criterion_class = lambda **dict: lambda x, y: nn.CrossEntropyLoss(weight=dict['weight'])(x, y) # ? This version - yes
 
     def _get_network_model(self):
-        """ Get the regular softmax network model
+        """ Get a network model without last ReLU layer
         """
         model = getattr(models, self.config.arch)(last_relu=False)
         if self.config.pretrained != None:
@@ -687,7 +689,6 @@ class ClusterNetwork(Network):
             raise NotImplementedError()
 
     def _update_last_layer(self, model, output_size, device='cuda'):
-        assert self.cluster_level in ['before_fc', 'after_fc']
         assert hasattr(self, 'network_output_size')
         if self.cluster_level == 'after_fc':
             if "resnet" in self.config.arch.lower():
@@ -701,7 +702,7 @@ class ClusterNetwork(Network):
             cluster_layer = models.ClusterLayer(output_size, output_size, self.distance_func, gamma=self.gamma).to(device)
             model.fc = torch.nn.Sequential(fc, cluster_layer)
         else:
-            cluster_layer = models.ClusterLayer(output_size, int(self.network_output_size), self.distance_func, gamma=self.gamma).to(device)
+            cluster_layer = models.ClusterLayer(output_size, self.network_output_size, self.distance_func, gamma=self.gamma).to(device)
             model.fc = cluster_layer
 
     def _get_open_set_pred_func(self):
@@ -760,6 +761,103 @@ class ClusterNetwork(Network):
                                 preds)
             return preds
         return open_set_prediction
+
+def sigmoid_loss(weight=None, mode='mean'):
+    def loss_func(x, y):
+        sigmoids = 1 - nn.Sigmoid()(x)
+        sigmoids[torch.arange(x.shape[0]), y] = nn.Sigmoid()(x)[torch.arange(x.shape[0]), y]
+        # log_sigmoids_expand = log_sigmoids.unsqueeze(1).expand(-1,log_sigmoids.shape[1],-1)
+        sigmoids = torch.max(torch.Tensor([1e-10]).to(sigmoids.device), sigmoids)
+        log_sigmoids = sigmoids.log()
+        if weight != None:
+            log_sigmoids = weights * log_sigmoids
+        if mode == 'mean':
+            res = log_sigmoids.mean(1).mean()
+        elif mode == 'sum':
+            res = log_sigmoids.sum(1).mean()
+        else:
+            raise NotImplementedError()
+        return - res
+    return loss_func
+
+class SigmoidNetwork(Network):
+    def __init__(self, *args, **kwargs):
+        super(SigmoidNetwork, self).__init__(*args, **kwargs)
+        # Before everything else, remove the relu from layer4
+        
+        if self.pseudo_open_set == None:
+            self.network_eval_threshold = self.config.network_eval_threshold
+        else:
+            self.network_eval_threshold = None
+
+        self.info_collector_class = lambda *args, **kwargs: SigmoidInfoCollector(*args, **kwargs)
+
+        self.sigmoid_train_mode = self.config.sigmoid_train_mode
+        self.criterion_class = lambda **dict: lambda x, y: sigmoid_loss(weight=dict['weight'], mode=self.sigmoid_train_mode)(x, y)
+
+    def _get_network_model(self):
+        """ Get the regular softmax network model
+        """
+        model = getattr(models, self.config.arch)(last_relu=False)
+        if self.config.pretrained != None:
+            state_dict = self._get_pretrained_model_state_dict()
+            model.load_state_dict(state_dict)
+            del state_dict
+        else:
+            print("Using random initialized model")
+        return model.to(self.device)
+
+    def _get_open_set_pred_func(self):
+        assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
+        if self.config.network_eval_mode == 'threshold':
+            threshold = self.config.network_eval_threshold
+        elif self.config.network_eval_mode == 'dynamic_threshold':
+            assert type(self.log) == list
+            if len(self.log) == 0:
+                # First round, use default threshold
+                threshold = self.config.network_eval_threshold
+                print(f"First round. Use default threshold {threshold}")
+            else:
+                try:
+                    threshold = get_dynamic_threshold(self.log, metric=self.config.threshold_metric, mode='weighted')
+                except NoSeenClassException:
+                    # Error when no new instances from seen class
+                    threshold = self.config.network_eval_threshold
+                    print(f"No seen class instances. Threshold set to {threshold}")
+                except NoUnseenClassException:
+                    threshold = self.config.network_eval_threshold
+                    print(f"No unseen class instances. Threshold set to {threshold}")
+                else:
+                    print(f"Threshold set to {threshold} based on all existing instances.")
+        elif self.config.network_eval_mode in ['pseuopen_threshold']:
+            assert hasattr(self, 'pseuopen_threshold')
+            print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
+            threshold = self.pseuopen_threshold
+
+        def open_set_prediction(outputs, inputs=None):
+            sigmoid_outputs = nn.Sigmoid()(outputs)
+            sigmoid_max, sigmoid_preds = torch.max(sigmoid_outputs, 1)
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            # if self.config.threshold_metric == 'softmax':
+            #     scores = softmax_max
+            # elif self.config.threshold_metric == 'entropy':
+            #     scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+            scores = sigmoid_max
+
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += softmax_max.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
+            
+            preds = torch.where(scores < threshold,
+                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                softmax_preds)
+            return preds
+        return open_set_prediction
+
 
 class OSDNNetwork(Network):
     def __init__(self, *args, **kwargs):

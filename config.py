@@ -58,6 +58,8 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
                           choices=['network',
+                                   'sigmoid', # Use 1 v.s. rest sigmoid network instead of softmax.
+                                   'c2ae',
                                    'gan',
                                    'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
@@ -90,6 +92,20 @@ network_args.add_argument('--network_eval_threshold',
                           type=float,
                           help='If max class probility < threshold, then classify to unseen class')
 
+sigmoid_args = add_argument_group('Sigmoid Trainer Machine Param.')
+sigmoid_args.add_argument('--sigmoid_train_mode',
+                          default='mean',
+                          choices=['sum', 'mean'], 
+                          help="Sum is to add all class score (e.g. logsigmoid or 1-logsigmoid). Mean is to take average of all classes for each example")
+
+c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
+c2ae_args.add_argument('--c2ae_train_mode',
+                          default='default',
+                          choices=['default', 'a_minus_1'], 
+                          help="C2AE config")
+c2ae_args.add_argument('--c2ae_alpha',
+                          default=0.9, type=float,
+                          help="C2AE alpha")
 
 
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')

@@ -131,6 +131,10 @@ def get_method_param(config):
     # For first round thresholds values logging
     if config.trainer == 'network':
         setting_str = config.threshold_metric
+    elif config.trainer == 'sigmoid':
+        setting_str = config.sigmoid_train_mode
+    elif config.trainer == 'c2ae':
+        setting_str = config.c2ae_train_mode
     elif config.trainer in ['osdn_modified', 'osdn']:
         setting_str = config.distance_metric
     elif config.trainer in ['cluster']:
@@ -163,6 +167,10 @@ def get_experiment_name(config):
             name += ['multi', config.gan_multi]
     elif config.trainer == "network":
         name += ['openset', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold)]
+    elif config.trainer == "sigmoid":
+        name += ["sigmoid", config.sigmoid_train_mode, config.network_eval_mode, str(config.network_eval_threshold)]
+    elif config.trainer == "c2ae":
+        name += ["c2ae", config.c2ae_train_mode, "alpha", str(config.c2ae_alpha), ]
     elif config.trainer in ['osdn','osdn_modified']:
         name += ['osdn_openmax' if not config.trainer == 'osdn_modified' else 'osdn_modified', 
                  "distance", config.distance_metric]

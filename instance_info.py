@@ -14,7 +14,7 @@ class BasicInstanceInfo(InstanceInfo):
         self.round_index = round_index
         self.true_label = true_label # in original index
         self.predicted_label = predicted_label # in original index
-        self.softmax = softmax # Caveat: For ClusterInfoCollector, this is just the prob score
+        self.softmax = softmax # Caveat: For SigmoidInfoCollector, this is the max sigmoid score.
         self.entropy = entropy # In fact, negative entropy, so the higher(more pos) the more certain
         self.seen = seen # -1 if unseen, 1 if seen
 
@@ -127,5 +127,60 @@ class ClusterInfoCollector(BasicInfoCollector):
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
             instance_info = ClusterInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, gaussian_i, label_i in self.seen_classes)
+            batch_instances_info.append(instance_info)
+        return batch_instances_info
+
+class SigmoidInfoCollector(BasicInfoCollector):
+    def __init__(self, *args, **kwargs):
+        super(SigmoidInfoCollector, self).__init__(*args, **kwargs)
+
+    def _basic_batch_instances_info_func(self, outputs, labels):
+        '''A func takes a batch of outputs, labels,
+           then output a list of InstanceInfo objects
+        '''
+        # Return a list with length == outputs.size(0). Each element is the information of that specific example.
+        # Each element is represented by (round_index, true_label, predicted_label, max_cluster_score, entropy, -1 if in unseen class else 1)
+        batch_instances_info = []
+        softmax_outputs = F.softmax(outputs, dim=1)
+        sigmoid_outputs = torch.nn.Sigmoid()(outputs)
+        # normalized_outputs = outputs / outputs.sum(1, keepdim=True)
+        prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
+        max_sigmoid_scores, _ = torch.max(sigmoid_outputs, 1)
+        for i in range(outputs.size(0)):
+            prob_i = prob_scores[i]
+            open_i = max_sigmoid_scores[i]
+            entropy_i = float((prob_i*prob_i.log()).sum()) # This is the negative entropy
+            prob_score_i = float(prob_scores[i])
+            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
+            label_i = int(labels[i])
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
+            batch_instances_info.append(instance_info)
+        return batch_instances_info
+
+class C2AEInfoCollector(BasicInfoCollector):
+    def __init__(self, *args, **kwargs):
+        super(C2AEInfoCollector, self).__init__(*args, **kwargs)
+
+    def _basic_batch_instances_info_func(self, outputs, labels):
+        '''A func takes a batch of outputs, labels,
+           then output a list of InstanceInfo objects
+        '''
+        # Return a list with length == outputs.size(0). Each element is the information of that specific example.
+        # Each element is represented by (round_index, true_label, predicted_label, max_cluster_score, entropy, -1 if in unseen class else 1)
+        raise NotImplementedError()
+        batch_instances_info = []
+        softmax_outputs = F.softmax(outputs, dim=1)
+        sigmoid_outputs = torch.nn.Sigmoid()(outputs)
+        # normalized_outputs = outputs / outputs.sum(1, keepdim=True)
+        prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
+        max_sigmoid_scores, _ = torch.max(sigmoid_outputs, 1)
+        for i in range(outputs.size(0)):
+            prob_i = prob_scores[i]
+            open_i = max_sigmoid_scores[i]
+            entropy_i = float((prob_i*prob_i.log()).sum()) # This is the negative entropy
+            prob_score_i = float(prob_scores[i])
+            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
+            label_i = int(labels[i])
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info

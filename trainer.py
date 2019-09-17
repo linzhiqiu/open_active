@@ -1,5 +1,6 @@
-from trainer_machine import Network, OSDNNetwork, OSDNNetworkModified, ClusterNetwork
+from trainer_machine import Network, OSDNNetwork, OSDNNetworkModified, ClusterNetwork, SigmoidNetwork
 from gan import GANFactory
+from c2ae import C2AE
 from label_picker import UncertaintyMeasure
 
 def get_trainer(config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
@@ -72,10 +73,14 @@ class Trainer(object):
             trainer_machine_class = Network
         elif self.config.trainer == 'osdn':
             trainer_machine_class = OSDNNetwork
+        elif self.config.trainer == 'c2ae':
+            trainer_machine_class = C2AE
         elif self.config.trainer == 'osdn_modified':
             trainer_machine_class = OSDNNetworkModified
         elif self.config.trainer == 'cluster':
             trainer_machine_class = ClusterNetwork
+        elif self.config.trainer == 'sigmoid':
+            trainer_machine_class = SigmoidNetwork
         elif self.config.trainer == 'gan':
             gan_factory = GANFactory(self.config)
             trainer_machine_class = gan_factory.gan_class()
@@ -85,7 +90,7 @@ class Trainer(object):
                                      self.train_instance)
 
     def _init_label_picker(self):
-        if self.config.trainer in ['network', 'osdn', 'osdn_modified', 'cluster', 'gan']:
+        if self.config.trainer in ['network', 'osdn', 'osdn_modified', 'cluster', 'gan', 'sigmoid', 'c2ae']:
             if self.config.label_picker == 'uncertainty_measure':
                 label_picker_class = UncertaintyMeasure
             else:
