@@ -553,17 +553,17 @@ class Network(TrainerMachine):
     def _eval_mode(self, model):
         model.eval()
 
-    # def _get_network_model(self):
-    #     """ Get the regular softmax network model
-    #     """
-    #     model = getattr(models, self.config.arch)()
-    #     if self.config.pretrained != None:
-    #         state_dict = self._get_pretrained_model_state_dict()
-    #         model.load_state_dict(state_dict)
-    #         del state_dict
-    #     else:
-    #         print("Using random initialized model")
-    #     return model.to(self.device)
+    def _get_network_model(self):
+        """ Get the regular softmax network model
+        """
+        model = getattr(models, self.config.arch)()
+        if self.config.pretrained != None:
+            state_dict = self._get_pretrained_model_state_dict()
+            model.load_state_dict(state_dict)
+            del state_dict
+        else:
+            print("Using random initialized model")
+        return model.to(self.device)
 
     def _get_pretrained_model_state_dict(self):
         if self.config.pretrained == 'CIFAR10':

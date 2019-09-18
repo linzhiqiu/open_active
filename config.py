@@ -101,7 +101,7 @@ sigmoid_args.add_argument('--sigmoid_train_mode',
 c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
 c2ae_args.add_argument('--c2ae_train_mode',
                           default='default',
-                          choices=['default', 'a_minus_1'], 
+                          choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce'], 
                           help="C2AE config")
 c2ae_args.add_argument('--c2ae_alpha',
                           default=0.9, type=float,

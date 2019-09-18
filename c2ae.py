@@ -23,18 +23,32 @@ import models
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
 # from vector import clamp_to_unit_sphere
-
-def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, criterion, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True):
+SAVE_FIG_EVERY_EPOCH = 500
+def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False):
     assert start_epoch < max_epochs
     avg_loss = 0.
     avg_match_loss = 0.
     avg_nonmatch_loss = 0.
 
-    assert train_mode in ['default', 'a_minus_1']
+    assert train_mode in ['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce']
     if train_mode == 'default':
         nonmatch_ratio = 1.-alpha
+        criterion = nn.L1Loss()
     elif train_mode == 'a_minus_1':
         nonmatch_ratio = alpha-1.
+        criterion = nn.L1Loss()
+    elif train_mode == 'default_mse':
+        nonmatch_ratio = 1.-alpha
+        criterion = nn.MSELoss()
+    elif train_mode == 'a_minus_1_mse':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.MSELoss()
+    elif train_mode == 'default_bce':
+        nonmatch_ratio = 1.-alpha
+        criterion = nn.BCELoss()
+    elif train_mode == 'a_minus_1_bce':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.BCELoss()
 
     for epoch in range(start_epoch, max_epochs):
         for phase in dataloaders.keys():
@@ -64,14 +78,41 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
                 with torch.set_grad_enabled(phase == 'train'):
 
-                    outputs = autoencoder(inputs, labels)
-                    match_loss = criterion(outputs, inputs)
+                    matched_outputs = autoencoder(inputs, labels)
+                    match_loss = criterion(matched_outputs, inputs)
 
                     dist = torch.zeros((inputs.shape[0], num_classes-1)).to(inputs.device) + (1/float(num_classes-1))
                     perm = torch.multinomial(dist,1).reshape(-1)
                     nm_labels = torch.remainder(labels + perm + 1, num_classes)
-                    outputs = autoencoder(inputs, nm_labels)
-                    nonmatch_loss = criterion(outputs, inputs)
+                    nonmatch_outputs = autoencoder(inputs, nm_labels)
+                    nonmatch_loss = criterion(nonmatch_outputs, inputs)
+                    
+                    if save_output and (batch == len(dataloaders[phase])-1):
+                        matched_results = vutils.make_grid(matched_outputs.detach().cpu(), padding=2, normalize=True)
+                        nonmatch_results = vutils.make_grid(nonmatch_outputs.detach().cpu(), padding=2, normalize=True)
+
+                        # if (batch % SAVE_FIG_EVERY_EPOCH == 0) and ((epoch == max_epochs-1) and (batch == len(dataloader)-1)):
+                        
+                        plt.figure(figsize=(25,25))
+                        plt.subplot(1,3,1)
+                        plt.axis("off")
+                        plt.title("Original Images")
+                        plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
+                        
+                        plt.subplot(1,3,2)
+                        plt.axis("off")
+                        plt.title("Match Reconstruction")
+                        plt.imshow(np.transpose(matched_results,(1,2,0)))
+
+                        plt.subplot(1,3,3)
+                        plt.axis("off")
+                        plt.title("NonMatch Reconstruction")
+                        plt.imshow(np.transpose(nonmatch_results,(1,2,0)))
+
+                        save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}"
+                        if not os.path.exists(save_dir):
+                            os.makedirs(save_dir)
+                        plt.savefig(save_dir + os.sep + str(epoch) + ".png")
 
                     loss = alpha * match_loss + nonmatch_ratio * nonmatch_loss
                     if phase == 'train':
@@ -159,7 +200,8 @@ class generator32(nn.Module):
         # 128 x 16 x 16
         x = self.conv5(x)
         # 3 x 32 x 32
-        x = nn.Sigmoid()(x)
+        # x = nn.Sigmoid()(x)
+        x = nn.Tanh()(x) # Since we use zero mean normalization
         return x
 
 class Decoder(nn.Module):
@@ -256,21 +298,23 @@ class C2AE(Network):
         optimizer_decoder = self._get_network_optimizer(self.decoder)
         scheduler_decoder = self._get_network_scheduler(optimizer_decoder)
         self.autoencoder = ResNetAutoEncoder(model, self.decoder)
-        criterion_autoencoder = torch.nn.L1Loss()
+        # criterion_autoencoder = torch.nn.L1Loss()
+        # criterion_autoencoder = torch.nn.MSELoss()
+        # criterion_autoencoder = torch.nn.BCELoss()
         with SetPrintMode(hidden=not self.config.verbose):
             match_loss, nm_loss =   train_autoencoder(
                                         self.autoencoder,
                                         self.dataloaders,
                                         optimizer_decoder,
                                         scheduler_decoder,
-                                        criterion_autoencoder,
                                         self.c2ae_alpha,
                                         len(seen_classes),
                                         train_mode=self.c2ae_train_mode,
                                         device=self.device,
                                         start_epoch=0,
-                                        max_epochs=self.max_epochs,
-                                        # max_epochs=1,
+                                        # max_epochs=self.max_epochs,
+                                        max_epochs=100,
+                                        save_output=True,
                                         verbose=self.config.verbose,
                                     )
         print(f"Train => {self.round} round => "
