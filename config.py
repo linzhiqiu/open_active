@@ -101,7 +101,10 @@ sigmoid_args.add_argument('--sigmoid_train_mode',
 c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
 c2ae_args.add_argument('--c2ae_train_mode',
                           default='default',
-                          choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce'], 
+                          choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
+                                   "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
+                                   'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
+                                   'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder'],
                           help="C2AE config")
 c2ae_args.add_argument('--c2ae_alpha',
                           default=0.9, type=float,

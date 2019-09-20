@@ -30,7 +30,10 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
     avg_match_loss = 0.
     avg_nonmatch_loss = 0.
 
-    assert train_mode in ['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce']
+    assert train_mode in ['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
+                          "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
+                          'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder_bce',
+                          'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']
     if train_mode == 'default':
         nonmatch_ratio = 1.-alpha
         criterion = nn.L1Loss()
@@ -45,10 +48,36 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
         criterion = nn.MSELoss()
     elif train_mode == 'default_bce':
         nonmatch_ratio = 1.-alpha
-        criterion = nn.BCELoss()
+        criterion = nn.BCEWithLogitsLoss()
     elif train_mode == 'a_minus_1_bce':
         nonmatch_ratio = alpha-1.
-        criterion = nn.BCELoss()
+        criterion = nn.BCEWithLogitsLoss()
+    elif train_mode == 'debug_no_label':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.L1Loss()
+    elif train_mode == 'debug_no_label_mse':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.MSELoss()
+    elif train_mode == 'debug_no_label_bce':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.BCEWithLogitsLoss()
+    elif train_mode == 'debug_no_label_dcgan':
+        nonmatch_ratio = alpha-1.
+        criterion = nn.L1Loss()
+    elif train_mode in ['debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder','debug_no_label_simple_autoencoder_bce', 'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']:
+        nonmatch_ratio = alpha-1.
+        if '_bce' in train_mode:
+            criterion = nn.BCEWithLogitsLoss()
+        elif "_mse" in train_mode:
+            criterion = nn.MSELoss()
+        else:
+            criterion = nn.L1Loss()
+        optim_param = {"lr": 0.0003, 
+                       "weight_decay": 1e-6}            
+        optimizer_decoder = torch.optim.Adam(
+                                filter(lambda x : x.requires_grad, autoencoder.parameters()), 
+                                **optim_param
+                            )
 
     for epoch in range(start_epoch, max_epochs):
         for phase in dataloaders.keys():
@@ -143,6 +172,78 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
+class Autoencoder(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super(Autoencoder, self).__init__()
+        # Input size: [batch, 3, 32, 32]
+        # Output size: [batch, 3, 32, 32]
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 12, 4, stride=2, padding=1),            # [batch, 12, 16, 16]
+            nn.ReLU(),
+            nn.Conv2d(12, 24, 4, stride=2, padding=1),           # [batch, 24, 8, 8]
+            nn.ReLU(),
+            nn.Conv2d(24, 48, 4, stride=2, padding=1),           # [batch, 48, 4, 4]
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(48, 24, 4, stride=2, padding=1),  # [batch, 24, 8, 8]
+            nn.ReLU(),
+            nn.ConvTranspose2d(24, 12, 4, stride=2, padding=1),  # [batch, 12, 16, 16]
+            nn.ReLU(),
+            nn.ConvTranspose2d(12, 3, 4, stride=2, padding=1),   # [batch, 3, 32, 32]
+            nn.Tanh(),
+        )
+
+    def forward(self, x, labels):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+
+class ConditionedAutoencoder(Autoencoder):
+    def __init__(self, num_classes=0, *args, **kwargs):
+        super(ConditionedAutoencoder, self).__init__()
+        self.num_classes = num_classes
+        self.h_y = torch.nn.Linear(num_classes, 768, bias=True)
+        self.h_b = torch.nn.Linear(num_classes, 768, bias=True)
+
+    def forward(self, x, labels):
+        encoded = self.encoder(x)
+        label_vectors = torch.zeros(x.shape[0], self.num_classes).to(x.device) - 1.
+        label_vectors[torch.arange(x.shape[0]), labels] = 1.
+        y = self.h_y(label_vectors)
+        b = self.h_b(label_vectors)
+        encoded_shape = encoded.shape
+        z = encoded.view(encoded.shape[0], -1)*y + b
+        z = z.view(encoded_shape)
+        decoded = self.decoder(z)
+        return decoded
+
+class dcgan_generator(nn.Module):
+    def __init__(self, latent_size=2048, ngf=64, *args, **kwargs):
+        super(dcgan_generator, self).__init__()
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(latent_size, ngf * 4, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 4 x 4
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (nc) x 32 x 32
+        )
+
+    def forward(self, input):
+        input = input.unsqueeze(2).unsqueeze(3)
+        return self.main(input)
+
 class generator32(nn.Module):
     def __init__(self, latent_size=100, batch_size=64, **kwargs):
         super(self.__class__, self).__init__()
@@ -150,12 +251,12 @@ class generator32(nn.Module):
         self.fc1 = nn.Linear(latent_size, 512*2*2, bias=False)
 
         self.conv2_in = nn.ConvTranspose2d(latent_size, 512, 1, stride=1, padding=0, bias=False)
-        self.conv2 = nn.ConvTranspose2d(   512,      512, 4, stride=2, padding=1, bias=False)
+        self.conv2 = nn.ConvTranspose2d(512,512, 4, stride=2, padding=1, bias=False)
         self.conv3_in = nn.ConvTranspose2d(latent_size, 512, 1, stride=1, padding=0, bias=False)
-        self.conv3 = nn.ConvTranspose2d(   512,      256, 4, stride=2, padding=1, bias=False)
+        self.conv3 = nn.ConvTranspose2d(512,256, 4, stride=2, padding=1, bias=False)
         self.conv4_in = nn.ConvTranspose2d(latent_size, 256, 1, stride=1, padding=0, bias=False)
-        self.conv4 = nn.ConvTranspose2d(   256,      128, 4, stride=2, padding=1, bias=False)
-        self.conv5 = nn.ConvTranspose2d(   128,        3, 4, stride=2, padding=1)
+        self.conv4 = nn.ConvTranspose2d(256,128, 4, stride=2, padding=1, bias=False)
+        self.conv5 = nn.ConvTranspose2d(128,  3, 4, stride=2, padding=1)
 
         self.bn1 = nn.BatchNorm2d(512)
         self.bn2 = nn.BatchNorm2d(512)
@@ -222,6 +323,32 @@ class Decoder(nn.Module):
         b = self.h_b(label_vectors)
         z = x*y + b
         out = self.generator(z)
+        return out
+
+class DecoderNoLabel(nn.Module):
+    def __init__(self, latent_size=100, batch_size=64, num_classes=0):
+        super(self.__class__, self).__init__()
+        assert num_classes > 0
+        self.num_classes = num_classes
+        self.latent_size = latent_size
+        self.batch_size = batch_size
+        self.generator = generator32(latent_size=latent_size, batch_size=batch_size)
+
+    def forward(self, x, labels):
+        out = self.generator(x)
+        return out
+
+class DecoderNoLabelDCGAN(nn.Module):
+    def __init__(self, latent_size=100, batch_size=64, num_classes=0):
+        super(self.__class__, self).__init__()
+        assert num_classes > 0
+        self.num_classes = num_classes
+        self.latent_size = latent_size
+        self.batch_size = batch_size
+        self.generator = dcgan_generator(latent_size=latent_size, batch_size=batch_size)
+
+    def forward(self, x, labels):
+        out = self.generator(x)
         return out
 
 class ResNetAutoEncoder(nn.Module):
@@ -294,10 +421,22 @@ class C2AE(Network):
               f"Loss {train_loss}, Accuracy {train_acc}")
         print(f"Finish training the encoder. Now train the decoder.")
         
-        self.decoder = Decoder(latent_size=2048, batch_size=self.config.batch, num_classes=len(seen_classes)).to(self.device)
+        if self.c2ae_train_mode in ["debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce']:
+            self.decoder = DecoderNoLabel(latent_size=2048, batch_size=self.config.batch, num_classes=len(seen_classes)).to(self.device)
+        elif self.c2ae_train_mode in ["debug_no_label_dcgan", 'debug_no_label_not_frozen_dcgan']:
+            self.decoder = DecoderNoLabelDCGAN(latent_size=2048, batch_size=self.config.batch, num_classes=len(seen_classes)).to(self.device)            
+        else:
+            self.decoder = Decoder(latent_size=2048, batch_size=self.config.batch, num_classes=len(seen_classes)).to(self.device)
+        
+
         optimizer_decoder = self._get_network_optimizer(self.decoder)
         scheduler_decoder = self._get_network_scheduler(optimizer_decoder)
-        self.autoencoder = ResNetAutoEncoder(model, self.decoder)
+        if self.c2ae_train_mode in ['debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce']:
+            self.autoencoder = Autoencoder().to(self.device)
+        elif self.c2ae_train_mode in ['debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']:
+            self.autoencoder = ConditionedAutoencoder(latent_size=2048, num_classes=len(seen_classes)).to(self.device)
+        else:
+            self.autoencoder = ResNetAutoEncoder(model, self.decoder)
         # criterion_autoencoder = torch.nn.L1Loss()
         # criterion_autoencoder = torch.nn.MSELoss()
         # criterion_autoencoder = torch.nn.BCELoss()
@@ -313,7 +452,7 @@ class C2AE(Network):
                                         device=self.device,
                                         start_epoch=0,
                                         # max_epochs=self.max_epochs,
-                                        max_epochs=100,
+                                        max_epochs=150,
                                         save_output=True,
                                         verbose=self.config.verbose,
                                     )
