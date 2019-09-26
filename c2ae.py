@@ -387,7 +387,7 @@ class C2AE(Network):
 
 
     def _train(self, model, s_train, seen_classes, start_epoch=0):
-        self._train_mode(model)
+        self._train_mode()
         target_mapping_func = self._get_target_mapp_func(seen_classes)
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                   list(s_train),
@@ -460,6 +460,14 @@ class C2AE(Network):
               f"Match Loss {match_loss}, Non-match Loss {nm_loss}")
         return train_loss, train_acc
 
+    def _train_mode(self):
+        self.model.train()
+        self.autoencoder.train()
+
+    def _eval_mode(self):
+        self.model.eval()
+        self.autoencoder.eval()
+        
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
         if self.config.network_eval_mode == 'threshold':
