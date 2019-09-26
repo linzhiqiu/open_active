@@ -1,0 +1,14 @@
+data
+__pycache__
+models/__pycache__
+.ipynb*
+ckpt/*
+ckpts/*
+runs/*
+old_runs/*
+old_ckpts/*
+downloaded_models/*
+first_round*/
+gan_output*/
+c2ae_results/*
+
