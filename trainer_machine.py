@@ -262,7 +262,7 @@ class Network(TrainerMachine):
         return remaining_samples, remaining_seen_classes
 
     def _train(self, model, s_train, seen_classes, start_epoch=0):
-        self._train_mode(model)
+        self._train_mode()
         target_mapping_func = self._get_target_mapp_func(seen_classes)
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                   list(s_train),
@@ -327,7 +327,7 @@ class Network(TrainerMachine):
         return train_loss, train_acc, eval_results
 
     def _eval(self, model, test_dataset, seen_classes, verbose=True):
-        self._eval_mode(model)
+        self._eval_mode()
 
         # Update self.thresholds_checkpoints
         # assert self.round not in self.thresholds_checkpoints.keys()
@@ -547,11 +547,11 @@ class Network(TrainerMachine):
     #         return nn.CrossEntropyLoss()(outputs, labels)
     #     return None
 
-    def _train_mode(self, model):
-        model.train()
+    def _train_mode(self):
+        self.model.train()
 
-    def _eval_mode(self, model):
-        model.eval()
+    def _eval_mode(self):
+        self.model.eval()
 
     def _get_network_model(self):
         """ Get the regular softmax network model
