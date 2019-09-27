@@ -530,8 +530,7 @@ class C2AE(Network):
         def open_set_prediction(outputs, inputs=None):
             num_classes = outputs.shape[1]
             k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, outputs.shape[0])
-            import pdb; pdb.set_trace()  # breakpoint 0e426300 //
-            
+
             for class_i in range(num_classes):
                 errors = torch.abs(inputs - self.autoencoder(inputs, k_labels[class_i])).view(outputs.shape[0], -1).mean(1)
                 if class_i == 0:
