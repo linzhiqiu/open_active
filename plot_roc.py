@@ -207,6 +207,40 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
         auc_score = calc_auc_score(FPR, TCR)
         max_acc = total_corrects / num_closed_set
         parsed_results = {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
+    
+    # Plot histogram
+    gt = np.array(dictionary['ground_truth'])
+    open_scores = np.array(dictionary['open_set_score'])
+    gt[gt >= 0] = 0
+    if open_set == 'all':
+        gt[gt == OPEN_CLASS_INDEX] = 1
+        gt[gt == UNSEEN_CLASS_INDEX] = 1
+    elif open_set == 'hold_out':
+        gt[gt == OPEN_CLASS_INDEX] = 1
+        selected_indices = gt != UNSEEN_CLASS_INDEX
+        open_scores = open_scores[selected_indices]
+        gt = gt[selected_indices]
+    else:
+        gt[gt == UNSEEN_CLASS_INDEX] = 1
+        selected_indices = gt != OPEN_CLASS_INDEX
+        open_scores = open_scores[selected_indices]
+        gt = gt[selected_indices]
+    opens = open_scores[gt == 1]
+    closeds = open_scores[gt == 0]
+    histo_file = json_file[:json_file.rfind(".")] + "_" + open_set + ".png"
+    max_score = max(open_scores)
+    min_score = min(open_scores)
+
+    bins = np.linspace(min_score, max_score, 100)
+    plt.figure(figsize=(10,10))
+    plt.hist(opens, bins, alpha=0.5, label='open set')
+    plt.hist(closeds, bins, alpha=0.5, label='closed set')
+    plt.legend(loc='upper right')
+    # plt.show()
+    plt.tight_layout()
+    plt.savefig(histo_file)
+    print(f"Fig save to {histo_file}")
+
     return parsed_results
 
 
