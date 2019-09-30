@@ -480,6 +480,7 @@ class Network(TrainerMachine):
                   f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
         return epoch_result
 
+
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
         if self.config.network_eval_mode == 'threshold':
@@ -631,6 +632,12 @@ class Network(TrainerMachine):
             model.fc.weight.data.normal_(0, 0.01)
             model.fc.bias.data.zero_()
             model.fc.to(device)
+        elif self.config.arch == 'classifier32':
+            fd = int(model.fc1.weight.size()[1])
+            model.fc1 = nn.Linear(fd, output_size)
+            model.fc1.weight.data.normal_(0, 0.01)
+            model.fc1.bias.data.zero_()
+            model.fc1.to(device)
         else:
             raise NotImplementedError()
 

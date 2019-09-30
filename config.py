@@ -103,8 +103,10 @@ c2ae_args.add_argument('--c2ae_train_mode',
                           default='default',
                           choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
                                    "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
+                                   'debug_no_label_dcgan_mse', 'debug_no_label_not_frozen_dcgan_mse', 'a_minus_1_dcgan_mse', 'a_minus_1_dcgan',
                                    'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
-                                   'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder'],
+                                   'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder',
+                                   'a_minus_1_dcgan_mse_not_frozen', 'a_minus_1_dcgan_not_frozen', 'UNet_mse', 'UNet'],
                           help="C2AE config")
 c2ae_args.add_argument('--c2ae_alpha',
                           default=0.9, type=float,
@@ -191,7 +193,7 @@ cluster_args.add_argument('--cluster_level',
 
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
-                          choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50'], default='ResNet50',
+                          choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50', 'classifier32'], default='ResNet50',
                           help='CNN architecture (default: ResNet50)')
 training_arg.add_argument('--pretrained',
                           choices=[None, 'CIFAR10'],

@@ -117,6 +117,8 @@ def main():
                 f = open(os.path.join(save_dir, time_stamp+'.json'),"w+")
                 f.write(json_dict)
                 f.close()
+
+                # trainer.trainer_machine.draw_histogram()
                 exit(0)
 
             if config.log_first_round:

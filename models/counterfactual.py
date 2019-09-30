@@ -48,7 +48,6 @@ class classifier32(nn.Module):
         self.cuda()
 
     def forward(self, x, return_features=False):
-        import pdb; pdb.set_trace()  # breakpoint 4437580d //
         batch_size = len(x)
 
         x = self.dr1(x)

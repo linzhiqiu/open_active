@@ -1,0 +1,3 @@
+[submodule "OSDN"]
+	path = OSDN
+	url = https://github.com/abhijitbendale/OSDN.git
