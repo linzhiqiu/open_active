@@ -60,7 +60,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                 scheduler_decoder.step()
                 autoencoder.train()
             else:
-                autoencoder.eval()
+                # autoencoder.eval()
+                pass
 
             running_match_loss = 0.0
             running_nonmatch_loss = 0.0
@@ -82,40 +83,79 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
                 with torch.set_grad_enabled(phase == 'train'):
 
-                    matched_outputs = autoencoder(inputs, labels)
-                    match_loss = criterion(matched_outputs, inputs)
-
                     dist = torch.zeros((inputs.shape[0], num_classes-1)).to(inputs.device) + (1/float(num_classes-1))
                     perm = torch.multinomial(dist,1).reshape(-1)
                     nm_labels = torch.remainder(labels + perm + 1, num_classes)
                     nonmatch_outputs = autoencoder(inputs, nm_labels)
                     nonmatch_loss = criterion(nonmatch_outputs, inputs)
+
+                    matched_outputs = autoencoder(inputs, labels)
+                    match_loss = criterion(matched_outputs, inputs)
+
+
+                    if epoch==max_epochs-1:
+                        # Try batch size = 1. Train both train and eval
+                        k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, inputs.shape[0])
+                        for class_i in range(num_classes):
+                            reconstruction_i = autoencoder(inputs, k_labels[class_i])
+                            errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
+                            if class_i == 0:
+                                min_errors = errors
+                            else:
+                                min_errors = torch.min(min_errors, errors)
                     
-                    if save_output and (batch == len(dataloaders[phase])-1):
-                        matched_results = vutils.make_grid(matched_outputs.detach().cpu(), padding=2, normalize=True)
-                        nonmatch_results = vutils.make_grid(nonmatch_outputs.detach().cpu(), padding=2, normalize=True)
-
-                        # if (batch % SAVE_FIG_EVERY_EPOCH == 0) and ((epoch == max_epochs-1) and (batch == len(dataloader)-1)):
-                        
-                        plt.figure(figsize=(25,25))
-                        plt.subplot(1,3,1)
-                        plt.axis("off")
-                        plt.title("Original Images")
-                        plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
-                        
-                        plt.subplot(1,3,2)
-                        plt.axis("off")
-                        plt.title("Match Reconstruction")
-                        plt.imshow(np.transpose(matched_results,(1,2,0)))
-
-                        plt.subplot(1,3,3)
-                        plt.axis("off")
-                        plt.title("NonMatch Reconstruction")
-                        plt.imshow(np.transpose(nonmatch_results,(1,2,0)))
-
+                    if save_output:
                         save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}_arch_{arch}"
                         if not os.path.exists(save_dir):
                             os.makedirs(save_dir)
+                        
+                        if epoch==max_epochs-1:
+                            # Save the histogram 
+                            if batch==0:
+                                match_scores = []
+                                nonmatch_scores = []
+                            match_scores += (torch.abs(matched_outputs - inputs).view(inputs.shape[0],-1).mean(1).detach().cpu()).tolist()
+                            nonmatch_scores += (torch.abs(nonmatch_outputs - inputs).view(inputs.shape[0],-1).mean(1).detach().cpu()).tolist()
+
+
+                            if (batch == len(dataloaders[phase])-1):
+                                max_score = max(match_scores + nonmatch_scores)
+                                min_score = min(match_scores + nonmatch_scores)
+                                bins = np.linspace(min_score, max_score, 100)
+                                plt.figure(figsize=(10,10))
+                                plt.hist(match_scores, bins, alpha=0.5, label='Matched')
+                                plt.hist(nonmatch_scores, bins, alpha=0.5, label='Non Matched')
+                                plt.legend(loc='upper right')
+                                # plt.show()
+                                plt.tight_layout()
+                                histo_file = os.path.join(save_dir, "histo.png")
+                                plt.savefig(histo_file)
+                                print(f"Fig save to {histo_file}")
+
+
+                        if (batch == len(dataloaders[phase])-1):
+                            matched_results = vutils.make_grid(matched_outputs.detach().cpu(), padding=2, normalize=True)
+                            nonmatch_results = vutils.make_grid(nonmatch_outputs.detach().cpu(), padding=2, normalize=True)
+
+                            # if (batch % SAVE_FIG_EVERY_EPOCH == 0) and ((epoch == max_epochs-1) and (batch == len(dataloader)-1)):
+                            
+                            plt.figure(figsize=(25,25))
+                            plt.subplot(1,3,1)
+                            plt.axis("off")
+                            plt.title("Original Images")
+                            plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
+                            
+                            plt.subplot(1,3,2)
+                            plt.axis("off")
+                            plt.title("Match Reconstruction")
+                            plt.imshow(np.transpose(matched_results,(1,2,0)))
+
+                            plt.subplot(1,3,3)
+                            plt.axis("off")
+                            plt.title("NonMatch Reconstruction")
+                            plt.imshow(np.transpose(nonmatch_results,(1,2,0)))
+
+                        
                         plt.savefig(save_dir + os.sep + str(epoch) + ".png")
 
                     loss = alpha * match_loss + nonmatch_ratio * nonmatch_loss
@@ -136,6 +176,72 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                 avg_loss = float(running_match_loss+running_nonmatch_loss)/(count*2)
                 avg_match_loss = float(running_match_loss)/count
                 avg_nonmatch_loss = float(running_nonmatch_loss)/count
+
+    # Save min error for training examples
+    if save_output:
+        autoencoder.eval()
+        scores_lst = []
+
+        with torch.set_grad_enabled(False):
+            for batch, data in enumerate(pbar):
+                last_batch = (batch == len(dataloaders[phase])-1)
+
+                inputs, labels = data
+                k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, inputs.shape[0])
+                
+                count += inputs.size(0)
+                
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                with torch.set_grad_enabled(False):
+                    # matched_outputs = autoencoder(inputs, labels)
+                    # match_loss = criterion(matched_outputs, inputs) 
+                    for class_i in range(num_classes):
+                        reconstruction_i = autoencoder(inputs, k_labels[class_i])
+                        errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
+                        if class_i == 0:
+                            min_errors = errors
+                        else:
+                            min_errors = torch.min(min_errors, errors)
+
+                        if last_batch:
+                            if class_i == 0:
+                                reconstructions = [reconstruction_i.cpu()]
+                            else:
+                                reconstructions += [reconstruction_i.cpu()]
+                    scores_lst += min_errors.tolist()
+                        
+                    if verbose:
+                        pbar.set_postfix(count=count)
+
+            plt.figure(figsize=(25,25))
+            plt.subplot(5,3,1)
+            plt.axis("off")
+            plt.title("Original Images")
+            plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
+            
+            for class_i, reconstruction_i in enumerate(reconstructions):
+                results = vutils.make_grid(reconstruction_i.detach(), padding=2, normalize=True)
+                plt.subplot(5,3,2+class_i)
+                plt.axis("off")
+                plt.title(f"Reconstruction with class {class_i}")
+                plt.imshow(np.transpose(vutils.make_grid(results, padding=2, normalize=True).cpu(),(1,2,0)))
+            
+            plt.savefig(save_dir + os.sep + "reconstructions.png")
+
+            max_score = max(scores_lst)
+            min_score = min(scores_lst)
+            bins = np.linspace(min_score, max_score, 100)
+            plt.figure(figsize=(10,10))
+            plt.hist(scores_lst, bins, alpha=0.5, label='Min_error')
+            plt.legend(loc='upper right')
+            # plt.show()
+            plt.tight_layout()
+            histo_file = os.path.join(save_dir, "minerror_histo.png")
+            plt.savefig(histo_file)
+            print(f"Fig save to {histo_file}")
+
     return avg_match_loss, avg_nonmatch_loss
 
 def get_autoencoder(model, decoder, arch='classifier32'):
@@ -503,7 +609,8 @@ class C2AE(Network):
                                         device=self.device,
                                         start_epoch=0,
                                         # max_epochs=self.max_epochs,
-                                        max_epochs=150,
+                                        max_epochs=50,
+                                        # max_epochs=1,
                                         save_output=True,
                                         verbose=self.config.verbose,
                                         arch=self.config.arch,
@@ -518,7 +625,7 @@ class C2AE(Network):
 
     def _eval_mode(self):
         self.model.eval()
-        self.autoencoder.eval()
+        # self.autoencoder.eval()
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
