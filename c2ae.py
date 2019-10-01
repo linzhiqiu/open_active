@@ -56,12 +56,12 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
     for epoch in range(start_epoch, max_epochs):
         for phase in dataloaders.keys():
-            if phase == "train":
+            if phase == "train" and epoch < 5:
                 scheduler_decoder.step()
                 autoencoder.train()
+                autoencoder.encoder.eval()
             else:
-                # autoencoder.eval()
-                pass
+                autoencoder.eval()
 
             running_match_loss = 0.0
             running_nonmatch_loss = 0.0
@@ -552,22 +552,41 @@ class C2AE(Network):
                                              seen_classes=seen_classes,
                                              criterion_class=self.criterion_class)
 
-        with SetPrintMode(hidden=not self.config.verbose):
-            train_loss, train_acc = train_epochs(
-                                        model,
-                                        self.dataloaders,
-                                        optimizer,
-                                        scheduler,
-                                        self.criterion,
-                                        device=self.device,
-                                        start_epoch=start_epoch,
-                                        max_epochs=self.max_epochs,
-                                        verbose=self.config.verbose,
-                                    )
+        save_dir = f"c2ae_results/encoder_model_epoch_{self.max_epochs}_arch_{self.config.arch}"
+        if os.path.exists(save_dir+os.sep+'model.ckpt'):
+            print(f"Loading encoder weights from {save_dir+os.sep}model.ckpt")
+            checkpoint = torch.load(save_dir+os.sep+'model.ckpt')
+            model.load_state_dict(checkpoint['model_state_dict'])
+            train_loss = checkpoint['loss']
+            train_acc = checkpoint['accuracy']
+        else:
+            with SetPrintMode(hidden=not self.config.verbose):
+                train_loss, train_acc = train_epochs(
+                                            model,
+                                            self.dataloaders,
+                                            optimizer,
+                                            scheduler,
+                                            self.criterion,
+                                            device=self.device,
+                                            start_epoch=start_epoch,
+                                            max_epochs=self.max_epochs,
+                                            verbose=self.config.verbose,
+                                        )
         print(f"Train => {self.round} round => "
               f"Loss {train_loss}, Accuracy {train_acc}")
         print(f"Finish training the encoder. Now train the decoder.")
         
+        if not os.path.exists(save_dir):
+            model.eval()
+            os.makedirs(save_dir)
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                # 'optimizer_state_dict': optimizer.state_dict(),
+                'loss': train_loss,
+                'accuracy': train_acc,
+            }, save_dir+os.sep+'model.ckpt')
+            print(f"Encoder weights saved to {save_dir+os.sep}model.ckpt")
+
         if 'no_label' in self.c2ae_train_mode:
             decoder_class = DecoderNoLabel
         else:
