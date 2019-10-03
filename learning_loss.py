@@ -375,13 +375,29 @@ def learning_loss_function(loss_truth, loss_pred, epsilon=1):
     loss = nn.MSELoss()
     return loss(loss_truth, loss_pred)
 
-def trainer(train_dataset):
-    device = torch.device("cuda")
-    model = resnet18()
-    model.cuda()
+def evaluation(eval_dataset, model, criterion):
+    model.eval()
+    eval_loss = 0
+    correct = 0
+    eval_data = torch.utils.data.DataLoader(eval_dataset,
+                                            batch_size=BATCH_SIZE,
+                                            shuffle=True)
+    with torch.no_grad():
+        for batch_data, batch_label in eval_data:
+            batch_data, batch_label = batch_data.cuda(), batch_label.cuda()
+            output, ll = model(batch_data)
+            pred = F.log_softmax(output, dim=1)
+            eval_loss += F.cross_entropy(pred, batch_label, reduction='sum').item()
+            pred = pred.argmax(dim=1, keepdim=True) # get the index of the max log-probability
+            correct += pred.eq(batch_label.view_as(pred)).sum().item()
+    eval_loss /= len(eval_dataset)
+    accuracy = correct / len(eval_dataset)
+
+    print(f"Eval accuracy={accuracy}, loss={eval_loss}")
+
+def trainer(train_dataset, model, criterion):
     model.train()
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
-    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = optim.SGD(model.parameters(), lr=0.001)
 
     train_data = torch.utils.data.DataLoader(train_dataset,
                                             batch_size=BATCH_SIZE,
@@ -419,4 +435,10 @@ if __name__ == "__main__":
     dataset_factory = get_dataset_factory("CIFAR100", "./data", "default")
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
-    trainer(train_dataset)
+
+    device = torch.device("cuda")
+    model = resnet18()
+    criterion = nn.CrossEntropyLoss().cuda()
+    model.cuda()
+    trainer(train_dataset, model, criterion)
+    evaluation(test_dataset, model, criterion)
