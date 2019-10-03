@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.utils.data
 import torchvision.utils as vutils
 from trainer_machine import Network, train_epochs
 import argparse
@@ -12,7 +11,7 @@ from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrin
 
 NUM_CLASSES = 100
 BATCH_SIZE = 32
-ALPHA = 0.5
+ALPHA = 0.1
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -210,27 +209,37 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
 
         x = self.layer1(x)
+        # print(x.shape)
         ll1 = self.ll_gap1(x)
+        ll1 = ll1.squeeze()
+        # print(ll1.shape)
         ll1 = self.ll_fc1(ll1)
         ll1 = self.ll_relu1(ll1)
 
         x = self.layer2(x)
         ll2 = self.ll_gap2(x)
+        ll2 = ll2.squeeze()
+        # print(ll2.shape)
         ll2 = self.ll_fc2(ll2)
         ll2 = self.ll_relu2(ll2)
 
         x = self.layer3(x)
         ll3 = self.ll_gap3(x)
+        ll3 = ll3.squeeze()
+        # print(ll3.shape)
         ll3 = self.ll_fc3(ll3)
         ll3 = self.ll_relu3(ll3)
 
         x = self.layer4(x)
         ll4 = self.ll_gap4(x)
+        ll4 = ll4.squeeze()
+        # print(ll4.shape)
         ll4 = self.ll_fc4(ll4)
         ll4 = self.ll_relu4(ll4)
 
-        ll = torch.cat((ll1, ll2, ll3, ll4), dim=3)
-        ll = torch.flatten(ll, 1)
+        # print(ll1.shape,ll2.shape,ll3.shape,ll4.shape)
+        ll = torch.cat((ll1, ll2, ll3, ll4), dim=1)
+        # print(ll.shape)
         ll = self.ll_fc(ll)
 
         x = self.avgpool(x)
@@ -370,7 +379,8 @@ def trainer(train_dataset):
     device = torch.device("cuda")
     model = resnet18()
     model.cuda()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    model.train()
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
     criterion = nn.CrossEntropyLoss().cuda()
 
     train_data = torch.utils.data.DataLoader(train_dataset,
@@ -379,17 +389,24 @@ def trainer(train_dataset):
 
     # Initial 10000 training samples
     for epoch in range(300):
-        for batch_idx, (data, label) in enumerate(train_data):
-            data.cuda()
-            label.cuda()
-            output, ll = model(data)
-            pred = F.softmax(output)
-            loss = criterion(pred, label)
+        for batch_idx, (batch_data, batch_label) in enumerate(train_data):
+            batch_data = batch_data.cuda()
+            batch_label = batch_label.cuda()
+            optimizer.zero_grad()
+
+            output, ll = model(batch_data)
+            # print(output.shape)
+            # print(ll.shape)
+            pred = F.log_softmax(output, dim=1)
+            loss = criterion(pred, batch_label)
+            # print(loss, loss.shape)
+            # print(loss, loss.shape)
             learning_loss = learning_loss_function(loss, ll)
+            # print(learning_loss, learning_loss.shape)
 
             total_loss = ALPHA * learning_loss + (1-ALPHA) * loss
-
-            loss.backward()
+            
+            total_loss.backward()
             optimizer.step()
 
             if batch_idx >= int(10000/BATCH_SIZE):
