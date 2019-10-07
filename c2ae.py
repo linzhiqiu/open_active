@@ -24,7 +24,7 @@ from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrin
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
 # from vector import clamp_to_unit_sphere
 SAVE_FIG_EVERY_EPOCH = 500
-def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32'):
+def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32', train_in_eval_mode=False):
     assert start_epoch < max_epochs
     avg_loss = 0.
     avg_match_loss = 0.
@@ -48,7 +48,7 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
     if 'not_frozen' in train_mode or 'simple_autoencoder' in train_mode or 'UNet' in train_mode:
         optim_param = {"lr": 0.0003, 
-                       "weight_decay": 1e-6}            
+                       "weight_decay": 5e-4}          
         optimizer_decoder = torch.optim.Adam(
                                 filter(lambda x : x.requires_grad, autoencoder.parameters()), 
                                 **optim_param
@@ -56,7 +56,7 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
     for epoch in range(start_epoch, max_epochs):
         for phase in dataloaders.keys():
-            if phase == "train" and epoch < 5:
+            if phase == "train" and epoch < float(max_epochs)/2 and not train_in_eval_mode:
                 scheduler_decoder.step()
                 autoencoder.train()
                 autoencoder.encoder.eval()
@@ -93,19 +93,19 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                     match_loss = criterion(matched_outputs, inputs)
 
 
-                    if epoch==max_epochs-1:
-                        # Try batch size = 1. Train both train and eval
-                        k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, inputs.shape[0])
-                        for class_i in range(num_classes):
-                            reconstruction_i = autoencoder(inputs, k_labels[class_i])
-                            errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
-                            if class_i == 0:
-                                min_errors = errors
-                            else:
-                                min_errors = torch.min(min_errors, errors)
+                    # if epoch==max_epochs-1:
+                    #     # Try batch size = 1. Train both train and eval
+                    #     k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, inputs.shape[0])
+                    #     for class_i in range(num_classes):
+                    #         reconstruction_i = autoencoder(inputs, k_labels[class_i]).cpu().detach()
+                    #         errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
+                    #         if class_i == 0:
+                    #             min_errors = errors
+                    #         else:
+                    #             min_errors = torch.min(min_errors, errors)
                     
                     if save_output:
-                        save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}_arch_{arch}"
+                        save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}_arch_{arch}_trainineval_{train_in_eval_mode}"
                         if not os.path.exists(save_dir):
                             os.makedirs(save_dir)
                         
@@ -198,8 +198,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                     # matched_outputs = autoencoder(inputs, labels)
                     # match_loss = criterion(matched_outputs, inputs) 
                     for class_i in range(num_classes):
-                        reconstruction_i = autoencoder(inputs, k_labels[class_i])
-                        errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
+                        reconstruction_i = autoencoder(inputs, k_labels[class_i]).detach().cpu()
+                        errors = torch.abs(inputs.cpu() - reconstruction_i).view(inputs.shape[0], -1).mean(1)
                         if class_i == 0:
                             min_errors = errors
                         else:
@@ -247,7 +247,7 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 def get_autoencoder(model, decoder, arch='classifier32'):
     if 'resnet' in arch.lower():
         return ResNetAutoEncoder(model, decoder)
-    elif arch == 'classifier32':
+    elif arch in ['classifier32', 'classifier32_instancenorm']:
         return Classifier32AutoEncoder(model, decoder)
 
 def weights_init(m):
@@ -320,6 +320,32 @@ class dcgan_generator(nn.Module):
             # state size. (ngf*4) x 8 x 8
             nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (nc) x 32 x 32
+        )
+
+    def forward(self, input):
+        input = input.unsqueeze(2).unsqueeze(3)
+        return self.main(input)
+
+class dcgan_generator_instancenorm(nn.Module):
+    def __init__(self, latent_size=2048, ngf=64, affine=False, *args, **kwargs):
+        super(dcgan_generator_instancenorm, self).__init__()
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(latent_size, ngf * 4, 4, 1, 0, bias=False),
+            nn.InstanceNorm2d(ngf * 4, affine=affine),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 4 x 4
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.InstanceNorm2d(ngf * 2, affine=affine),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.InstanceNorm2d(ngf, affine=affine),
             nn.ReLU(True),
             # state size. (ngf*2) x 16 x 16
             nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
@@ -455,13 +481,13 @@ class generator32(nn.Module):
         return x
 
 class Decoder(nn.Module):
-    def __init__(self, latent_size=100, batch_size=64, num_classes=0, generator_class=generator32):
+    def __init__(self, latent_size=100, batch_size=64, num_classes=0, generator_class=generator32, **decoder_params):
         super(self.__class__, self).__init__()
         assert num_classes > 0
         self.num_classes = num_classes
         self.latent_size = latent_size
         self.batch_size = batch_size
-        self.generator = generator_class(latent_size=latent_size, batch_size=batch_size)
+        self.generator = generator_class(latent_size=latent_size, batch_size=batch_size, **decoder_params)
         self.h_y = torch.nn.Linear(num_classes, latent_size, bias=True)
         self.h_b = torch.nn.Linear(num_classes, latent_size, bias=True)
 
@@ -521,6 +547,9 @@ class C2AE(Network):
         super(C2AE, self).__init__(*args, **kwargs)
         self.c2ae_train_mode = self.config.c2ae_train_mode
         self.c2ae_alpha = self.config.c2ae_alpha
+        self.c2ae_instancenorm_affine = "instancenorm_affine" in self.config.c2ae_train_mode
+        # assert self.c2ae_instancenorm_affine == False # TODO: implement True
+        self.c2ae_train_in_eval_mode = self.config.c2ae_train_in_eval_mode
 
         self.model = self._get_network_model() # need to remove last relu layer
         
@@ -587,20 +616,26 @@ class C2AE(Network):
             }, save_dir+os.sep+'model.ckpt')
             print(f"Encoder weights saved to {save_dir+os.sep}model.ckpt")
 
+        decoder_params = {}
         if 'no_label' in self.c2ae_train_mode:
             decoder_class = DecoderNoLabel
         else:
             decoder_class = Decoder
 
         if 'dcgan' in self.c2ae_train_mode:
-            generator_class = dcgan_generator
+            if "instancenorm" in self.c2ae_train_mode:
+                generator_class = dcgan_generator_instancenorm
+                decoder_params['affine'] = self.c2ae_instancenorm_affine
+            else:
+                generator_class = dcgan_generator
         else:
             generator_class = generator32
         
         self.decoder = decoder_class(latent_size=2048,
                                      batch_size=self.config.batch,
                                      num_classes=len(seen_classes),
-                                     generator_class=generator_class).to(self.device)
+                                     generator_class=generator_class,
+                                     **decoder_params).to(self.device)
         
 
         optimizer_decoder = self._get_network_optimizer(self.decoder)
@@ -628,7 +663,7 @@ class C2AE(Network):
                                         device=self.device,
                                         start_epoch=0,
                                         # max_epochs=self.max_epochs,
-                                        max_epochs=50,
+                                        max_epochs=100,
                                         # max_epochs=1,
                                         save_output=True,
                                         verbose=self.config.verbose,
@@ -687,7 +722,7 @@ class C2AE(Network):
     def _get_network_model(self):
         """ Get the regular softmax network model without last relu layer
         """
-        model = getattr(models, self.config.arch)(last_relu=False)
+        model = getattr(models, self.config.arch)(last_relu=False, affine=False)
         if self.config.pretrained != None:
             state_dict = self._get_pretrained_model_state_dict()
             model.load_state_dict(state_dict)

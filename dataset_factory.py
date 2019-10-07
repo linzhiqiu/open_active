@@ -51,7 +51,7 @@ def select_init_train_set(data, init_mode, labels, classes):
     """ Returns the initial training set (in indices), hold-out open set (in indices), seen classes (set), and hold-out open classes (set)
     """
     assert data in SUPPORTED_DATASETS
-    if data == 'CIFAR100':
+    if data in ['CIFAR100', 'CIFAR10']:
         init_conf = INIT_TRAIN_SET_CONFIG[data][init_mode]
         assert len(classes) - init_conf['num_open_classes'] - init_conf['num_init_classes'] >= 0
         class_to_indices = {}
@@ -67,10 +67,16 @@ def select_init_train_set(data, init_mode, labels, classes):
         else:
             for class_i in range(init_conf['num_init_classes']):
                 s_train += class_to_indices[class_i][:init_conf['sample_per_class']]
-            for open_class_i in range(len(classes))[-init_conf['num_open_classes']:]:
+
+
+            if init_conf['num_open_classes'] > 0:
+                open_indices = range(len(classes))[-init_conf['num_open_classes']:]
+            else:
+                open_indices = []
+            for open_class_i in open_indices:
                 open_samples += class_to_indices[open_class_i]
             assert len(open_samples) == len(set(open_samples))
-            return s_train, set(open_samples), set(range(init_conf['num_init_classes'])), set(range(len(classes))[-init_conf['num_open_classes']:])
+            return s_train, set(open_samples), set(range(init_conf['num_init_classes'])), set(open_indices)
     else:
         raise NotImplementedError()
     
@@ -103,7 +109,7 @@ def generate_dataset(data, data_path):
 
 
 
-# Not used
+# Below are never used
 def get_imagenet12(config, transforms_dict):
     train_path = os.path.join(config.data_path, config.dataset.lower(), 'train')
     test_path = os.path.join(config.data_path, config.dataset.lower(), 'val')

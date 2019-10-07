@@ -2,9 +2,10 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-import sys
+import sys, random
 import trainer_machine
-from instance_info import BasicInfoCollector, ClusterInfoCollector
+import learning_loss
+from instance_info import BasicInfoCollector, ClusterInfoCollector, LearningLossInfoCollector
 from utils import get_subset_loader, get_target_unmapping_dict
 
 class LabelPicker(object):
@@ -16,6 +17,9 @@ class LabelPicker(object):
         self.train_instance = train_instance
         self.trainer_machine = trainer_machine # Should have a variable log to store all new instance's information
         self._generate_new_log()
+
+        # New: After reading active learning papers
+        self.active_random_sampling = self.config.active_random_sampling
 
     def get_checkpoint(self):
         raise NotImplementedError()
@@ -49,11 +53,8 @@ class UncertaintyMeasure(LabelPicker):
         super(UncertaintyMeasure, self).__init__(*args, **kwargs)
         assert isinstance(self.trainer_machine, trainer_machine.Network)
         assert self.config.label_picker == 'uncertainty_measure'
-        if isinstance(self.trainer_machine, trainer_machine.Network):
-            assert self.config.uncertainty_measure in ['least_confident', 'most_confident']
-            self.info_collector_class = BasicInfoCollector
-            self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
-        elif isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
+        # Make sure Network (parent class) is at last branch
+        if isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
             assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query']
             self.info_collector_class = BasicInfoCollector
             def openmax_measure_func(outputs):
@@ -78,6 +79,15 @@ class UncertaintyMeasure(LabelPicker):
                 elif self.config.uncertainty_measure == 'random_query':
                     return torch.rand_like(score, device=score.device)
             self.measure_func = cluster_measure_func
+        elif isinstance(self.trainer_machine, learning_loss.NetworkLearningLoss):
+            assert self.config.uncertainty_measure in ['learning_loss']
+            self.info_collector_class = LearningLossInfoCollector
+            self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
+            # raise NotImplementedError()
+        elif isinstance(self.trainer_machine, trainer_machine.Network):
+            assert self.config.uncertainty_measure in ['least_confident', 'most_confident']
+            self.info_collector_class = BasicInfoCollector
+            self.measure_func = random_query
         else:
             raise NotImplementedError()
 
@@ -98,6 +108,18 @@ class UncertaintyMeasure(LabelPicker):
         if len(unlabeled_pool) < self.config.budget:
             print("Remaining data is fewer than the budget constraint. Label all.")
             return unlabeled_pool, unseen_classes
+        elif self.config.budget == 0:
+            print("No label budget")
+            return set(), seen_classes
+
+        if self.active_random_sampling == 'fixed_10K':
+            if len(unlabeled_pool) > 10000:
+                random.shuffle(unlabeled_pool)
+                unlabeled_pool = unlabeled_pool[:10000]
+        elif self.active_random_sampling == "1_out_of_5":
+            if len(unlabeled_pool)*0.2 > self.config.budget:
+                random.shuffle(unlabeled_pool)
+                unlabeled_pool = unlabeled_pool[:int(len(unlabeled_pool)*.2)]
 
         dataloader = get_subset_loader(self.train_instance.train_dataset,
                                        unlabeled_pool,

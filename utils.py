@@ -139,6 +139,10 @@ def get_method_param(config):
         setting_str = config.distance_metric
     elif config.trainer in ['cluster']:
         setting_str = "_".join([config.clustering, "dist", config.distance_metric, "metric", config.threshold_metric])
+    elif config.trainer in ['network_learning_loss']:
+        setting_str = "_".join([config.threshold_metric, 'mode', config.learning_loss_train_mode, 'lmb', str(config.learning_loss_lambda),
+                                'margin', str(config.learning_loss_margin),
+                                'stop_ep', str(config.learning_loss_stop_epoch)])
     else:
         raise NotImplementedError()
     return "_".join([config.trainer, setting_str])
@@ -155,7 +159,7 @@ def get_experiment_name(config):
     name += [config.label_picker]
 
     if config.label_picker == "uncertainty_measure":
-        name += [config.uncertainty_measure]
+        name += [config.uncertainty_measure, 'sampling', config.active_random_sampling]
     else:
         raise NotImplementedError()
     name_str += "_".join(name) + os.sep
@@ -167,6 +171,11 @@ def get_experiment_name(config):
             name += ['multi', config.gan_multi]
     elif config.trainer == "network":
         name += ['openset', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold)]
+    elif config.trainer == "network_learning_loss":
+        name += ['softmax_learning_loss', config.threshold_metric, config.network_eval_mode, str(config.network_eval_threshold), 
+                 'mode', config.learning_loss_train_mode, 'lmb', str(config.learning_loss_lambda),
+                 'margin', str(config.learning_loss_margin),
+                 'stop_ep', str(config.learning_loss_stop_epoch)]
     elif config.trainer == "sigmoid":
         name += ["sigmoid", config.sigmoid_train_mode, config.network_eval_mode, str(config.network_eval_threshold)]
     elif config.trainer == "c2ae":

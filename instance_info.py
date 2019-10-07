@@ -184,3 +184,31 @@ class C2AEInfoCollector(BasicInfoCollector):
             instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
+
+class LearningLossInfoCollector(BasicInfoCollector):
+    def __init__(self, *args, **kwargs):
+        super(LearningLossInfoCollector, self).__init__(*args, **kwargs)
+
+    def _basic_batch_instances_info_func(self, outputs, labels):
+        '''A func takes a batch of outputs, labels,
+           then output a list of InstanceInfo objects
+        '''
+        # Return a list with length == outputs.size(0). Each element is the information of that specific example.
+        # Each element is represented by (round_index, true_label, predicted_label, max_cluster_score, entropy, -1 if in unseen class else 1)
+        raise NotImplementedError()
+        batch_instances_info = []
+        softmax_outputs = F.softmax(outputs, dim=1)
+        sigmoid_outputs = torch.nn.Sigmoid()(outputs)
+        # normalized_outputs = outputs / outputs.sum(1, keepdim=True)
+        prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
+        max_sigmoid_scores, _ = torch.max(sigmoid_outputs, 1)
+        for i in range(outputs.size(0)):
+            prob_i = prob_scores[i]
+            open_i = max_sigmoid_scores[i]
+            entropy_i = float((prob_i*prob_i.log()).sum()) # This is the negative entropy
+            prob_score_i = float(prob_scores[i])
+            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
+            label_i = int(labels[i])
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
+            batch_instances_info.append(instance_info)
+        return batch_instances_info

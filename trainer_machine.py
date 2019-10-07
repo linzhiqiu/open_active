@@ -596,11 +596,11 @@ class Network(TrainerMachine):
             optim_module = optim.SGD
             optim_param = {"lr" : self.config.lr, 
                            "momentum" : self.config.momentum,
-                           "weight_decay" : 0 if self.config.wd == None else 10**self.config.wd}
+                           "weight_decay" : 0 if self.config.wd == None else float(self.config.wd)}
         elif self.config.optim == "adam":
             optim_module = optim.Adam
             optim_param = {"lr": self.config.lr, 
-                           "weight_decay": 10**self.config.wd, 
+                           "weight_decay": float(self.config.wd), 
                            "amsgrad": self.config.amsgrad}
         else:
             raise ValueError("optim type not supported")
@@ -632,7 +632,7 @@ class Network(TrainerMachine):
             model.fc.weight.data.normal_(0, 0.01)
             model.fc.bias.data.zero_()
             model.fc.to(device)
-        elif self.config.arch == 'classifier32':
+        elif self.config.arch in ['classifier32', 'classifier32_instancenorm']:
             fd = int(model.fc1.weight.size()[1])
             model.fc1 = nn.Linear(fd, output_size)
             model.fc1.weight.data.normal_(0, 0.01)
