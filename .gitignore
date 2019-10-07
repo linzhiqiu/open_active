@@ -12,7 +12,8 @@ first_round*/
 gan_output*/
 *c2ae_results/*
 old_c2ae_results/*
-*.*py
-*.*sh
+.*.py
+.*.sh
 */.*
+learning_loss/*
 

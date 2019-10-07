@@ -46,8 +46,48 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 10,
             'use_random_classes' : False
         },
+        'learning_loss' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 10,
+            'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
+        'no_learning' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 500,
+            'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
+        'no_learning_10K' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 100,
+            'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
+    },
+'CIFAR10' : {
+        'learning_loss' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 100, # initially 40 x 12 = 480 samples
+            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'use_random_classes' : False
+        },
+        'no_learning' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 5000,
+            'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
+        'no_learning_10K' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 1000,
+            'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
     }
 }
+
+
 
 GAN_STANDARD_SETUP = {
                          'nc' : 3,

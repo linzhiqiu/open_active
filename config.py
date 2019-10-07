@@ -24,7 +24,7 @@ graphite_args.add_argument('--graphite',
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data', 
                           default="CIFAR100",
-                          choices=["CIFAR100", "MNIST", "IMAGENET12", "TINY-IMAGENET"],
+                          choices=["CIFAR100", "MNIST", "IMAGENET12", "TINY-IMAGENET", "CIFAR10"],
                           help='Choice of dataset')
 dataset_args.add_argument('--data_path', 
                           default="./data", metavar='PATH',
@@ -64,6 +64,7 @@ trainer_args.add_argument('--trainer',
                                    'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
                                    'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
+                                   'network_learning_loss'
                           ],
                           )
 
@@ -104,6 +105,7 @@ c2ae_args.add_argument('--c2ae_train_mode',
                           choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
                                    "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
                                    'debug_no_label_dcgan_mse', 'debug_no_label_not_frozen_dcgan_mse', 'a_minus_1_dcgan_mse', 'a_minus_1_dcgan',
+                                   'a_minus_1_instancenorm_dcgan_mse', 'a_minus_1_instancenorm_dcgan', 'a_minus_1_instancenorm_affine_dcgan_mse', 'a_minus_1_instancenorm_affine_dcgan',
                                    'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
                                    'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder',
                                    'a_minus_1_dcgan_mse_not_frozen', 'a_minus_1_dcgan_not_frozen', 'UNet_mse', 'UNet'],
@@ -111,6 +113,25 @@ c2ae_args.add_argument('--c2ae_train_mode',
 c2ae_args.add_argument('--c2ae_alpha',
                           default=0.9, type=float,
                           help="C2AE alpha")
+c2ae_args.add_argument('--c2ae_train_in_eval_mode',
+                          default=True, type=str2bool,
+                          help="C2AE whether to train model in eval mode")
+
+
+learnloss_args = add_argument_group('Learning Loss Param.')
+learnloss_args.add_argument('--learning_loss_train_mode',
+                            default='default',
+                            choices=['default'],
+                            help="Learning loss config")
+learnloss_args.add_argument('--learning_loss_lambda',
+                            default=1.0, type=float,
+                            help="Learning loss lambda")
+learnloss_args.add_argument('--learning_loss_margin',
+                            default=1.0, type=float,
+                            help="Learning loss margin")
+learnloss_args.add_argument('--learning_loss_stop_epoch',
+                            default=120, type=int,
+                            help="Learning loss stop propagation epoch")
 
 
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')
@@ -193,20 +214,21 @@ cluster_args.add_argument('--cluster_level',
 
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
-                          choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50', 'classifier32'], default='ResNet50',
+                          choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50', 
+                          'ResNet18', 'classifier32', 'classifier32_instancenorm', 'classifier32_instancenorm_affine'], default='ResNet50',
                           help='CNN architecture (default: ResNet50)')
 training_arg.add_argument('--pretrained',
                           choices=[None, 'CIFAR10'],
                           default=None,
                           help='Whether the model is pretrained.')
 training_arg.add_argument('--lr', default=0.1, type=float,
-                          help='learning rate (default: 0.01)')
+                          help='learning rate (default: 0.1)')
 training_arg.add_argument('--optim', default="sgd", choices=["sgd", "adam"], type=str,
                           help='optimizer (default: sgd)')
 training_arg.add_argument('--momentum', default=0.9, type=float, 
                           help='momentum (default: 0.9)')
-training_arg.add_argument('--wd', default=-5, type=float,
-                          help='weight decay pow (default: -5)')
+training_arg.add_argument('--wd', default=5e-4, type=float,
+                          help='weight decay pow (default: 5e-4)')
 training_arg.add_argument("--amsgrad", 
                           type=str2bool,
                           default=True, 
@@ -224,7 +246,6 @@ training_arg.add_argument('--start_epoch', default=0, type=int,
 training_arg.add_argument('--batch', default=128, type=int,
                           help='mini-batch size (default: 128)')
 training_arg.add_argument("--lr_decay_step", type=int, default=None,
-                          nargs="+",
                           help="After [lr_decay_step] epochs, decay the learning rate by [lr_decay_ratio].")
 training_arg.add_argument("--lr_decay_ratio", "--lr_decay_ratio", 
                           type=float, default=0.1,
@@ -248,7 +269,7 @@ open_act_arg.add_argument('--budget',
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
                          default='default',
-                         choices=['default', 'open_set_leave_one_out'],
+                         choices=['default', 'open_set_leave_one_out', 'no_learning', 'no_learning_10K', 'learning_loss'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
@@ -264,7 +285,17 @@ uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                                'most_confident',
                                                'random_query',
                                                'margin_sampling',
-                                               'entropy'],
+                                               'entropy',
+                                               'learning_loss'],
+                                      )
+uncertainty_sampling_arg.add_argument('--active_random_sampling',
+                                      default=None,
+                                      type=str,
+                                      choices=['fixed_10K', # As in learning the loss paper
+                                               '1_out_of_5',  # 1/5 of the unlabled pool. Or budget if smaller than budget.
+                                               'none',
+                                              ],
+                                      help='If true, use the random sampling scheme in "Learning Loss Active Learning" paper',
                                       )
 
 pseudo_open_arg = add_argument_group('Pseudo-open set hyper tuning Param.')
@@ -304,6 +335,8 @@ misc_arg.add_argument('--log_first_round', type=str2bool, default=False, #defaul
                       help='If True, log first round results to first_round/')
 misc_arg.add_argument('--log_first_round_thresholds', type=str2bool, default=False, #default='first_round.txt'
                       help='If True, log first round threshold results to first_round_thresholds/')
+misc_arg.add_argument('--log_test_accuracy', type=str2bool, default=True, #default='first_round.txt'
+                      help='If True, log test acc results to learning_loss/')
 misc_arg.add_argument('--writer', type=str2bool, default=True,
                       help='Whether or not to use writer')
 misc_arg.add_argument('--save_ckpt', type=str2bool, default=True,

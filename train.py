@@ -14,6 +14,7 @@ from tensorboardX import SummaryWriter
 from trainer import get_trainer # Contains different ways to train model
 from logger import get_logger
 import utils
+import json
 # from tools_training import get_device, get_criterion, get_optimizer, get_scheduler, get_tensorboard_logger
 
 def main():
@@ -112,7 +113,6 @@ def main():
                 first_round_thresholds = trainer.get_thresholds_checkpoints()[1]
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                import json
                 json_dict = json.dumps(first_round_thresholds)
                 f = open(os.path.join(save_dir, time_stamp+'.json'),"w+")
                 f.write(json_dict)
@@ -138,8 +138,29 @@ def main():
                     file.write(detail_str + "\n")
                 print(f"Check {save_path}. Now exiting.")
                 exit(0)
-            
 
+        if config.log_test_accuracy:
+            if round_i == 0:
+                test_accs = {}
+
+                log_strs = utils.get_experiment_name(config).split(os.sep)
+                dataset_str = utils.get_data_param(config)
+                method_str = utils.get_method_param(config)
+                training_str = '_'.join(log_strs[2:])
+                save_dir = os.path.join('learning_loss', dataset_str, method_str, training_str)
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                active_learning_filename = os.path.join(save_dir, time_stamp+'.json')
+
+            test_accs[len(s_train)] = eval_results['seen_closed_acc']
+            
+            if round_i == config.max_rounds - 1:
+                json_dict = json.dumps(test_accs)
+                print(f"Writing test accuracy to {active_learning_filename}")
+                f = open(active_learning_filename, "w+")
+                f.write(json_dict)
+                f.close()
+    
 
         t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
 
