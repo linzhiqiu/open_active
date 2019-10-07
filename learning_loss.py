@@ -3,15 +3,39 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.utils as vutils
+from torch.utils.data.sampler import Sampler, SubsetRandomSampler
+from sklearn.utils.random import sample_without_replacement
+from sklearn.model_selection import train_test_split
 from trainer_machine import Network, train_epochs
 import argparse
+import numpy as np
 from dataset_factory import get_dataset_factory
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
 
 
 NUM_CLASSES = 100
+NUM_TRAINING_DATA = 50000
+NUM_INITIAL_TRAINING_SAMPLE = 10000
+NUM_TO_SAMPLE = 10000
 BATCH_SIZE = 32
-ALPHA = 0.1
+ALPHA = 0.2
+EPSILON = 1
+
+class SubsetSampler(Sampler):
+    r"""Samples elements randomly from a given list of indices, without replacement.
+
+    Arguments:
+        indices (sequence): a sequence of indices
+    """
+
+    def __init__(self, indices):
+        self.indices = indices
+
+    def __iter__(self):
+        return iter(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -211,35 +235,39 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         # print(x.shape)
         ll1 = self.ll_gap1(x)
-        ll1 = ll1.squeeze()
+        ll1 = ll1.squeeze(dim=2)
+        ll1 = ll1.squeeze(dim=2)
         # print(ll1.shape)
         ll1 = self.ll_fc1(ll1)
         ll1 = self.ll_relu1(ll1)
 
         x = self.layer2(x)
         ll2 = self.ll_gap2(x)
-        ll2 = ll2.squeeze()
+        ll2 = ll2.squeeze(dim=2)
+        ll2 = ll2.squeeze(dim=2)
         # print(ll2.shape)
         ll2 = self.ll_fc2(ll2)
         ll2 = self.ll_relu2(ll2)
 
         x = self.layer3(x)
         ll3 = self.ll_gap3(x)
-        ll3 = ll3.squeeze()
+        ll3 = ll3.squeeze(dim=2)
+        ll3 = ll3.squeeze(dim=2)
         # print(ll3.shape)
         ll3 = self.ll_fc3(ll3)
         ll3 = self.ll_relu3(ll3)
 
         x = self.layer4(x)
         ll4 = self.ll_gap4(x)
-        ll4 = ll4.squeeze()
+        ll4 = ll4.squeeze(dim=2)
+        ll4 = ll4.squeeze(dim=2)
         # print(ll4.shape)
         ll4 = self.ll_fc4(ll4)
         ll4 = self.ll_relu4(ll4)
 
-        # print(ll1.shape,ll2.shape,ll3.shape,ll4.shape)
+        # llx: BATCH_SIZE * 128
         ll = torch.cat((ll1, ll2, ll3, ll4), dim=1)
-        # print(ll.shape)
+        # ll = BATCH_SIZE * (128*4)
         ll = self.ll_fc(ll)
 
         x = self.avgpool(x)
@@ -381,7 +409,7 @@ def evaluation(eval_dataset, model, criterion):
     correct = 0
     eval_data = torch.utils.data.DataLoader(eval_dataset,
                                             batch_size=BATCH_SIZE,
-                                            shuffle=True)
+                                            sampler=None)
     with torch.no_grad():
         for batch_data, batch_label in eval_data:
             batch_data, batch_label = batch_data.cuda(), batch_label.cuda()
@@ -395,41 +423,73 @@ def evaluation(eval_dataset, model, criterion):
 
     print(f"Eval accuracy={accuracy}, loss={eval_loss}")
 
-def trainer(train_dataset, model, criterion):
+def trainer(train_dataset, test_dataset, model, criterion):
     model.train()
     optimizer = optim.SGD(model.parameters(), lr=0.001)
+    labeled_indices, unlabeled_indices = train_test_split(list(range(NUM_TRAINING_DATA)), train_size=NUM_INITIAL_TRAINING_SAMPLE, shuffle=True)
 
-    train_data = torch.utils.data.DataLoader(train_dataset,
-                                            batch_size=BATCH_SIZE,
-                                            shuffle=True)
+    for round in range(9):
+        labeled_sampler = SubsetSampler(labeled_indices)
+        unlabeled_sampler = SubsetSampler(unlabeled_indices)
+        train_data = torch.utils.data.DataLoader(train_dataset,
+                                                batch_size=BATCH_SIZE,
+                                                shuffle=False,
+                                                sampler=labeled_sampler)
 
-    # Initial 10000 training samples
-    for epoch in range(300):
-        for batch_idx, (batch_data, batch_label) in enumerate(train_data):
-            batch_data = batch_data.cuda()
-            batch_label = batch_label.cuda()
-            optimizer.zero_grad()
 
-            output, ll = model(batch_data)
-            # print(output.shape)
-            # print(ll.shape)
-            pred = F.log_softmax(output, dim=1)
-            loss = criterion(pred, batch_label)
-            # print(loss, loss.shape)
-            # print(loss, loss.shape)
-            learning_loss = learning_loss_function(loss, ll)
-            # print(learning_loss, learning_loss.shape)
+        print(f"Num of labeled train data: {len(labeled_sampler)}")
 
-            total_loss = ALPHA * learning_loss + (1-ALPHA) * loss
-            
-            total_loss.backward()
-            optimizer.step()
 
-            if batch_idx >= int(10000/BATCH_SIZE):
-                break
-        print(f"Train epoch={epoch}, loss={loss}, learning_loss={learning_loss}")
+        # Initial 10000 training samples
+        for epoch in range(2):  # TODO: change the num_epoch
+            model.train()
+            for batch_idx, (batch_data, batch_label) in enumerate(train_data):
+                batch_data = batch_data.cuda()
+                batch_label = batch_label.cuda()
+                optimizer.zero_grad()
 
-        # TODO
+                output, ll = model(batch_data)
+                # print(output.shape)
+                # print(ll.shape)
+                pred = F.log_softmax(output, dim=1)
+                loss = criterion(pred, batch_label)
+                # print(loss, loss.shape)
+                # print(loss, loss.shape)
+                learning_loss = learning_loss_function(loss, ll)
+                # print(learning_loss, learning_loss.shape)
+
+                total_loss = ALPHA * learning_loss + (1-ALPHA) * loss
+                
+                total_loss.backward()
+                optimizer.step()
+
+            print(f"Train epoch={epoch}, loss={loss}, learning_loss={learning_loss}")
+            evaluation(test_dataset, model, criterion)
+    
+        torch.cuda.empty_cache()
+        unlabeled_data = torch.utils.data.DataLoader(train_dataset,
+                                                batch_size=BATCH_SIZE,
+                                                shuffle=False,
+                                                sampler=unlabeled_sampler)
+        losses = []
+        model.eval()
+        with torch.no_grad():
+            for batch_idx, (batch_data, _) in enumerate(unlabeled_data):
+                batch_data = batch_data.cuda()
+                output, ll = model(batch_data)
+                losses += [ll.cpu().numpy()[i][0] for i in range(len(ll.cpu().numpy()))]
+                # torch.cuda.empty_cache()
+        #print(losses)
+        sorted_indices = np.argsort(losses)
+        #print(sorted_indices)
+        new_indices = [unlabeled_indices[i] for i in sorted_indices[-NUM_TO_SAMPLE:]]  # Take the indices max loss images
+        labeled_indices = np.concatenate((labeled_indices, new_indices), axis=0)
+        assert len(labeled_indices) == len(set(labeled_indices))
+        unlabeled_indices = [i for i in unlabeled_indices if i not in new_indices]
+
+        labeled_indices = np.random.permutation(labeled_indices)
+
+    
 
 if __name__ == "__main__":
     dataset_factory = get_dataset_factory("CIFAR100", "./data", "default")
@@ -440,5 +500,5 @@ if __name__ == "__main__":
     model = resnet18()
     criterion = nn.CrossEntropyLoss().cuda()
     model.cuda()
-    trainer(train_dataset, model, criterion)
+    trainer(train_dataset, test_dataset, model, criterion)
     evaluation(test_dataset, model, criterion)
