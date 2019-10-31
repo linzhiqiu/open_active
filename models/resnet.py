@@ -100,20 +100,20 @@ class ResNet(nn.Module):
         return out
 
 
-def ResNet18(last_relu=True):
-    return ResNet(BasicBlock, [2,2,2,2], last_relu=last_relu)
+def ResNet18(last_relu=True, **kwargs):
+    return ResNet(BasicBlock, [2,2,2,2], last_relu=last_relu, **kwargs)
 
-def ResNet34(last_relu=True):
-    return ResNet(BasicBlock, [3,4,6,3], last_relu=last_relu)
+def ResNet34(last_relu=True, **kwargs):
+    return ResNet(BasicBlock, [3,4,6,3], last_relu=last_relu, **kwargs)
 
-def ResNet50(last_relu=True):
-    return ResNet(Bottleneck, [3,4,6,3], last_relu=last_relu)
+def ResNet50(last_relu=True, **kwargs):
+    return ResNet(Bottleneck, [3,4,6,3], last_relu=last_relu, **kwargs)
 
-def ResNet101(last_relu=True):
-    return ResNet(Bottleneck, [3,4,23,3], last_relu=last_relu)
+def ResNet101(last_relu=True, **kwargs):
+    return ResNet(Bottleneck, [3,4,23,3], last_relu=last_relu, **kwargs)
 
-def ResNet152(last_relu=True):
-    return ResNet(Bottleneck, [3,8,36,3], last_relu=last_relu)
+def ResNet152(last_relu=True, **kwargs):
+    return ResNet(Bottleneck, [3,8,36,3], last_relu=last_relu, **kwargs)
 
 
 def test():
