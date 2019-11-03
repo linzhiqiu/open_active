@@ -103,7 +103,11 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
             gt = gt[selected_indices]
 
         fpr, tpr, thresholds = roc_curve(gt, open_scores)
-        auc_score = roc_auc_score(gt, open_scores)
+        try:
+            auc_score = roc_auc_score(gt, open_scores)
+        except:
+            import pdb; pdb.set_trace()  # breakpoint 3c78e0d4 //
+            
         parsed_results = {'fpr' : fpr, 'tpr' : tpr, 'thresholds' : thresholds, 'auc_score' : auc_score}
         # plot = plot_xy(fpr, tpr, x_axis="False Positive Rate", y_axis="True Positive Rate", title=title)
         # print("Saving ROC scores to file {}".format(options['roc_output']))
@@ -319,7 +323,12 @@ if __name__ == "__main__":
             save_scores(hyper_results, folder=method_folder, mode=args.mode, open_set=args.open_set, sorted_key=sorted_key)
             sorted_keys_hyper = sorted(list(hyper_results.keys()), key=lambda x: hyper_results[x][sorted_key])
 
-            best_hyper_result = hyper_results[sorted_keys_hyper[-1]]
+            try:
+                best_hyper_result = hyper_results[sorted_keys_hyper[-1]]
+            except:
+                print("Something wrong")
+                import pdb; pdb.set_trace()  # breakpoint 4393104a //
+
 
             method_str = method_folder.split(os.sep)[-2]
             method_results[method_str] = best_hyper_result

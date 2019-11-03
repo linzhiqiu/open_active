@@ -31,6 +31,19 @@ class ClusterInstanceInfo(InstanceInfo):
         self.gaussian = gaussian
         self.seen = seen # -1 if unseen, 1 if seen
 
+class LearningLossInstanceInfo(InstanceInfo):
+    """ Store the most basic information of a new instance to be added
+    """
+    def __init__(self, round_index, true_label, predicted_label, softmax, entropy, loss, seen):
+        super(LearningLossInstanceInfo, self).__init__()
+        self.round_index = round_index
+        self.true_label = true_label # in original index
+        self.predicted_label = predicted_label # in original index
+        self.softmax = softmax # Caveat: For ClusterInfoCollector, this is just the prob score
+        self.entropy = entropy # In fact, negative entropy, so the higher(more pos) the more certain
+        self.loss = loss
+        self.seen = seen # -1 if unseen, 1 if seen
+
 
 class InfoCollector(object):
     ''' A class that collect list of InstanceInfo (optionally a tensor of scores that can be used to sort the instances)
@@ -101,6 +114,32 @@ class BasicInfoCollector(InfoCollector):
                 info += batch_instances_info
         return scores, info
 
+
+class LearningLossInfoCollector(BasicInfoCollector):
+    def __init__(self, *args, **kwargs):
+        super(LearningLossInfoCollector, self).__init__(*args, **kwargs)
+
+    def _basic_batch_instances_info_func(self, outputs, labels):
+        '''A func takes a batch of outputs, labels,
+           then output a list of InstanceInfo objects
+        '''
+        # Return a list with length == outputs.size(0). Each element is the information of that specific example.
+        # Each element is represented by (round_index, true_label, predicted_label, max_cluster_score, entropy, -1 if in unseen class else 1)
+        outputs, losses = outputs
+        batch_instances_info = []
+        softmax_outputs = F.softmax(outputs, dim=1)
+        prob_scores, predicted_labels = torch.max(softmax_outputs, 1)
+        for i in range(outputs.size(0)):
+            softmax_i = softmax_outputs[i]
+            entropy_i = float((softmax_i*softmax_i.log()).sum()) # This is the negative entropy
+            prob_score_i = float(prob_scores[i])
+            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
+            label_i = int(labels[i])
+            loss_i = float(losses[i])
+            instance_info = LearningLossInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, loss_i, label_i in self.seen_classes)
+            batch_instances_info.append(instance_info)
+        return batch_instances_info
+
 import math
 class ClusterInfoCollector(BasicInfoCollector):
     def __init__(self, gamma, *args, **kwargs):
@@ -157,9 +196,9 @@ class SigmoidInfoCollector(BasicInfoCollector):
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
-class C2AEInfoCollector(BasicInfoCollector):
+class BinarySoftmaxInfoCollector(BasicInfoCollector):
     def __init__(self, *args, **kwargs):
-        super(C2AEInfoCollector, self).__init__(*args, **kwargs)
+        super(BinarySoftmaxInfoCollector, self).__init__(*args, **kwargs)
 
     def _basic_batch_instances_info_func(self, outputs, labels):
         '''A func takes a batch of outputs, labels,
@@ -167,7 +206,6 @@ class C2AEInfoCollector(BasicInfoCollector):
         '''
         # Return a list with length == outputs.size(0). Each element is the information of that specific example.
         # Each element is represented by (round_index, true_label, predicted_label, max_cluster_score, entropy, -1 if in unseen class else 1)
-        raise NotImplementedError()
         batch_instances_info = []
         softmax_outputs = F.softmax(outputs, dim=1)
         sigmoid_outputs = torch.nn.Sigmoid()(outputs)
@@ -185,9 +223,9 @@ class C2AEInfoCollector(BasicInfoCollector):
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
-class LearningLossInfoCollector(BasicInfoCollector):
+class C2AEInfoCollector(BasicInfoCollector):
     def __init__(self, *args, **kwargs):
-        super(LearningLossInfoCollector, self).__init__(*args, **kwargs)
+        super(C2AEInfoCollector, self).__init__(*args, **kwargs)
 
     def _basic_batch_instances_info_func(self, outputs, labels):
         '''A func takes a batch of outputs, labels,

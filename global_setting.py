@@ -7,6 +7,16 @@ PRETRAINED_MODEL_PATH = {
     }
 }
 
+
+uncertainty_type_dict = {
+    'osdn' : ['osdn', 'osdn_modified', 'icalr_osdn', 'icalr_osdn_modified', 'icalr_osdn_neg', 'icalr_osdn_modified_neg'],
+    'icalr' : ['icalr', 'icalr_learning_loss', 'icalr_osdn', 'icalr_osdn_modified', 'icalr_osdn_neg', 'icalr_osdn_modified_neg'],
+    'cluster' : ['cluster'],
+    'learning_loss' : ['network_learning_loss', 'icalr_learning_loss'],
+    'network' : ['network', 'icalr', 'icalr_binary_softmax'],
+    'sigmoid' : ['sigmoid', 'binary_softmax'],
+}
+
 OPENMAX_META_LEARN = {
     'default' : {
         'weibull_tail_size' : [20],
@@ -28,6 +38,11 @@ OPENMAX_META_LEARN = {
         'alpha_rank' : [2, 3, 4, 5],
         'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
     },
+    'toy' : {
+        'weibull_tail_size' : [10],
+        'alpha_rank' : [2],
+        'osdn_eval_threshold' : [0.01]
+    },
 }
 
 SUPPORTED_DATASETS = ['CIFAR10', 'CIFAR100']
@@ -46,12 +61,88 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 10,
             'use_random_classes' : False
         },
+        'open_set_leave_one_out_new' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 500,
+            'num_open_classes' : 10,
+            'use_random_classes' : False
+        },
         'learning_loss' : {
             'num_init_classes' : 100,
             'sample_per_class' : 10,
             'num_open_classes' : 0,
             'use_random_classes' : False
         },
+        'learning_loss_start_random' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 10,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
+        },
+        'learning_loss_start_random_tuning' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 10,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
+        },
+        'few_shot_1' : {
+            'num_init_classes' : 40,
+            'sample_per_class' : 25,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'few_shot_3' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 20,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        },
+        'many_shot_1' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 50,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        },
+        'many_shot_2' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 100,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        },
+        'many_shot_3' : {
+            'num_init_classes' : 100,
+            'sample_per_class' : 150,
+            'num_open_classes' : 0,
+            'use_random_classes' : False,
+            'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        },
+        'open_active_1' : {
+            'num_init_classes' : 40,
+            'sample_per_class' : 25,
+            'num_open_classes' : 10,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'open_active_2' : {
+            'num_init_classes' : 40,
+            'sample_per_class' : 100,
+            'num_open_classes' : 10,
+            'use_random_classes' : False,
+            'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        },
+        # 'open_active_3' : {
+        #     'num_init_classes' : 40,
+        #     'sample_per_class' : 200,
+        #     'num_open_classes' : 10,
+        #     'use_random_classes' : False,
+        #     'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
+        # },
         'no_learning' : {
             'num_init_classes' : 100,
             'sample_per_class' : 500,
@@ -64,6 +155,18 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 0,
             'use_random_classes' : False
         },
+        'no_learning_50_open_classes' : {
+            'num_init_classes' : 50,
+            'sample_per_class' : 500,
+            'num_open_classes' : 50,
+            'use_random_classes' : False
+        },
+        'no_learning_5K_50_open_classes' : {
+            'num_init_classes' : 50,
+            'sample_per_class' : 100,
+            'num_open_classes' : 50,
+            'use_random_classes' : False
+        },
     },
 'CIFAR10' : {
         'learning_loss' : {
@@ -71,6 +174,20 @@ INIT_TRAIN_SET_CONFIG = {
             'sample_per_class' : 100, # initially 40 x 12 = 480 samples
             'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
             'use_random_classes' : False
+        },
+        'learning_loss_start_random' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 100,
+            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'use_random_classes' : False,
+            'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
+        },
+        'learning_loss_start_random_tuning' : {
+            'num_init_classes' : 10,
+            'sample_per_class' : 100,
+            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'use_random_classes' : False,
+            'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
         },
         'no_learning' : {
             'num_init_classes' : 10,
@@ -82,6 +199,18 @@ INIT_TRAIN_SET_CONFIG = {
             'num_init_classes' : 10,
             'sample_per_class' : 1000,
             'num_open_classes' : 0,
+            'use_random_classes' : False
+        },
+        'no_learning_5_open_classes' : {
+            'num_init_classes' : 5,
+            'sample_per_class' : 5000,
+            'num_open_classes' : 5,
+            'use_random_classes' : False
+        },
+        'no_learning_5K_5_open_classes' : {
+            'num_init_classes' : 5,
+            'sample_per_class' : 1000,
+            'num_open_classes' : 5,
             'use_random_classes' : False
         },
     }

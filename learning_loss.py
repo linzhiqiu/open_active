@@ -26,18 +26,12 @@ class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
 
-class ResNetLearningLoss(nn.Module):
-    def __init__(self, resnet_model, resnet_type='ResNet18', mid_feature_size=128):
-        super(self.__class__, self).__init__()
-        self.resnet_model = resnet_model
-        self.resnet_type = resnet_type
-        if self.resnet_type == "ResNet18":
-            layer_sizes = [64, 128, 256, 512]
-        elif self.resnet_type == "ResNet50":
-            layer_sizes = [256, 512, 1024, 2048]
-        else:
-            raise NotImplementedError()
 
+class LossLayer(nn.Module):
+    """docstring for LossLayer"""
+    def __init__(self, layer_sizes, mid_feature_size):
+        super(LossLayer, self).__init__()
+        assert len(layer_sizes) == 4
         mid_loss_layers = []
         for layer_size in layer_sizes:
             mid_loss_layer = nn.Sequential(
@@ -51,28 +45,66 @@ class ResNetLearningLoss(nn.Module):
         self.mid_loss_layer_1 = mid_loss_layers[0]
         self.mid_loss_layer_2 = mid_loss_layers[1]
         self.mid_loss_layer_3 = mid_loss_layers[2]
-        self.mid_loss_layer_4 = mid_loss_layers[3] 
+        self.mid_loss_layer_4 = mid_loss_layers[3]
+        self.final_loss_layer = nn.Linear(len(layer_sizes)*mid_feature_size, 1)
 
-        self.loss_layer = nn.Linear(len(layer_sizes)*mid_feature_size, 1)
+    def forward(self, out_1, out_2, out_3, out_4):
+        f_1 = self.mid_loss_layer_1(out_1)
+        f_2 = self.mid_loss_layer_2(out_2)
+        f_3 = self.mid_loss_layer_3(out_3)
+        f_4 = self.mid_loss_layer_4(out_4)
+        pred_loss = self.final_loss_layer(torch.cat([f_1, f_2, f_3, f_4], dim=1))
+        return pred_loss
+
+
+class ResNetLearningLoss(nn.Module):
+    def __init__(self, resnet_model, resnet_type='ResNet18', mid_feature_size=128):
+        super(self.__class__, self).__init__()
+        self.resnet_model = resnet_model
+        self.resnet_type = resnet_type
+        if self.resnet_type == "ResNet18":
+            layer_sizes = [64, 128, 256, 512]
+        elif self.resnet_type == "ResNet50":
+            layer_sizes = [256, 512, 1024, 2048]
+        else:
+            raise NotImplementedError() 
+
+        self.loss_layer = LossLayer(layer_sizes, mid_feature_size)
+
+        self.loss_back_hook = None
+
+    def pred_loss_gradient_propagation(self, enabled=True):
+        # if type(self.loss_back_handle) != type(None):
+        #     # Remove old handle, if any
+        #     self.loss_back_handle.remove()
+        #     self.loss_back_handle = None
+        if enabled == True:
+            self.loss_back_hook = None
+        else:
+            self.loss_back_hook = lambda grad : grad * 0.
 
     def forward(self, x):
         out = F.relu(self.resnet_model.bn1(self.resnet_model.conv1(x)))
-        out = self.resnet_model.layer1(out)
-        f_1 = self.mid_loss_layer_1(out)
-        out = self.resnet_model.layer2(out)
-        f_2 = self.mid_loss_layer_2(out)
-        out = self.resnet_model.layer3(out)
-        f_3 = self.mid_loss_layer_3(out)
-        out = self.resnet_model.layer4(out)
-        f_4 = self.mid_loss_layer_4(out)
-        out = F.avg_pool2d(out, 4)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-        pred_loss = self.loss_layer(torch.cat([f_1, f_2, f_3, f_4], dim=1))
-        return out, pred_loss
+        out_1 = self.resnet_model.layer1(out)
+        # f_1 = self.mid_loss_layer_1(out_1)
+        out_2 = self.resnet_model.layer2(out_1)
+        # f_2 = self.mid_loss_layer_2(out_2)
+        out_3 = self.resnet_model.layer3(out_2)
+        # f_3 = self.mid_loss_layer_3(out_3)
+        out_4 = self.resnet_model.layer4(out_3)
+        # f_4 = self.mid_loss_layer_4(out_4)
+        out_pool = F.avg_pool2d(out_4, 4)
+        out_f = out_pool.view(out_pool.size(0), -1)
+        out_f = self.fc(out_f)
 
 
-def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, lmb=1.0, margin=1.0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
+        pred_loss = self.loss_layer(out_1, out_2, out_3, out_4)
+        if type(self.loss_back_hook) != type(None):
+            pred_loss.register_hook(self.loss_back_hook)
+        return out_f, pred_loss
+
+
+def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, mode='default', lmb=1.0, margin=1.0, start_prop_epoch=0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
     """Regular PyTorch training procedure: Train model using data in dataloaders['train'] from start_epoch to max_epochs-1
     """
     assert start_epoch < max_epochs
@@ -86,10 +118,14 @@ def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, lmb=1.0
     for epoch in range(start_epoch, max_epochs):
         # print('Epoch {}/{}'.format(epoch, max_epochs - 1))
         # print('-' * 10)
+
         for phase in dataloaders.keys():
             if phase == "train":
                 scheduler.step()
                 model.train()
+                # Enable loss propagtion to target model or not
+                loss_prop_enabled = epoch < stop_prop_epoch
+                model.pred_loss_gradient_propagation(enabled=loss_prop_enabled)
             else:
                 model.eval()
 
@@ -129,21 +165,24 @@ def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, lmb=1.0
                         loss = torch.zeros([0.0]).to(device)
                     else:
                         if inputs.shape[0] % 2 != 0:
-                            loss = loss[-1:]
-                            pred_losses = pred_losses[-1:]
+                            loss = loss[:-1]
+                            pred_losses = pred_losses[:-1]
                         split_index = int(loss.shape[0]/2)
                         loss_1, loss_2 = loss[:split_index], loss[split_index:]
                         pred_losses_1, pred_losses_2 = pred_losses[:split_index], pred_losses[split_index:]
-                        loss_gt = torch.where(
-                                      loss_1 > loss_2,
-                                      torch.Tensor([1.]).to(device),
-                                      torch.Tensor([-1.]).to(device)
-                                  )
                         loss_corrects = (loss_1 > loss_2) == (pred_losses_1 > pred_losses_2)
-                        loss_loss = torch.max(torch.FloatTensor([0]).to(device),
-                                              -1*loss_gt*(pred_losses_1-pred_losses_2)+margin)
+                        if mode == 'default':
+                            loss_gt = torch.where(
+                                          loss_1 > loss_2,
+                                          torch.Tensor([1.]).to(device),
+                                          torch.Tensor([-1.]).to(device)
+                                      )
+                            loss_loss = torch.max(torch.FloatTensor([0]).to(device),
+                                                  -1*loss_gt*(pred_losses_1-pred_losses_2)+margin)
+                        else:
+                            loss_loss = nn.MSELoss()(loss, pred_losses)
 
-                    if epoch < stop_prop_epoch:
+                    if epoch >= start_prop_epoch:
                         combined_loss = loss.mean() + 2*lmb*loss_loss.mean()
                     else:
                         combined_loss = loss.mean()
@@ -183,6 +222,7 @@ class NetworkLearningLoss(Network):
         self.learning_loss_train_mode = self.config.learning_loss_train_mode
         self.learning_loss_lambda = self.config.learning_loss_lambda
         self.learning_loss_margin = self.config.learning_loss_margin
+        self.learning_loss_start_epoch = self.config.learning_loss_start_epoch
         self.learning_loss_stop_epoch = self.config.learning_loss_stop_epoch
 
         self.info_collector_class = LearningLossInfoCollector
@@ -213,8 +253,10 @@ class NetworkLearningLoss(Network):
                                                              optimizer,
                                                              scheduler,
                                                              # self.criterion,
+                                                             mode=self.learning_loss_train_mode,
                                                              lmb=self.learning_loss_lambda,
                                                              margin=self.learning_loss_margin,
+                                                             start_prop_epoch=self.learning_loss_start_epoch,
                                                              stop_prop_epoch=self.learning_loss_stop_epoch, #TODO: Figure out what this should be
                                                              device=self.device,
                                                              start_epoch=start_epoch,
@@ -225,6 +267,7 @@ class NetworkLearningLoss(Network):
               f"Label_Loss {train_loss}, Accuracy {train_acc}"
               f"Pred_Loss {loss_loss}, Accuracy {loss_acc}")
         return train_loss, train_acc
+
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
@@ -254,7 +297,7 @@ class NetworkLearningLoss(Network):
             print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
             threshold = self.pseuopen_threshold
 
-        def open_set_prediction(outputs_tuple, inputs=None):
+        def open_set_prediction(outputs_tuple, inputs=None, features=None):
             # TODO: output is a tuple
             outputs, losses = outputs_tuple
             softmax_outputs = F.softmax(outputs, dim=1)
@@ -281,7 +324,7 @@ class NetworkLearningLoss(Network):
     def _get_network_model(self):
         """ Get the regular softmax network model
         """
-        model = getattr(models, self.config.arch)()
+        model = getattr(models, self.config.arch)(last_relu=False)
         model = ResNetLearningLoss(model, self.config.arch)
         if self.config.pretrained != None:
             state_dict = self._get_pretrained_model_state_dict()
@@ -308,3 +351,230 @@ class NetworkLearningLoss(Network):
             # model.fc1.to(device)
         else:
             raise NotImplementedError()
+
+    def _eval_mode(self):
+        self.model.pred_loss_gradient_propagation(enabled=True) # So no hook is registered     
+        self.model.eval()
+
+
+def get_learning_loss_class(base_class):
+    class LearningLoss(base_class):
+        def __init__(self, *args, **kwargs):
+            super(LearningLoss, self).__init__(*args, **kwargs)
+            assert self.config.class_weight in ['uniform'] # No 'class_imbalanced'
+            self.learning_loss_train_mode = self.config.learning_loss_train_mode
+            self.learning_loss_lambda = self.config.learning_loss_lambda
+            self.learning_loss_margin = self.config.learning_loss_margin
+            self.learning_loss_start_epoch = self.config.learning_loss_start_epoch
+            self.learning_loss_stop_epoch = self.config.learning_loss_stop_epoch
+
+            self.info_collector_class = LearningLossInfoCollector
+
+
+        def _train(self, model, s_train, seen_classes, start_epoch=0):
+            self._train_mode()
+            target_mapping_func = self._get_target_mapp_func(seen_classes)
+            self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                      list(s_train),
+                                                      [], # TODO: Make a validation set
+                                                      target_mapping_func,
+                                                      batch_size=self.config.batch,
+                                                      workers=self.config.workers)
+            
+            self._update_last_layer(model, len(seen_classes), device=self.device)
+            optimizer = self._get_network_optimizer(model)
+            scheduler = self._get_network_scheduler(optimizer)
+
+            # self.criterion = self._get_criterion(self.dataloaders['train'],
+            #                                      seen_classes=seen_classes,
+            #                                      criterion_class=self.criterion_class)
+
+            with SetPrintMode(hidden=not self.config.verbose):
+                train_loss, train_acc, loss_loss, loss_acc = train_epochs_learning_loss(
+                                                                 model,
+                                                                 self.dataloaders,
+                                                                 optimizer,
+                                                                 scheduler,
+                                                                 # self.criterion,
+                                                                 mode=self.learning_loss_train_mode,
+                                                                 lmb=self.learning_loss_lambda,
+                                                                 margin=self.learning_loss_margin,
+                                                                 start_prop_epoch=self.learning_loss_start_epoch,
+                                                                 stop_prop_epoch=self.learning_loss_stop_epoch, #TODO: Figure out what this should be
+                                                                 device=self.device,
+                                                                 start_epoch=start_epoch,
+                                                                 max_epochs=self.max_epochs,
+                                                                 verbose=self.config.verbose,
+                                                             )
+            print(f"Train => {self.round} round => "
+                  f"Label_Loss {train_loss}, Accuracy {train_acc}"
+                  f"Pred_Loss {loss_loss}, Accuracy {loss_acc}")
+            return train_loss, train_acc
+
+        def _get_open_set_pred_func(self):
+            parent_open_set_pred_func = super(LearningLoss, self)._get_open_set_pred_func()
+            def open_set_prediction(outputs_tuple, **kwargs):
+                outputs, losses = outputs_tuple
+                return parent_open_set_pred_func(outputs, **kwargs)
+            return open_set_prediction
+
+        def _get_network_model(self):
+            """ Get the regular softmax network model
+            """
+            model = getattr(models, self.config.arch)(last_relu=False)
+            model = ResNetLearningLoss(model, self.config.arch)
+            if self.config.pretrained != None:
+                state_dict = self._get_pretrained_model_state_dict()
+                model.resnet_model.load_state_dict(state_dict)
+                del state_dict
+            else:
+                print("Using random initialized model")
+            return model.to(self.device)
+
+
+        def _update_last_layer(self, model, output_size, device='cuda'):
+            if "resnet" in self.config.arch.lower():
+                fd = int(model.resnet_model.fc.weight.size()[1])
+                model.fc = nn.Linear(fd, output_size)
+                model.fc.weight.data.normal_(0, 0.01)
+                model.fc.bias.data.zero_()
+                model.fc.to(device)
+            elif self.config.arch in ['classifier32', 'classifier32_instancenorm']:
+                raise NotImplementedError()
+                # fd = int(model.fc1.weight.size()[1])
+                # model.fc1 = nn.Linear(fd, output_size)
+                # model.fc1.weight.data.normal_(0, 0.01)
+                # model.fc1.bias.data.zero_()
+                # model.fc1.to(device)
+            else:
+                raise NotImplementedError()
+
+        def _eval_mode(self):
+            self.model.pred_loss_gradient_propagation(enabled=True) # So no hook is registered     
+            self.model.eval()
+    return LearningLoss
+
+
+if __name__ == '__main__':
+    import models
+    resnet_model = models.ResNet18().cuda()
+    
+
+    model = ResNetLearningLoss(resnet_model, "ResNet18").cuda()
+
+    fd = int(model.resnet_model.fc.weight.size()[1])
+    model.fc = nn.Linear(fd, 10)
+    model.fc.weight.data.normal_(0, 0.01)
+    model.fc.bias.data.zero_()
+    model.fc.cuda()
+
+    def printgradnorm(self, grad_input, grad_output):
+        print('Inside ' + self.__class__.__name__ + ' backward')
+        print('Inside class:' + self.__class__.__name__)
+        print('')
+        print('grad_input: ', type(grad_input))
+        for i in range(len(grad_input)):
+            if type(grad_input[i]) != type(None):
+                print(f'grad_input[{i}]: ', type(grad_input[i]))
+                print('grad_input size:', grad_input[i].size())
+                print('grad_input norm:', grad_input[i].norm())
+            else:
+                print(f"No grad at grad_input[{i}]")
+        print('grad_input_length: ', len(grad_input))
+        print('grad_output: ', type(grad_output))
+        print('grad_output[0]: ', type(grad_output[0]))
+        print('grad_output_length: ', len(grad_output))
+        print('')
+        print('grad_output size:', grad_output[0].size())
+        print('grad_output norm:', grad_output[0].norm())
+
+    def cut_grad(grad):
+        return grad*0.
+
+
+    # model.loss_layer.register_backward_hook(printgradnorm)
+    model.resnet_model.conv1.register_backward_hook(printgradnorm)
+
+    inputs = torch.randn(6,3,32,32).cuda()
+    labels = torch.LongTensor([1,0,1,3,4,5]).cuda()
+
+    model.pred_loss_gradient_propagation(enabled=False)
+    outputs, pred_losses = model(inputs)
+    # outputs, pred_losses = model(inputs)
+    _, preds = torch.max(outputs, 1)
+    loss = nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+    pred_losses = pred_losses.view(inputs.shape[0])
+
+    split_index = int(loss.shape[0]/2)
+    loss_1, loss_2 = loss[:split_index], loss[split_index:]
+    pred_losses_1, pred_losses_2 = pred_losses[:split_index], pred_losses[split_index:]
+    loss_gt = torch.where(
+                  loss_1 > loss_2,
+                  torch.Tensor([1.]).cuda(),
+                  torch.Tensor([-1.]).cuda()
+              )
+    loss_corrects = (loss_1 > loss_2) == (pred_losses_1 > pred_losses_2)
+    loss_loss = torch.max(torch.FloatTensor([0]).cuda(),
+                          -1*loss_gt*(pred_losses_1-pred_losses_2)+1).mean()
+    loss_loss.backward()
+
+    outputs, pred_losses = model(inputs)
+    # outputs, pred_losses = model(inputs)
+    _, preds = torch.max(outputs, 1)
+    loss = nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+    pred_losses = pred_losses.view(inputs.shape[0])
+
+    split_index = int(loss.shape[0]/2)
+    loss_1, loss_2 = loss[:split_index], loss[split_index:]
+    pred_losses_1, pred_losses_2 = pred_losses[:split_index], pred_losses[split_index:]
+    loss_gt = torch.where(
+                  loss_1 > loss_2,
+                  torch.Tensor([1.]).cuda(),
+                  torch.Tensor([-1.]).cuda()
+              )
+    loss_corrects = (loss_1 > loss_2) == (pred_losses_1 > pred_losses_2)
+    loss_loss = torch.max(torch.FloatTensor([0]).cuda(),
+                          -1*loss_gt*(pred_losses_1-pred_losses_2)+1).mean()
+    loss_loss.backward()
+
+    model.pred_loss_gradient_propagation(enabled=True)
+    outputs, pred_losses = model(inputs)
+    # outputs, pred_losses = model(inputs)
+    _, preds = torch.max(outputs, 1)
+    loss = nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+    pred_losses = pred_losses.view(inputs.shape[0])
+
+    split_index = int(loss.shape[0]/2)
+    loss_1, loss_2 = loss[:split_index], loss[split_index:]
+    pred_losses_1, pred_losses_2 = pred_losses[:split_index], pred_losses[split_index:]
+    loss_gt = torch.where(
+                  loss_1 > loss_2,
+                  torch.Tensor([1.]).cuda(),
+                  torch.Tensor([-1.]).cuda()
+              )
+    loss_corrects = (loss_1 > loss_2) == (pred_losses_1 > pred_losses_2)
+    loss_loss = torch.max(torch.FloatTensor([0]).cuda(),
+                          -1*loss_gt*(pred_losses_1-pred_losses_2)+1).mean()
+    loss_loss.backward()
+
+    outputs, pred_losses = model(inputs)
+    # outputs, pred_losses = model(inputs)
+    _, preds = torch.max(outputs, 1)
+    loss = nn.CrossEntropyLoss(reduction='none')(outputs, labels)
+    pred_losses = pred_losses.view(inputs.shape[0])
+
+    split_index = int(loss.shape[0]/2)
+    loss_1, loss_2 = loss[:split_index], loss[split_index:]
+    pred_losses_1, pred_losses_2 = pred_losses[:split_index], pred_losses[split_index:]
+    loss_gt = torch.where(
+                  loss_1 > loss_2,
+                  torch.Tensor([1.]).cuda(),
+                  torch.Tensor([-1.]).cuda()
+              )
+    loss_corrects = (loss_1 > loss_2) == (pred_losses_1 > pred_losses_2)
+    loss_loss = torch.max(torch.FloatTensor([0]).cuda(),
+                          -1*loss_gt*(pred_losses_1-pred_losses_2)+1).mean()
+    (loss.mean()+loss_loss).backward()
+
+
+    exit(0)

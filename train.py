@@ -17,11 +17,23 @@ import utils
 import json
 # from tools_training import get_device, get_criterion, get_optimizer, get_scheduler, get_tensorboard_logger
 
+import random
+
+
 def main():
     config, _ = get_config()
+    if config.use_random_seed:
+        print("Using random random seed")
+    else:
+        print("Random seed use 30")
+        random.seed(30)
+        torch.manual_seed(30)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
     if config.graphite:
         raise NotImplementedError()
-    #     config = utils.enable_graphite(config)
+    #  config = utils.enable_graphite(config)
     dataset_factory = get_dataset_factory(config.data, config.data_path, config.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()
     train_samples, train_labels, classes = dataset_factory.get_train_set_info()
@@ -100,9 +112,51 @@ def main():
     for round_i in range(start_round, config.max_rounds):
         print(f"Round [{round_i}]")
 
-        
+        # Test if log dir is short enough
+        # log_strs = utils.get_experiment_name(config).split(os.sep)
+        # dataset_str = utils.get_data_param(config)
+        # method_str = utils.get_method_param(config)
+        # training_str = '_'.join(log_strs[2:])
+        # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
+        # if not os.path.exists(save_dir):
+        #     os.makedirs(save_dir)
+
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
         
+        if config.log_everything:
+            if round_i == 0:
+                results = {} # A dictionary, key is round number
+                log_strs = utils.get_experiment_name(config).split(os.sep)
+                dataset_str = utils.get_data_active_param(config)
+                method_str = utils.get_method_param(config)
+                active_str = utils.get_active_param(config)
+                training_str = '_'.join(log_strs[2:])
+                save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                log_filename = os.path.join(save_dir, time_stamp+'.json')
+
+            results[round_i] = {
+                'seen_samples' : s_train,
+                'train_labels' : train_labels,
+                'num_seen_samples' : len(s_train),
+                'num_seen_classes' : len(seen_classes),
+                'num_unseen_classes' : len(classes.difference(seen_classes)),
+                'num_open_classes' : len(open_classes),
+                'eval_results' : eval_results,
+                'thresholds' : trainer.get_thresholds_checkpoints()[round_i+1],
+            }
+
+            # if round_i == config.max_rounds - 1:
+            json_dict = json.dumps(results)
+            if round_i == config.max_rounds - 1:
+                print(f"Writing all results to {log_filename}")
+            else:
+                print(f"Writing intermediate results to {log_filename}")
+            f = open(log_filename, "w+")
+            f.write(json_dict)
+            f.close()
+
         if round_i == 0:
             if config.log_first_round_thresholds:
                 log_strs = utils.get_experiment_name(config).split(os.sep)
@@ -117,7 +171,7 @@ def main():
                 f = open(os.path.join(save_dir, time_stamp+'.json'),"w+")
                 f.write(json_dict)
                 f.close()
-
+                print(f"Writing results to {os.path.join(save_dir, time_stamp+'.json')}")
                 # trainer.trainer_machine.draw_histogram()
                 exit(0)
 
@@ -144,10 +198,11 @@ def main():
                 test_accs = {}
 
                 log_strs = utils.get_experiment_name(config).split(os.sep)
-                dataset_str = utils.get_data_param(config)
+                dataset_str = utils.get_data_active_param(config)
                 method_str = utils.get_method_param(config)
+                active_str = utils.get_active_param(config)
                 training_str = '_'.join(log_strs[2:])
-                save_dir = os.path.join('learning_loss', dataset_str, method_str, training_str)
+                save_dir = os.path.join('learning_loss', dataset_str, "_".join([method_str, active_str]), training_str)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 active_learning_filename = os.path.join(save_dir, time_stamp+'.json')
