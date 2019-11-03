@@ -78,7 +78,8 @@ class BasicInfoCollector(InfoCollector):
             softmax_i = softmax_outputs[i]
             entropy_i = float((softmax_i*softmax_i.log()).sum()) # This is the negative entropy
             prob_score_i = float(prob_scores[i])
-            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
+            predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])]) 
+            # predicted_label_i = int(predicted_labels[i])
             label_i = int(labels[i])
             instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, label_i in self.seen_classes)
             batch_instances_info.append(instance_info)

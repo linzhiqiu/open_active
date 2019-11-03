@@ -44,6 +44,9 @@ class Trainer(object):
 
     def get_thresholds_checkpoints(self):
         return self.trainer_machine.get_thresholds_checkpoints()
+
+    def get_exemplar_set(self):
+        return self.trainer_machine.exemplar_set
         
     # def train_new_round(self, s_train, seen_classes):
     #     return self.trainer_machine.train_new_round(s_train, seen_classes)

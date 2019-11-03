@@ -96,6 +96,7 @@ def get_target_mapping_func(classes, seen_classes, open_classes):
             seen_classes: The set of all seen classes
             open_classes: The set of all hold-out open classes
     """
+
     seen_classes = sorted(list(seen_classes))
     open_classes = sorted(list(open_classes))
     mapping = {idx : global_setting.OPEN_CLASS_INDEX if idx in open_classes else 
@@ -103,6 +104,23 @@ def get_target_mapping_func(classes, seen_classes, open_classes):
                      seen_classes.index(idx)
                for idx in classes}
     return lambda idx : mapping[idx]
+
+def get_target_mapping_func_for_tensor(classes, seen_classes, open_classes, device='cuda'):
+    """ Exactly the same as get_target_mapping_func but operate on tensor level
+    """
+    
+    seen_classes = sorted(list(seen_classes))
+    open_classes = sorted(list(open_classes))
+    mapping = {idx : global_setting.OPEN_CLASS_INDEX if idx in open_classes else 
+                     global_setting.UNSEEN_CLASS_INDEX if idx not in seen_classes else 
+                     seen_classes.index(idx)
+               for idx in classes}
+    index_tensor = torch.zeros((len(classes))).long().to(device)
+    for idx in classes:
+        index_tensor[idx] = mapping[idx]
+    def mapp_func(real_labels):
+        return index_tensor[real_labels]
+    return mapp_func
 
 def get_target_unmapping_dict(classes, seen_classes):
     """ Return a dictionary that map 0-len(seen_classes) to true seen_classes indices.
@@ -112,12 +130,22 @@ def get_target_unmapping_dict(classes, seen_classes):
             seen_classes: The set of all seen classes
     """
     seen_classes = sorted(list(seen_classes))
-    mapping = {idx : -1 if idx not in seen_classes else seen_classes.index(idx)
+    mapping = {idx : global_setting.UNSEEN_CLASS_INDEX if idx not in seen_classes else seen_classes.index(idx)
                for idx in classes}
     unmapping = {mapping[true_index] : true_index for true_index in mapping.keys()}
     if -1 in unmapping.keys():
         del unmapping[-1]
     return unmapping
+
+def get_target_unmapping_func_for_list(classes, seen_classes):
+    seen_classes = sorted(list(seen_classes))
+    mapping = {idx : global_setting.UNSEEN_CLASS_INDEX if idx not in seen_classes else seen_classes.index(idx)
+               for idx in classes}
+    unmapping_dict = {mapping[true_index] : true_index for true_index in mapping.keys()}
+    unmapping_dict[global_setting.UNSEEN_CLASS_INDEX] = global_setting.UNSEEN_CLASS_INDEX
+    def unmapp_func(lst):
+        return list(map(lambda x: unmapping_dict[x], lst))
+    return unmapp_func
 
 def enable_graphite(config):
     import os

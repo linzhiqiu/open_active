@@ -12,7 +12,7 @@ import copy
 
 import models
 from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
 
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
@@ -82,7 +82,7 @@ def get_dynamic_threshold(log : list, metric='softmax', mode='weighted'):
     return candidates[0][0]
 
 
-def train_epochs(model, dataloaders, optimizer, scheduler, criterion, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
+def train_epochs(model, dataloaders, optimizer, scheduler, criterion, target_mapping_func, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
     """Regular PyTorch training procedure: Train model using data in dataloaders['train'] from start_epoch to max_epochs-1
     """
     assert start_epoch < max_epochs
@@ -109,7 +109,8 @@ def train_epochs(model, dataloaders, optimizer, scheduler, criterion, device='cu
                 pbar = dataloaders[phase]
 
             for batch, data in enumerate(pbar):
-                inputs, labels = data
+                inputs, real_labels = data
+                labels = target_mapping_func(real_labels)
                 count += inputs.size(0)
                 
                 inputs = inputs.to(device)
@@ -149,7 +150,7 @@ class TrainerMachine(object):
         self.config = config
         self.train_instance = train_instance
         self.log = None # This should be maintained by the corresponding label picker. It will be updated after each call to label_picker.select_new_data() 
-
+        self.exemplar_set = None # Only works for ICALR based modules
         # For ROC/other open set evaluation metric. self.thresholds_checkpoints[epoch] is a dictionary of all the information for a given epoch
         # This metric should be updated in the open_set_prediction function returned by self._get_open_set_pred()
         self.thresholds_checkpoints = {}
@@ -168,9 +169,13 @@ class TrainerMachine(object):
 
     # Below are some helper functions shared by all subclasses
     def _get_target_mapp_func(self, seen_classes):
-        return get_target_mapping_func(self.train_instance.classes,
-                                       seen_classes,
-                                       self.train_instance.open_classes)
+        return get_target_mapping_func_for_tensor(self.train_instance.classes,
+                                                  seen_classes,
+                                                  self.train_instance.open_classes)
+
+    def _get_target_unmapping_func_for_list(self, seen_classes):
+        return get_target_unmapping_func_for_list(self.train_instance.classes,
+                                                  seen_classes)
 
 class Network(TrainerMachine):
     def __init__(self, *args, **kwargs):
@@ -226,7 +231,7 @@ class Network(TrainerMachine):
         # self.optimizer.load_state_dict(checkpoint['optimizer'])
         # self.scheduler.load_state_dict(checkpoint['scheduler'])
 
-    def _get_criterion(self, dataloader, seen_classes=set(), criterion_class=nn.CrossEntropyLoss):
+    def _get_criterion(self, dataloader, target_mapping_func, seen_classes=set(), criterion_class=nn.CrossEntropyLoss):
         assert seen_classes.__len__() > 0
         assert self.config.class_weight in ['uniform', 'class_imbalanced']
         if self.config.class_weight == 'uniform':
@@ -236,7 +241,8 @@ class Network(TrainerMachine):
             weight = torch.zeros(len(seen_classes))
             total = 0.0
             for _, data in enumerate(tqdm(dataloader, ncols=80)):
-                _, labels = data
+                _, real_labels = data
+                labels = target_mapping_func(real_labels)
                 for label_i in labels:
                     weight[label_i] += 1.
                     total += 1.
@@ -267,7 +273,7 @@ class Network(TrainerMachine):
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                   list(s_train),
                                                   [], # TODO: Make a validation set
-                                                  target_mapping_func,
+                                                  None, # No target transform is made
                                                   batch_size=self.config.batch,
                                                   workers=self.config.workers)
         
@@ -276,6 +282,7 @@ class Network(TrainerMachine):
         scheduler = self._get_network_scheduler(optimizer)
 
         self.criterion = self._get_criterion(self.dataloaders['train'],
+                                             target_mapping_func,
                                              seen_classes=seen_classes,
                                              criterion_class=self.criterion_class)
 
@@ -286,6 +293,7 @@ class Network(TrainerMachine):
                                         optimizer,
                                         scheduler,
                                         self.criterion,
+                                        target_mapping_func,
                                         device=self.device,
                                         start_epoch=start_epoch,
                                         max_epochs=self.max_epochs,
@@ -302,7 +310,6 @@ class Network(TrainerMachine):
         dataloader = get_subset_loader(self.train_instance.train_dataset,
                                        list(full_train_set),
                                        None, # No target transform is needed! 
-                                       # self._get_target_mapp_func(pseudo_seen_classes), # it should map the pseudo open classes to OPEN_INDEX
                                        shuffle=False,
                                        batch_size=self.config.batch,
                                        workers=self.config.workers)
@@ -333,15 +340,21 @@ class Network(TrainerMachine):
         # assert self.round not in self.thresholds_checkpoints.keys()
         # Caveat: Currently, the open_set_score is updated in the open_set_prediction function. Yet the grouth_truth is updated in self._eval()
         self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+                                                   'real_labels' : [], # The real labels for CIFAR100 or other datasets.
                                                    'open_set_score' : [], # Higher the score, more likely to be open set
-                                                   'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label?
-                                                   'closed_argmax_prob' : [], # If fail the open set detection, then what's the probability for predicted closed set class?
-                                                   'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above
+                                                   'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?
+                                                   'closed_predicted_real' : [], # If fail the open set detection, then what's the predicted closed set label (real labels)?
+                                                   'closed_argmax_prob' : [], # If fail the open set detection, then what's the probability for predicted closed set class (real labels)?
+                                                   'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
+                                                   'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
                                                    'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
                                                   } # A list of dictionary
 
+        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(seen_classes) # Only for transforming predicted label (in network indices) to real indices
         dataloader = get_loader(test_dataset,
-                                self._get_target_mapp_func(seen_classes),
+                                # self._get_target_mapp_func(seen_classes),
+                                None,
                                 shuffle=False,
                                 batch_size=self.config.batch,
                                 workers=self.config.workers)
@@ -364,10 +377,10 @@ class Network(TrainerMachine):
 
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
-                    inputs, labels = data
+                    inputs, real_labels = data
                     
                     inputs = inputs.to(self.device)
-                    labels = labels.to(self.device)
+                    labels = target_mapping_func(real_labels.to(self.device))
                     labels_for_openset_pred = torch.where(
                                                   labels == OPEN_CLASS_INDEX,
                                                   torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
@@ -376,15 +389,9 @@ class Network(TrainerMachine):
 
                     outputs = model(inputs)
                     preds = open_set_prediction(outputs, inputs=inputs) # Open set index == UNSEEN_CLASS_INDEX
-                    # loss = open_set_criterion(outputs, labels)
-
-                    # labels_for_ground_truth = torch.where(
-                    #                               (labels != OPEN_CLASS_INDEX) & (labels != UNSEEN_CLASS_INDEX),
-                    #                               torch.LongTensor([0]).to(labels.device),
-                    #                               labels
-                    #                           ) # This change hold out open set examples' indices to unseen open set examples indices
 
                     self.thresholds_checkpoints[self.round]['ground_truth'] += labels.tolist()
+                    self.thresholds_checkpoints[self.round]['real_labels'] += real_labels.tolist()
                     # statistics
                     # running_loss += loss.item() * inputs.size(0)
                     performance_dict['overall_acc']['count'] += inputs.size(0)
@@ -469,6 +476,8 @@ class Network(TrainerMachine):
                 train_class_notseen = performance_dict['train_class_acc']['not_seen']
                 seen_closed_open = performance_dict['seen_closed_acc']['open']
 
+            self.thresholds_checkpoints[self.round]['closed_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            self.thresholds_checkpoints[self.round]['open_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['open_predicted'])
             print(f"Test => "
                   f"Training Class Acc {train_class_acc}, "
                   f"Hold-out Open-Set Acc {holdout_open_acc}")
@@ -1043,8 +1052,11 @@ class OSDNNetwork(Network):
     def _gather_correct_features(self, model, train_loader, seen_classes=set(), mav_features_selection='correct'):
         assert len(seen_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
+        mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                               seen_classes,
+                                               self.train_instance.open_classes)
         target_mapping_func = self._get_target_mapp_func(seen_classes)
-        seen_class_softmax_indices = [target_mapping_func(i) for i in seen_classes]
+        seen_class_softmax_indices = [mapping_func(i) for i in seen_classes]
 
         if mav_features_selection == 'correct':
             print("Gather feature vectors for each class that are predicted correctly")
@@ -1070,10 +1082,10 @@ class OSDNNetwork(Network):
         #     handle = self.model.fc.register_forward_hook(forward_hook_func)
 
         for batch, data in enumerate(pbar):
-            inputs, labels = data
+            inputs, real_labels = data
             
             inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
+            labels = target_mapping_func(real_labels.to(self.device))
 
             with torch.set_grad_enabled(False):
                 outputs = model(inputs)
@@ -1081,9 +1093,6 @@ class OSDNNetwork(Network):
                 cur_features = []
                 _, preds = torch.max(outputs, 1)
                 correct_indices = preds == labels.data
-
-                # if self.use_feature_before_fc:
-                #     outputs = cur_features[0]
 
                 for i in range(inputs.size(0)):
                     if mav_features_selection == 'correct':
@@ -1096,6 +1105,7 @@ class OSDNNetwork(Network):
                     elif mav_features_selection == 'none_correct_then_all':
                         if correct_indices[i]:
                             features_dict[int(labels[i])]['correct'].append(outputs[i].unsqueeze(0))
+
                         features_dict[int(labels[i])]['all'].append(outputs[i].unsqueeze(0))
 
         if mav_features_selection == 'none_correct_then_all':
@@ -1113,9 +1123,6 @@ class OSDNNetwork(Network):
             print("These classes has no correct feature. So we use all inputs.")
             print(none_correct_classes)
             features_dict = new_features_dict
-
-        # if self.use_feature_before_fc:
-        #     handle.remove()
 
         return features_dict
 
@@ -1253,35 +1260,6 @@ class OSDNNetwork(Network):
                                'open_class_reject': 0.,
                                'both_reject': 0.,
                                'total_reject': 0.}
-
-    # def get_checkpoint(self):
-    #     return {
-    #         'epoch' : self.epoch,
-    #         'arch' : self.config.arch,
-    #         'distance_metric' : self.distance_metric,
-    #         'weibull_tail_size' : self.weibull_tail_size,
-    #         'alpha_rank' : self.alpha_rank,
-    #         'osdn_eval_threshold' : self.osdn_eval_threshold,
-    #         'model' : self.model.state_dict(),
-    #         'optimizer' : self.optimizer.state_dict(),
-    #         'scheduler' : self.scheduler.state_dict(),
-    #         'training_features' : self.training_features,
-    #     }
-
-    # def load_checkpoint(self, checkpoint):
-    #     self.epoch = checkpoint['epoch']
-    #     new_model_checkpoint = copy.deepcopy(checkpoint['model'])
-    #     for layer_name in checkpoint['model']:
-    #         if "fc.weight" in layer_name or "fc.bias" in layer_name:
-    #             del new_model_checkpoint[layer_name]
-    #     self.model.load_state_dict(new_model_checkpoint, strict=False)
-    #     self.optimizer.load_state_dict(checkpoint['optimizer'])
-    #     self.scheduler.load_state_dict(checkpoint['scheduler'])
-    #     self.training_features = checkpoint['training_features']
-    #     self.distance_metric = checkpoint['distance_metric']
-    #     self.weibull_tail_size = checkpoint['weibull_tail_size']
-    #     self.alpha_rank = checkpoint['alpha_rank']
-    #     self.osdn_eval_threshold = checkpoint['osdn_eval_threshold']
 
 
 class OSDNNetworkModified(OSDNNetwork):

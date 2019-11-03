@@ -138,10 +138,11 @@ def main():
 
             results[round_i] = {
                 'seen_samples' : s_train,
+                'exemplar_set' : trainer.get_exemplar_set(),
                 'train_labels' : train_labels,
                 'num_seen_samples' : len(s_train),
                 'num_seen_classes' : len(seen_classes),
-                'num_unseen_classes' : len(classes.difference(seen_classes)),
+                'num_unseen_classes' : len(classes.difference(seen_classes))-len(open_classes),
                 'num_open_classes' : len(open_classes),
                 'eval_results' : eval_results,
                 'thresholds' : trainer.get_thresholds_checkpoints()[round_i+1],

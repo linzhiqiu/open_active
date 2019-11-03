@@ -14,8 +14,7 @@ from trainer_machine import TrainerMachine, Network, train_epochs, get_dynamic_t
 from instance_info import BasicInfoCollector
 
 import models
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
-
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
 import libmr
@@ -72,75 +71,6 @@ class ICALR(Network):
             return old_exemplar_set
         else:
             raise NotImplementedError()
-
-    # def _get_criterion(self, dataloader, seen_classes=set(), criterion_class=nn.CrossEntropyLoss):
-    #     assert seen_classes.__len__() > 0
-    #     assert self.config.class_weight in ['uniform', 'class_imbalanced']
-    #     if self.config.class_weight == 'uniform':
-    #         weight = None
-    #         print('Using uniform class weight.')
-    #     elif self.config.class_weight == 'class_imbalanced':
-    #         weight = torch.zeros(len(seen_classes))
-    #         total = 0.0
-    #         for _, data in enumerate(tqdm(dataloader, ncols=80)):
-    #             _, labels = data
-    #             for label_i in labels:
-    #                 weight[label_i] += 1.
-    #                 total += 1.
-    #         weight = total / weight
-    #         weight = weight / weight.min() # TODO: Figure out whether or not need this min()
-
-    #         class_weight_info = {}
-    #         unmap_dict = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
-    #         for i, w_i in enumerate(weight):
-    #             class_weight_info[unmap_dict[i]] = float(w_i)
-    #         print(f'Using class weight: {class_weight_info}')
-    #     return criterion_class(weight=weight)
-
-    # def _filter_pseudo_open_set(self, samples : list, all_seen_class : set):
-    #     assert len(self.pseudo_open_set_classes) > 0
-    #     for pseudo_open_class in self.pseudo_open_set_classes:
-    #         assert pseudo_open_class in all_seen_class
-
-    #     # Remove pseudo open class examples from training
-    #     remaining_seen_classes = all_seen_class.difference(self.pseudo_open_set_classes)
-    #     # pseudo_open_samples = list(filter(lambda x : self.train_instance.train_labels[x] in self.pseudo_open_set_classes, samples))
-    #     remaining_samples = list(filter(lambda x : self.train_instance.train_labels[x] in remaining_seen_classes, samples))
-    #     return remaining_samples, remaining_seen_classes
-
-    # def _train(self, model, s_train, seen_classes, start_epoch=0):
-    #     self._train_mode()
-    #     target_mapping_func = self._get_target_mapp_func(seen_classes)
-    #     self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-    #                                               list(s_train),
-    #                                               [], # TODO: Make a validation set
-    #                                               target_mapping_func,
-    #                                               batch_size=self.config.batch,
-    #                                               workers=self.config.workers)
-        
-    #     self._update_last_layer(model, len(seen_classes), device=self.device)
-    #     optimizer = self._get_network_optimizer(model)
-    #     scheduler = self._get_network_scheduler(optimizer)
-
-    #     self.criterion = self._get_criterion(self.dataloaders['train'],
-    #                                          seen_classes=seen_classes,
-    #                                          criterion_class=self.criterion_class)
-
-    #     with SetPrintMode(hidden=not self.config.verbose):
-    #         train_loss, train_acc = train_epochs(
-    #                                     model,
-    #                                     self.dataloaders,
-    #                                     optimizer,
-    #                                     scheduler,
-    #                                     self.criterion,
-    #                                     device=self.device,
-    #                                     start_epoch=start_epoch,
-    #                                     max_epochs=self.max_epochs,
-    #                                     verbose=self.config.verbose,
-    #                                 )
-    #     print(f"Train => {self.round} round => "
-    #           f"Loss {train_loss}, Accuracy {train_acc}")
-    #     return train_loss, train_acc
 
     def _train_new_samples(self, model, new_round_samples, seen_classes, start_epoch=0):
         if self.icalr_strategy == 'proto':
@@ -216,6 +146,7 @@ class ICALR(Network):
                 self.cur_retrain_threshold += 1
             else: raise NotImplementedError()
 
+        # Retrain on first round or if criterion meets
         to_retrain_all_exemplar = self.round == 0 or (self.cur_retrain_threshold - self.past_retrain_threshold) / self.icalr_retrain_threshold >= 1.
 
         self.round += 1
@@ -251,7 +182,9 @@ class ICALR(Network):
         else:
             feature_size = 512
         self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                      seen_classes,
+                                                      self.train_instance.open_classes)
         
 
         cur_features = []
@@ -266,7 +199,8 @@ class ICALR(Network):
             dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                  class_sample_indices,
                                                  [], # TODO: Make a validation set
-                                                 target_mapping_func,
+                                                 # target_mapping_func,
+                                                 None,
                                                  batch_size=self.config.batch,
                                                  workers=self.config.workers)
             
@@ -292,15 +226,21 @@ class ICALR(Network):
         # assert self.round not in self.thresholds_checkpoints.keys()
         # Caveat: Currently, the open_set_score is updated in the open_set_prediction function. Yet the grouth_truth is updated in self._eval()
         self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+                                                   'real_labels' : [], # The real labels for CIFAR100 or other datasets.
                                                    'open_set_score' : [], # Higher the score, more likely to be open set
-                                                   'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label?
-                                                   'closed_argmax_prob' : [], # If fail the open set detection, then what's the probability for predicted closed set class?
-                                                   'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above
+                                                   'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?
+                                                   'closed_predicted_real' : [], # If fail the open set detection, then what's the predicted closed set label (real labels)?
+                                                   'closed_argmax_prob' : [], # If fail the open set detection, then what's the probability for predicted closed set class (real labels)?
+                                                   'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
+                                                   'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
                                                    'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
                                                   } # A list of dictionary
 
+        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(seen_classes) # Only for transforming predicted label (in network indices) to real indices
         dataloader = get_loader(test_dataset,
-                                self._get_target_mapp_func(seen_classes),
+                                # self._get_target_mapp_func(seen_classes),
+                                None,
                                 shuffle=False,
                                 batch_size=self.config.batch,
                                 workers=self.config.workers)
@@ -329,10 +269,10 @@ class ICALR(Network):
 
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
-                    inputs, labels = data
+                    inputs, real_labels = data
                     
                     inputs = inputs.to(self.device)
-                    labels = labels.to(self.device)
+                    labels = target_mapping_func(real_labels.to(self.device))
                     labels_for_openset_pred = torch.where(
                                                   labels == OPEN_CLASS_INDEX,
                                                   torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
@@ -351,6 +291,7 @@ class ICALR(Network):
                     #                           ) # This change hold out open set examples' indices to unseen open set examples indices
 
                     self.thresholds_checkpoints[self.round]['ground_truth'] += labels.tolist()
+                    self.thresholds_checkpoints[self.round]['real_labels'] += real_labels.tolist()
                     # statistics
                     # running_loss += loss.item() * inputs.size(0)
                     performance_dict['overall_acc']['count'] += inputs.size(0)
@@ -435,6 +376,9 @@ class ICALR(Network):
                 train_class_notseen = performance_dict['train_class_acc']['not_seen']
                 seen_closed_open = performance_dict['seen_closed_acc']['open']
 
+            self.thresholds_checkpoints[self.round]['closed_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            self.thresholds_checkpoints[self.round]['open_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['open_predicted'])
+            
             print(f"Test => "
                   f"Training Class Acc {train_class_acc}, "
                   f"Hold-out Open-Set Acc {holdout_open_acc}")
@@ -728,8 +672,11 @@ class ICALROSDNNetwork(ICALR):
     def _gather_correct_features(self, model, train_loader, seen_classes=set(), mav_features_selection='correct'):
         assert len(seen_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
+        mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                               seen_classes,
+                                               self.train_instance.open_classes)
         target_mapping_func = self._get_target_mapp_func(seen_classes)
-        seen_class_softmax_indices = [target_mapping_func(i) for i in seen_classes]
+        seen_class_softmax_indices = [mapping_func(i) for i in seen_classes]
 
         if mav_features_selection == 'correct':
             print("Gather feature vectors for each class that are predicted correctly")
@@ -754,10 +701,10 @@ class ICALROSDNNetwork(ICALR):
         handle = model.fc.register_forward_hook(forward_hook_func)
 
         for batch, data in enumerate(pbar):
-            inputs, labels = data
+            inputs, real_labels = data
             
             inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
+            labels = target_mapping_func(real_labels.to(self.device))
 
             with torch.set_grad_enabled(False):
                 _ = model(inputs)
