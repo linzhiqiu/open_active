@@ -120,20 +120,29 @@ def main():
         # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
         # if not os.path.exists(save_dir):
         #     os.makedirs(save_dir)
+        if config.log_everything:
+            log_strs = utils.get_experiment_name(config).split(os.sep)
+            dataset_str = utils.get_data_active_param(config)
+            method_str = utils.get_method_param(config)
+            active_str = utils.get_active_param(config)
+            training_str = '_'.join(log_strs[2:])
+            save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
 
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
         
         if config.log_everything:
             if round_i == 0:
                 results = {} # A dictionary, key is round number
-                log_strs = utils.get_experiment_name(config).split(os.sep)
-                dataset_str = utils.get_data_active_param(config)
-                method_str = utils.get_method_param(config)
-                active_str = utils.get_active_param(config)
-                training_str = '_'.join(log_strs[2:])
-                save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
+                # log_strs = utils.get_experiment_name(config).split(os.sep)
+                # dataset_str = utils.get_data_active_param(config)
+                # method_str = utils.get_method_param(config)
+                # active_str = utils.get_active_param(config)
+                # training_str = '_'.join(log_strs[2:])
+                # save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
+                # if not os.path.exists(save_dir):
+                #     os.makedirs(save_dir)
                 log_filename = os.path.join(save_dir, time_stamp+'.json')
 
             results[round_i] = {
@@ -144,6 +153,9 @@ def main():
                 'num_seen_classes' : len(seen_classes),
                 'num_unseen_classes' : len(classes.difference(seen_classes))-len(open_classes),
                 'num_open_classes' : len(open_classes),
+                'seen_classes' : list(seen_classes),
+                'unseen_classes' : list(classes.difference(seen_classes)),
+                'open_classes' : list(open_classes),
                 'eval_results' : eval_results,
                 'thresholds' : trainer.get_thresholds_checkpoints()[round_i+1],
             }

@@ -18,6 +18,18 @@ class SetPrintMode:
             sys.stdout.close()
             sys.stdout = self._original_stdout
 
+class FixedRepresentationDataset(torch.utils.data.TensorDataset):
+    def __init__(self, data_tensor, target_tensor):
+        assert (data_tensor.size(0) == target_tensor.size(0))
+        self.data_tensor = data_tensor
+        self.target_tensor = target_tensor
+
+    def __getitem__(self, idx):
+        return self.data_tensor[idx, ...], self.target_tensor[idx, ...] 
+
+    def __len__(self):
+        return self.data_tensor.size(0)
+
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
@@ -84,6 +96,19 @@ def get_subset_dataloaders(dataset, train_samples, val_samples, target_transform
                                                shuffle=False,
                                                workers=workers)
 
+    return dataloaders
+
+def get_dataloaders(dataset, batch_size=128, workers=4, shuffle=True):
+    """ Return a dict of train dataloaders.
+    """
+    dataloaders = {}
+    dataloaders['train'] = DataLoader(
+                 dataset,
+                 batch_size=batch_size,
+                 shuffle=shuffle,
+                 num_workers=workers,
+                 pin_memory=True
+             )
     return dataloaders
 
 def get_target_mapping_func(classes, seen_classes, open_classes):
@@ -196,11 +221,12 @@ def get_active_param(config):
     # For active learning acc logging    
     name = [config.label_picker]
     if config.label_picker == "uncertainty_measure":
-        name += [config.uncertainty_measure, 'sampling', config.active_random_sampling]
+        name += [config.uncertainty_measure, "s", config.active_random_sampling]
     elif config.label_picker == "coreset_measure":
-        name += [config.coreset_measure, 'sampling', config.active_random_sampling, config.coreset_feature]
+        name += [config.coreset_measure, "s", config.active_random_sampling, config.coreset_feature]
     else:
         raise NotImplementedError()
+    name += ['oa', config.open_active_setup]
     return "_".join(name)
 
 def get_experiment_name(config):
@@ -225,12 +251,13 @@ def get_experiment_name(config):
 
     if config.label_picker == "uncertainty_measure":
         name += ["uncertain"]
-        name += [config.uncertainty_measure, 'sampling', config.active_random_sampling]
+        name += [config.uncertainty_measure, config.active_random_sampling]
     elif config.label_picker == "coreset_measure":
         name += ["coreset"]
-        name += [config.coreset_measure, 'sampling', config.active_random_sampling, config.coreset_feature]
+        name += [config.coreset_measure, config.active_random_sampling, config.coreset_feature]
     else:
         raise NotImplementedError()
+    name += ['oa', config.open_active_setup]
     name_str += "_".join(name) + os.sep
 
     name = []

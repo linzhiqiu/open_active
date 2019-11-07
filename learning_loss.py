@@ -20,6 +20,7 @@ from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODE
 
 import libmr
 import math
+import icalr
 
 
 class Flatten(nn.Module):
@@ -104,7 +105,7 @@ class ResNetLearningLoss(nn.Module):
         return out_f, pred_loss
 
 
-def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, mode='default', lmb=1.0, margin=1.0, start_prop_epoch=0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
+def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, target_mapping_func, mode='default', lmb=1.0, margin=1.0, start_prop_epoch=0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
     """Regular PyTorch training procedure: Train model using data in dataloaders['train'] from start_epoch to max_epochs-1
     """
     assert start_epoch < max_epochs
@@ -145,12 +146,13 @@ def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, mode='d
                 pbar = dataloaders[phase]
 
             for batch, data in enumerate(pbar):
-                inputs, labels = data
+                inputs, real_labels = data
+
                 count += math.floor(inputs.size(0)/2)*2 # Ignore last odd item
                 pair_count += math.floor(inputs.size(0)/2) # Ignore last odd item
                 
                 inputs = inputs.to(device)
-                labels = labels.to(device)
+                labels = target_mapping_func(real_labels.to(device))
 
                 optimizer.zero_grad()
 
@@ -234,7 +236,8 @@ class NetworkLearningLoss(Network):
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                   list(s_train),
                                                   [], # TODO: Make a validation set
-                                                  target_mapping_func,
+                                                  # target_mapping_func,
+                                                  None,
                                                   batch_size=self.config.batch,
                                                   workers=self.config.workers)
         
@@ -253,6 +256,7 @@ class NetworkLearningLoss(Network):
                                                              optimizer,
                                                              scheduler,
                                                              # self.criterion,
+                                                             target_mapping_func,
                                                              mode=self.learning_loss_train_mode,
                                                              lmb=self.learning_loss_lambda,
                                                              margin=self.learning_loss_margin,
@@ -377,7 +381,8 @@ def get_learning_loss_class(base_class):
             self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
                                                       list(s_train),
                                                       [], # TODO: Make a validation set
-                                                      target_mapping_func,
+                                                      # target_mapping_func,
+                                                      None,
                                                       batch_size=self.config.batch,
                                                       workers=self.config.workers)
             
@@ -396,6 +401,7 @@ def get_learning_loss_class(base_class):
                                                                  optimizer,
                                                                  scheduler,
                                                                  # self.criterion,
+                                                                 target_mapping_func,
                                                                  mode=self.learning_loss_train_mode,
                                                                  lmb=self.learning_loss_lambda,
                                                                  margin=self.learning_loss_margin,
@@ -409,6 +415,12 @@ def get_learning_loss_class(base_class):
             print(f"Train => {self.round} round => "
                   f"Label_Loss {train_loss}, Accuracy {train_acc}"
                   f"Pred_Loss {loss_loss}, Accuracy {loss_acc}")
+
+            if isinstance(self, icalr.ICALR):
+                if self.icalr_strategy == 'naive':
+                    if self.icalr_naive_strategy == 'fixed':
+                        # Store current representation
+                        self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, s_train)
             return train_loss, train_acc
 
         def _get_open_set_pred_func(self):
@@ -431,7 +443,6 @@ def get_learning_loss_class(base_class):
                 print("Using random initialized model")
             return model.to(self.device)
 
-
         def _update_last_layer(self, model, output_size, device='cuda'):
             if "resnet" in self.config.arch.lower():
                 fd = int(model.resnet_model.fc.weight.size()[1])
@@ -452,6 +463,22 @@ def get_learning_loss_class(base_class):
         def _eval_mode(self):
             self.model.pred_loss_gradient_propagation(enabled=True) # So no hook is registered     
             self.model.eval()
+
+        def get_open_score_func(self):
+            if isinstance(self, icalr.ICALR) and self.icalr_strategy == 'naive':
+                def open_score_func(inputs):
+                    outputs, _ = self.model(inputs)
+                    softmax_outputs = F.softmax(outputs, dim=1)
+                    softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+                    if self.config.threshold_metric == 'softmax':
+                        scores = softmax_max
+                    elif self.config.threshold_metric == 'entropy':
+                        scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                    self.cur_features = []
+                    return -scores
+                return open_score_func
+            else:
+                return super(LearningLoss, self).get_open_score_func()
     return LearningLoss
 
 

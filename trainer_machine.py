@@ -154,6 +154,7 @@ class TrainerMachine(object):
         # For ROC/other open set evaluation metric. self.thresholds_checkpoints[epoch] is a dictionary of all the information for a given epoch
         # This metric should be updated in the open_set_prediction function returned by self._get_open_set_pred()
         self.thresholds_checkpoints = {}
+        self.handle = None # For any handle object
 
     def get_thresholds_checkpoints(self):
         return self.thresholds_checkpoints
@@ -166,6 +167,11 @@ class TrainerMachine(object):
 
     def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=True):
         raise NotImplementedError()
+
+    def remove_handle(self):
+        # Currently only used in openCollector
+        if type(self.handle) != type(None):
+            self.handle.remove()
 
     # Below are some helper functions shared by all subclasses
     def _get_target_mapp_func(self, seen_classes):
@@ -539,6 +545,18 @@ class Network(TrainerMachine):
             return preds
         return open_set_prediction
 
+    def get_open_score_func(self):
+        def open_score_func(inputs):
+            outputs = self.model(inputs)
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            if self.config.threshold_metric == 'softmax':
+                scores = softmax_max
+            elif self.config.threshold_metric == 'entropy':
+                scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+            return -scores
+        return open_score_func
+
     def _train_mode(self):
         self.model.train()
 
@@ -760,6 +778,19 @@ class ClusterNetwork(Network):
             return preds
         return open_set_prediction
 
+    def get_open_score_func(self):
+        raise NotImplementedError()
+        # def open_score_func(inputs):
+        #     outputs = model(inputs)
+        #     softmax_outputs = F.softmax(outputs, dim=1)
+        #     softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+        #     if self.config.threshold_metric == 'softmax':
+        #         scores = softmax_max
+        #     elif self.config.threshold_metric == 'entropy':
+        #         scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+        #     return scores
+        # return open_score_func
+
 def sigmoid_loss(weight=None, mode='mean'):
     def loss_func(x, y):
         sigmoids = 1 - nn.Sigmoid()(x)
@@ -856,6 +887,15 @@ class SigmoidNetwork(Network):
             return preds
         return open_set_prediction
 
+    def get_open_score_func(self):
+        def open_score_func(inputs):
+            outputs = self.model(inputs)
+            sigmoid_outputs = nn.Sigmoid()(outputs)
+            sigmoid_max, sigmoid_preds = torch.max(sigmoid_outputs, 1)
+            scores = sigmoid_max
+            return -scores
+        return open_score_func
+
 class BinarySoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):
         super(BinarySoftmaxNetwork, self).__init__(*args, **kwargs)
@@ -930,6 +970,15 @@ class BinarySoftmaxNetwork(Network):
                                 softmax_preds)
             return preds
         return open_set_prediction
+
+    def get_open_score_func(self):
+        def open_score_func(inputs):
+            outputs = self.model(inputs)
+            sigmoid_outputs = nn.Sigmoid()(outputs)
+            sigmoid_max, sigmoid_preds = torch.max(sigmoid_outputs, 1)
+            scores = sigmoid_max
+            return -scores
+        return open_score_func
 
 
 class OSDNNetwork(Network):
@@ -1159,7 +1208,7 @@ class OSDNNetwork(Network):
                 weibull[index]['weibull_model'] = mr
         return weibull
 
-    def compute_open_max(self, outputs, features=None):
+    def compute_open_max(self, outputs, log_thresholds=True):
         """ Return (openset_score, openset_preds)
         """
         alpha_weights = [((self.alpha_rank+1) - i)/float(self.alpha_rank) for i in range(1, self.alpha_rank+1)]
@@ -1196,22 +1245,30 @@ class OSDNNetwork(Network):
         openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
-        # First update the open set stats
-        self._update_open_set_stats(openmax_max, openmax_preds)
+        if log_thresholds:
+            # First update the open set stats
+            self._update_open_set_stats(openmax_max, openmax_preds)
 
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-        self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
-        self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
-        self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
-        self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
-        self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         # Return the prediction
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
+
+    def get_open_score_func(self):
+        def open_score_func(inputs):
+            outputs = self.model(inputs)
+            scores, _ = self.compute_open_max(outputs, log_thresholds=False)
+            return scores[:, -1]
+        return open_score_func
 
     def _get_open_set_pred_func(self):
         """ Caveat: Open set class is represented as -1.
@@ -1268,7 +1325,7 @@ class OSDNNetworkModified(OSDNNetwork):
         # doesn't change the activation score of the seen classes.
         super(OSDNNetworkModified, self).__init__(*args, **kwargs)
 
-    def compute_open_max(self, outputs):
+    def compute_open_max(self, outputs, log_thresholds=True):
         """ Return (openset_score, openset_preds)
         """
         alpha_weights = [((self.alpha_rank+1) - i)/float(self.alpha_rank) for i in range(1, self.alpha_rank+1)]
@@ -1301,16 +1358,18 @@ class OSDNNetworkModified(OSDNNetwork):
         openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
-        # First update the open set stats
-        self._update_open_set_stats(openmax_max, openmax_preds)
+        
+        if log_thresholds:
+            # First update the open set stats
+            self._update_open_set_stats(openmax_max, openmax_preds)
 
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-        self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
-        self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
-        self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
-        self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
-        self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 

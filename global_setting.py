@@ -17,6 +17,21 @@ uncertainty_type_dict = {
     'sigmoid' : ['sigmoid', 'binary_softmax'],
 }
 
+# Only working for ICALR based modules
+open_type_dict = {
+    'osdn' : {'module' : ['icalr_osdn', 'icalr_osdn_modified', 'icalr_osdn_neg', 'icalr_osdn_modified_neg'],
+              'type' : ['osdn']}, # Use osdn the open set probability
+    # 'icalr' : ['icalr', 'icalr_learning_loss', 'icalr_osdn', 'icalr_osdn_modified', 'icalr_osdn_neg', 'icalr_osdn_modified_neg'],
+    # 'cluster' : ['cluster'],
+    'learning_loss' : { 'module': ['icalr_learning_loss'],
+                        'type' : ['entropy', 'softmax'],},
+    'network' : { 'module' : ['icalr'],
+                  'type' : ['entropy', 'softmax']},
+    'binary_softmax' : {'module' : ['icalr_binary_softmax'],
+                        'type' : ['rbf'],},
+    # 'sigmoid' : ['sigmoid', 'binary_softmax'],
+}
+
 OPENMAX_META_LEARN = {
     'default' : {
         'weibull_tail_size' : [20],
@@ -36,6 +51,11 @@ OPENMAX_META_LEARN = {
     'open_set' : {
         'weibull_tail_size' : [10, 20, 50],
         'alpha_rank' : [2, 3, 4, 5],
+        'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
+    },
+    'open_set_more' : {
+        'weibull_tail_size' : [10, 20, 50, 100],
+        'alpha_rank' : [2, 3, 4, 5, 10, 15, 20, 40],
         'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
     },
     'toy' : {
@@ -167,6 +187,27 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 50,
             'use_random_classes' : False
         },
+        'cifar100_open_50': {
+            'num_init_classes' : 50,
+            'sample_per_class' : 500,
+            'num_open_classes' : 50,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'cifar100_open_80': {
+            'num_init_classes' : 80,
+            'sample_per_class' : 500,
+            'num_open_classes' : 20,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'cifar100_open_20': {
+            'num_init_classes' : 20,
+            'sample_per_class' : 500,
+            'num_open_classes' : 80,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        }
     },
 'CIFAR10' : {
         'learning_loss' : {

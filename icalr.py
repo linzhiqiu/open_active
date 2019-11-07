@@ -14,7 +14,7 @@ from trainer_machine import TrainerMachine, Network, train_epochs, get_dynamic_t
 from instance_info import BasicInfoCollector
 
 import models
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
+from utils import get_dataloaders, get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list, FixedRepresentationDataset
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
 import libmr
@@ -47,8 +47,8 @@ class ICALR(Network):
         self.icalr_retrain_threshold = self.config.icalr_retrain_threshold
 
         self.icalr_strategy = self.config.icalr_strategy
-        if self.icalr_strategy == 'naive':
-            raise NotImplementedError()
+        # if self.icalr_strategy == 'naive':
+        #     raise NotImplementedError()
         self.icalr_naive_strategy = self.config.icalr_naive_strategy
         self.icalr_proto_strategy = self.config.icalr_proto_strategy
 
@@ -59,6 +59,7 @@ class ICALR(Network):
             # Disable pseudo open set training
             # raise NotImplementedError()
             pass # TODO: make sure not buggy
+    
 
     def _update_exemplar_set(self, new_round_samples, old_exemplar_set):
         if self.icalr_exemplar_size == None:
@@ -75,39 +76,45 @@ class ICALR(Network):
     def _train_new_samples(self, model, new_round_samples, seen_classes, start_epoch=0):
         if self.icalr_strategy == 'proto':
             return 0.0, 0.0
+        elif self.icalr_strategy == 'naive':
+            # raise NotImplementedError()
+            if self.icalr_naive_strategy == 'fixed':
+                self.fixed_rep_dataset = self._update_fixed_representation_dataset(self.fixed_rep_dataset, model, new_round_samples)
+                target_mapping_func = self._get_target_mapp_func(seen_classes)
+                dataloaders = get_dataloaders(self.fixed_rep_dataset,
+                                              batch_size=self.config.batch,
+                                              workers=self.config.workers,
+                                              shuffle=True)
+                
+                self._update_last_layer(model, len(seen_classes), device=self.device)
+                fc_optimizer = self._get_network_optimizer(model.fc)
+                fc_scheduler = self._get_network_scheduler(fc_optimizer)
+
+                self.criterion = self._get_criterion(self.dataloaders['train'],
+                                                     target_mapping_func,
+                                                     seen_classes=seen_classes,
+                                                     criterion_class=self.criterion_class)
+                fc_model = model.fc
+                with SetPrintMode(hidden=not self.config.verbose):
+                    train_loss, train_acc = train_epochs(
+                                                fc_model,
+                                                dataloaders,
+                                                fc_optimizer,
+                                                fc_scheduler,
+                                                self.criterion,
+                                                target_mapping_func,
+                                                device=self.device,
+                                                start_epoch=start_epoch,
+                                                # max_epochs=self.max_epochs,
+                                                max_epochs=30,
+                                                verbose=self.config.verbose,
+                                            )
+                print(f"Train => {self.round} round => "
+                      f"Loss {train_loss}, Accuracy {train_acc}")
+                return train_loss, train_acc
+            else:
+                raise NotImplementedError()
         else: raise NotImplementedError()
-        # self._train_mode()
-        # target_mapping_func = self._get_target_mapp_func(seen_classes)
-        # self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-        #                                           list(s_train),
-        #                                           [], # TODO: Make a validation set
-        #                                           target_mapping_func,
-        #                                           batch_size=self.config.batch,
-        #                                           workers=self.config.workers)
-        
-        # self._update_last_layer(model, len(seen_classes), device=self.device)
-        # optimizer = self._get_network_optimizer(model)
-        # scheduler = self._get_network_scheduler(optimizer)
-
-        # self.criterion = self._get_criterion(self.dataloaders['train'],
-        #                                      seen_classes=seen_classes,
-        #                                      criterion_class=self.criterion_class)
-
-        # with SetPrintMode(hidden=not self.config.verbose):
-        #     train_loss, train_acc = train_epochs(
-        #                                 model,
-        #                                 self.dataloaders,
-        #                                 optimizer,
-        #                                 scheduler,
-        #                                 self.criterion,
-        #                                 device=self.device,
-        #                                 start_epoch=start_epoch,
-        #                                 max_epochs=self.max_epochs,
-        #                                 verbose=self.config.verbose,
-        #                             )
-        # print(f"Train => {self.round} round => "
-        #       f"Loss {train_loss}, Accuracy {train_acc}")
-        # return train_loss, train_acc
 
     # def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_seen_classes):
     #     assert self.round <= self.pseudo_open_set_rounds
@@ -134,6 +141,56 @@ class ICALR(Network):
         old_s_train = set(old_s_train)
         diff_s_train = set(s_train).difference(old_s_train)
         return list(diff_s_train)
+
+    def _get_fixed_representation_dataset(self, model, s_train):
+        model.eval()
+        # seen_classes = list(exemplar_set.keys())
+        if self.config.arch == 'ResNet50':
+            feature_size = 2048
+        else:
+            feature_size = 512
+        # fixed_rep = torch.zeros((len(s_train), feature_size)).cpu()
+        fixed_rep = torch.Tensor().cpu()
+        fixed_label = torch.LongTensor().cpu()        
+
+        cur_features = []
+        def forward_hook_func(module, inputs, outputs):
+            cur_features.append(inputs[0])
+        handle = self.model.fc.register_forward_hook(forward_hook_func)
+
+        dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                             list(s_train),
+                                             [], # TODO: Make a validation set
+                                             None,
+                                             batch_size=self.config.batch,
+                                             workers=self.config.workers)
+
+        for batch, data in enumerate(dataloaders['train']):
+            inputs, real_labels = data
+            inputs = inputs.to(self.device)
+            _ = self.model(inputs)
+
+            fixed_rep = torch.cat((fixed_rep, cur_features[0].detach().cpu()), dim=0)
+            fixed_label = torch.cat((fixed_label, real_labels.cpu()))
+            cur_features = []
+
+        handle.remove()
+
+        return FixedRepresentationDataset(fixed_rep, fixed_label)
+
+    def _update_fixed_representation_dataset(self, fixed_rep_dataset, model, new_round_samples):
+        new_rep_dataset = self._get_fixed_representation_dataset(model, new_round_samples)
+        data_new, label_new = new_rep_dataset.data_tensor, new_rep_dataset.target_tensor
+        data, label = fixed_rep_dataset.data_tensor, fixed_rep_dataset.target_tensor
+        return FixedRepresentationDataset(torch.cat((data, data_new),dim=0), torch.cat((label, label_new)))
+
+    def _train(self, model, s_train, seen_classes, start_epoch=0):
+        results = super(ICALR, self)._train(model, s_train, seen_classes, start_epoch=start_epoch)
+        if self.icalr_strategy == 'naive':
+            if self.icalr_naive_strategy == 'fixed':
+                # Store current representation
+                self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, s_train)
+        return results
 
     def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=True, start_epoch=0):
         if self.round == 0:
@@ -162,7 +219,8 @@ class ICALR(Network):
         if to_retrain_all_exemplar:
             self.past_retrain_threshold = self.cur_retrain_threshold
             # in self._train(), train set will be augmented with new round samples. Further, proto_vectors will be updated.
-            train_loss, train_acc = self._train(self.model, s_train, seen_classes, start_epoch=0)  
+            train_loss, train_acc = self._train(self.model, s_train, seen_classes, start_epoch=0)
+
         else:
             train_loss, train_acc = self._train_new_samples(self.model, new_round_samples, seen_classes, start_epoch=0)  
         
@@ -175,48 +233,51 @@ class ICALR(Network):
         return train_loss, train_acc, eval_results
 
     def _update_proto_vector(self, exemplar_set):
-        self._eval_mode()
-        seen_classes = list(exemplar_set.keys())
-        if self.config.arch == 'ResNet50':
-            feature_size = 2048
-        else:
-            feature_size = 512
-        self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
-        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                      seen_classes,
-                                                      self.train_instance.open_classes)
-        
-
-        cur_features = []
-        def forward_hook_func(self, inputs, outputs):
-            cur_features.append(inputs[0])
-        handle = self.model.fc.register_forward_hook(forward_hook_func)
-
-        for class_idx in seen_classes:
-            num_class_i_samples = float(len(exemplar_set[class_idx]))
-            class_sample_indices = exemplar_set[class_idx]
-            target_class_idx = target_mapping_func(class_idx)
-            dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                 class_sample_indices,
-                                                 [], # TODO: Make a validation set
-                                                 # target_mapping_func,
-                                                 None,
-                                                 batch_size=self.config.batch,
-                                                 workers=self.config.workers)
+        if self.icalr_strategy == 'naive':
+            pass
+        elif self.icalr_strategy == 'proto':
+            self._eval_mode()
+            seen_classes = list(exemplar_set.keys())
+            if self.config.arch == 'ResNet50':
+                feature_size = 2048
+            else:
+                feature_size = 512
+            self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
+            target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                          seen_classes,
+                                                          self.train_instance.open_classes)
             
-            with torch.set_grad_enabled(False):
-                for batch, data in enumerate(dataloaders['train']):
-                    inputs, _ = data
-                    
-                    inputs = inputs.to(self.device)
-                    _ = self.model(inputs)
 
-                    self.proto[target_class_idx,:] += (cur_features[0] / num_class_i_samples).sum(dim=0).detach()
-                    cur_features = []
+            cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                cur_features.append(inputs[0])
+            handle = self.model.fc.register_forward_hook(forward_hook_func)
 
-        handle.remove()
-        # Normalize the feature vectors
-        self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
+            for class_idx in seen_classes:
+                num_class_i_samples = float(len(exemplar_set[class_idx]))
+                class_sample_indices = exemplar_set[class_idx]
+                target_class_idx = target_mapping_func(class_idx)
+                dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                     class_sample_indices,
+                                                     [], # TODO: Make a validation set
+                                                     # target_mapping_func,
+                                                     None,
+                                                     batch_size=self.config.batch,
+                                                     workers=self.config.workers)
+                
+                with torch.set_grad_enabled(False):
+                    for batch, data in enumerate(dataloaders['train']):
+                        inputs, _ = data
+                        
+                        inputs = inputs.to(self.device)
+                        _ = self.model(inputs)
+
+                        self.proto[target_class_idx,:] += (cur_features[0] / num_class_i_samples).sum(dim=0).detach()
+                        cur_features = []
+
+            handle.remove()
+            # Normalize the feature vectors
+            self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
 
 
     def _eval(self, model, test_dataset, seen_classes, verbose=True):
@@ -247,10 +308,11 @@ class ICALR(Network):
         
         open_set_prediction = self._get_open_set_pred_func()
 
-        cur_features = []
-        def forward_hook_func(self, inputs, outputs):
-            cur_features.append(inputs[0])
-        handle = model.fc.register_forward_hook(forward_hook_func)
+        if self.icalr_strategy == 'proto':
+            cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                cur_features.append(inputs[0])
+            handle = model.fc.register_forward_hook(forward_hook_func)
 
         with SetPrintMode(hidden=not verbose):
             if verbose:
@@ -280,8 +342,11 @@ class ICALR(Network):
                                               ) # This change hold out open set examples' indices to unseen open set examples indices
 
                     outputs = model(inputs)
-                    preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0]) # Open set index == UNSEEN_CLASS_INDEX
-                    cur_features = []
+                    if self.icalr_strategy == 'proto':
+                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0]) # Open set index == UNSEEN_CLASS_INDEX
+                        cur_features = []
+                    elif self.icalr_strategy == 'naive':
+                        preds = open_set_prediction(outputs, inputs=inputs, features=None) # Open set index == UNSEEN_CLASS_INDEX
                     # loss = open_set_criterion(outputs, labels)
 
                     # labels_for_ground_truth = torch.where(
@@ -388,14 +453,15 @@ class ICALR(Network):
             print(f"Training Classes Accuracy Details => "
                   f"[{train_class_notseen}/{train_class_count}] not in seen classes, "
                   f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
-        handle.remove()
+        
+        if self.icalr_strategy == 'proto': handle.remove()
         return epoch_result
 
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
         if self.config.network_eval_mode == 'threshold':
-            assert self.config.threshold_metric == "softmax"
+            # assert self.config.threshold_metric == "softmax"
             threshold = self.config.network_eval_threshold
         elif self.config.network_eval_mode == 'dynamic_threshold':
             # raise NotImplementedError()
@@ -423,13 +489,15 @@ class ICALR(Network):
             raise NotImplementedError()
 
         def open_set_prediction(outputs, inputs=None, features=None):
-            # First step is to normalize the features
-            features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+            if self.icalr_strategy == 'proto':
+                # First step is to normalize the features
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
 
-            difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
-            distances = (difference*difference).sum(2)**0.5
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+                outputs = -distances
 
-            softmax_outputs = F.softmax(-distances, dim=1)
+            softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
             if self.config.threshold_metric == 'softmax':
                 scores = softmax_max
@@ -448,6 +516,42 @@ class ICALR(Network):
                                 softmax_preds)
             return preds
         return open_set_prediction
+
+    def get_open_score_func(self):
+        if self.icalr_strategy == 'proto':
+            self.cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                self.cur_features.append(inputs[0])
+            self.handle = self.model.fc.register_forward_hook(forward_hook_func)
+            def open_score_func(inputs):
+                _ = self.model(inputs)
+                features = self.cur_features[0]
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+
+                softmax_outputs = F.softmax(-distances, dim=1)
+                softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+                if self.config.threshold_metric == 'softmax':
+                    scores = softmax_max
+                elif self.config.threshold_metric == 'entropy':
+                    scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                self.cur_features = []
+                return -scores
+            return open_score_func
+        else:
+            def open_score_func(inputs):
+                outputs = self.model(inputs)
+                softmax_outputs = F.softmax(outputs, dim=1)
+                softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+                if self.config.threshold_metric == 'softmax':
+                    scores = softmax_max
+                elif self.config.threshold_metric == 'entropy':
+                    scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                self.cur_features = []
+                return -scores
+            return open_score_func
 
     # def _train_mode(self):
     #     self.model.train()
@@ -667,8 +771,6 @@ class ICALROSDNNetwork(ICALR):
         self.osdn_eval_threshold = best_res['threshold']
         print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
 
-
-
     def _gather_correct_features(self, model, train_loader, seen_classes=set(), mav_features_selection='correct'):
         assert len(seen_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
@@ -696,7 +798,7 @@ class ICALROSDNNetwork(ICALR):
             pbar = train_loader
 
         cur_features = []
-        def forward_hook_func(self, inputs, outputs):
+        def forward_hook_func(module, inputs, outputs):
             cur_features.append(inputs[0])
         handle = model.fc.register_forward_hook(forward_hook_func)
 
@@ -780,7 +882,7 @@ class ICALROSDNNetwork(ICALR):
                 weibull[index]['weibull_model'] = mr
         return weibull
 
-    def compute_open_max(self, outputs, features):
+    def compute_open_max(self, outputs, features, log_thresholds=True):
         """ Return (openset_score, openset_preds)
             If features is None, then use the outputs
         """
@@ -822,25 +924,47 @@ class ICALROSDNNetwork(ICALR):
         openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
-        # First update the open set stats
-        self._update_open_set_stats(openmax_max, openmax_preds)
+        
+        if log_thresholds:
+            # First update the open set stats
+            self._update_open_set_stats(openmax_max, openmax_preds)
 
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-        if self.use_positive_score:
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
-        else:
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
-        self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
-        self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
-        self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
-        self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            if self.use_positive_score:
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            else:
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         # Return the prediction
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
+
+    def get_open_score_func(self):
+        if self.icalr_strategy == 'proto':
+            self.cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                self.cur_features.append(inputs[0])
+            self.handle = self.model.fc.register_forward_hook(forward_hook_func)
+            
+            def open_score_func(inputs):
+                outputs = self.model(inputs)
+                scores, _ = self.compute_open_max(outputs, self.cur_features[0], log_thresholds=False)
+                self.cur_features = []
+                return scores[:, -1]
+            return open_score_func
+        else:
+            def open_score_func(inputs):
+                outputs = self.model(inputs)
+                scores, _ = self.compute_open_max(outputs, None, log_thresholds=False)
+                return scores[:, -1]
+            return open_score_func
 
     def _get_open_set_pred_func(self):
         """ Caveat: Open set class is represented as -1.
@@ -887,14 +1011,13 @@ class ICALROSDNNetwork(ICALR):
                                'total_reject': 0.}
 
 
-
 class ICALROSDNNetworkModified(ICALROSDNNetwork):
     def __init__(self, *args, **kwargs):
         # This is essentially using the open max algorithm. But this modified version 
         # doesn't change the activation score of the seen classes.
         super(ICALROSDNNetworkModified, self).__init__(*args, **kwargs)
 
-    def compute_open_max(self, outputs, features):
+    def compute_open_max(self, outputs, features, log_thresholds=True):
         """ Return (openset_score, openset_preds)
         """
         if type(features) != type(None):
@@ -933,19 +1056,21 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
         openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
-        # First update the open set stats
-        self._update_open_set_stats(openmax_max, openmax_preds)
+        
+        if log_thresholds:
+            # First update the open set stats
+            self._update_open_set_stats(openmax_max, openmax_preds)
 
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
-        assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-        if self.use_positive_score:
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
-        else:
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
-        self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
-        self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
-        self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
-        self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            if self.use_positive_score:
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            else:
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
@@ -965,54 +1090,54 @@ class ICALRBinarySoftmaxNetwork(ICALR):
             self.network_eval_threshold = None
 
         self.icalr_binary_softmax_train_mode = self.config.icalr_binary_softmax_train_mode
+        self.proto_var = 2 # TODO Fix
         self.info_collector_class = lambda *args, **kwargs: BinarySoftmaxInfoCollector(*args, **kwargs)
 
-    def _update_proto_vector(self, exemplar_set):
-        super(ICALRBinarySoftmaxNetwork, self)._update_proto_vector(exemplar_set)
-        return
-        # seen_classes = list(exemplar_set.keys())
-        # target_mapping_func = self._get_target_mapp_func(seen_classes)
+    # def _update_proto_vector(self, exemplar_set):
+    #     super(ICALRBinarySoftmaxNetwork, self)._update_proto_vector(exemplar_set)
+    #     return
+    #     # seen_classes = list(exemplar_set.keys())
+    #     # target_mapping_func = self._get_target_mapp_func(seen_classes)
 
-        # cur_features = []
-        # def forward_hook_func(self, inputs, outputs):
-        #     cur_features.append(inputs[0])
-        # handle = self.model.fc.register_forward_hook(forward_hook_func)
+    #     # cur_features = []
+    #     # def forward_hook_func(self, inputs, outputs):
+    #     #     cur_features.append(inputs[0])
+    #     # handle = self.model.fc.register_forward_hook(forward_hook_func)
 
-        # self.abs_distances = {} # key is target_class_idx, value is a list of distances
+    #     # self.abs_distances = {} # key is target_class_idx, value is a list of distances
 
-        # for class_idx in seen_classes:
-        #     num_class_i_samples = float(len(exemplar_set[class_idx]))
-        #     class_sample_indices = exemplar_set[class_idx]
-        #     target_class_idx = target_mapping_func(class_idx)
-        #     dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-        #                                          class_sample_indices,
-        #                                          [], # TODO: Make a validation set
-        #                                          target_mapping_func,
-        #                                          batch_size=self.config.batch,
-        #                                          workers=self.config.workers)
+    #     # for class_idx in seen_classes:
+    #     #     num_class_i_samples = float(len(exemplar_set[class_idx]))
+    #     #     class_sample_indices = exemplar_set[class_idx]
+    #     #     target_class_idx = target_mapping_func(class_idx)
+    #     #     dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+    #     #                                          class_sample_indices,
+    #     #                                          [], # TODO: Make a validation set
+    #     #                                          target_mapping_func,
+    #     #                                          batch_size=self.config.batch,
+    #     #                                          workers=self.config.workers)
             
-        #     self.abs_distances[target_class_idx] = []
-        #     with torch.set_grad_enabled(False):
-        #         for batch, data in enumerate(dataloaders['train']):
-        #             inputs, _ = data
+    #     #     self.abs_distances[target_class_idx] = []
+    #     #     with torch.set_grad_enabled(False):
+    #     #         for batch, data in enumerate(dataloaders['train']):
+    #     #             inputs, _ = data
                     
-        #             inputs = inputs.to(self.device)
-        #             _ = self.model(inputs)
+    #     #             inputs = inputs.to(self.device)
+    #     #             _ = self.model(inputs)
 
-        #             features = cur_features[0]
-        #             features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+    #     #             features = cur_features[0]
+    #     #             features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
 
-        #             difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
-        #             distances = (difference*difference).sum(2)**0.5
-        #             distances_to_class_mean = distances[:, target_class_idx]
+    #     #             difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+    #     #             distances = (difference*difference).sum(2)**0.5
+    #     #             distances_to_class_mean = distances[:, target_class_idx]
 
 
-        #             cur_features = []
+    #     #             cur_features = []
 
-        # handle.remove()
-        # # Normalize the feature vectors
-        # self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
-
+    #     # handle.remove()
+    #     # # Normalize the feature vectors
+    #     # self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
 
     def _get_open_set_pred_func(self):
         assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
@@ -1041,20 +1166,21 @@ class ICALRBinarySoftmaxNetwork(ICALR):
             print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
             threshold = self.pseuopen_threshold
 
-        assert self.icalr_binary_softmax_train_mode == 'fixed_variance'
+        assert self.icalr_binary_softmax_train_mode in ['fixed_variance','default']
 
         def open_set_prediction(outputs, inputs=None, features=None):
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            if self.icalr_strategy == 'naive':
+                features = outputs
+
             # First step is to normalize the features
             features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
 
             difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
             distances = (difference*difference).sum(2)**0.5
-
-
-            softmax_outputs = F.softmax(-distances, dim=1)
-            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
-
-            distances = torch.exp(-distances/2.0)
+            # outputs = -distances
+            distances = torch.exp(-distances/self.proto_var)
             dist_max, dist_preds = torch.max(distances, 1)
             scores = dist_max
 
@@ -1071,6 +1197,124 @@ class ICALRBinarySoftmaxNetwork(ICALR):
             return preds
         return open_set_prediction
 
+    def _update_proto_vector(self, exemplar_set):
+        self._eval_mode()
+        seen_classes = list(exemplar_set.keys())
+        target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                      seen_classes,
+                                                      self.train_instance.open_classes)
+        if self.icalr_strategy == 'naive':
+            # Use network output as prototype
+            self.proto = torch.zeros((len(seen_classes), len(seen_classes))).to(self.device)
+        elif self.icalr_strategy == 'proto':
+            if self.config.arch == 'ResNet50':
+                feature_size = 2048
+            else:
+                feature_size = 512
+            self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
+            
+            cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                cur_features.append(inputs[0])
+            handle = self.model.fc.register_forward_hook(forward_hook_func)
+
+        for class_idx in seen_classes:
+            num_class_i_samples = float(len(exemplar_set[class_idx]))
+            class_sample_indices = exemplar_set[class_idx]
+            target_class_idx = target_mapping_func(class_idx)
+            dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                 class_sample_indices,
+                                                 [], # TODO: Make a validation set
+                                                 # target_mapping_func,
+                                                 None,
+                                                 batch_size=self.config.batch,
+                                                 workers=self.config.workers)
+            
+            with torch.set_grad_enabled(False):
+                for batch, data in enumerate(dataloaders['train']):
+                    inputs, _ = data
+                    
+                    inputs = inputs.to(self.device)
+                    outputs = self.model(inputs)
+
+                    if self.icalr_strategy == 'proto':
+                        self.proto[target_class_idx,:] += (cur_features[0] / num_class_i_samples).sum(dim=0).detach()
+                        cur_features = []
+                    else:
+                        self.proto[target_class_idx,:] += (outputs / num_class_i_samples).sum(dim=0).detach()
+
+        # Normalize the feature vectors
+        self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
+
+        # Now compute the proto variance
+        if self.icalr_binary_softmax_train_mode == 'default':
+            self.proto_var = torch.zeros((1, len(seen_classes))).to(self.device)
+            for class_idx in seen_classes:
+                num_class_i_samples = float(len(exemplar_set[class_idx]))
+                class_sample_indices = exemplar_set[class_idx]
+                target_class_idx = target_mapping_func(class_idx)
+                dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                     class_sample_indices,
+                                                     [], # TODO: Make a validation set
+                                                     # target_mapping_func,
+                                                     None,
+                                                     batch_size=self.config.batch,
+                                                     workers=self.config.workers)
+                
+                with torch.set_grad_enabled(False):
+                    for batch, data in enumerate(dataloaders['train']):
+                        inputs, _ = data
+                        
+                        inputs = inputs.to(self.device)
+                        outputs = self.model(inputs)
+
+                        if self.icalr_strategy == 'proto':
+                            features = cur_features[0].clone().detach()
+                            cur_features = []
+                        else:
+                            features = outputs.clone().detach()
+
+                        features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+                        difference = features - self.proto[target_class_idx,:].unsqueeze(0)
+                        distances = (difference*difference).sum(1)
+
+                        self.proto_var[0,target_class_idx] += (distances / num_class_i_samples).sum(dim=0).detach()
+
+            self.proto_var = self.proto_var**0.5
+        if self.icalr_strategy == 'proto': handle.remove()
+
+
+    def get_open_score_func(self):
+        if self.icalr_strategy == 'proto':
+            self.cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                self.cur_features.append(inputs[0])
+            self.handle = self.model.fc.register_forward_hook(forward_hook_func)
+            def open_score_func(inputs):
+                _ = self.model(inputs)
+                features = self.cur_features[0]
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+                distances = torch.exp(-distances/self.proto_var)
+                dist_max, dist_preds = torch.max(distances, 1)
+                scores = dist_max
+
+                self.cur_features = []
+                return -scores
+            return open_score_func
+        else:
+            def open_score_func(inputs):
+                outputs = self.model(inputs)
+                features = outputs
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+                distances = torch.exp(-distances/self.proto_var)
+                dist_max, dist_preds = torch.max(distances, 1)
+                scores = dist_max
+                return -scores
+            return open_score_func
 
 
 def get_acc_from_performance_dict(dict):

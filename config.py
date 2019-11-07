@@ -246,7 +246,7 @@ icalr_args.add_argument('--icalr_strategy',
                           default=None, choices=['naive', 'proto'],
                           help='Naive just simply trains new weight vector. Proto use prototype as activation score.')
 icalr_args.add_argument('--icalr_naive_strategy',
-                          default=None, choices=['fixed', 'finetune'],
+                          default='fixed', choices=['fixed', 'finetune'],
                           help='For naive strategy: Fixed is fixing weight of network representation. Finetune just try the entire network.')
 icalr_args.add_argument('--icalr_proto_strategy',
                           default=None, choices=['default'],
@@ -312,13 +312,18 @@ open_act_arg.add_argument('--budget',
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
                          default='default',
-                         choices=['default', 'no_learning_5K_5_open_classes', 'no_learning_5_open_classes', 'no_learning_5K_50_open_classes', 'no_learning_50_open_classes',  'open_set_leave_one_out', 'open_set_leave_one_out_new', 'open_active_1', 'open_active_2', 'many_shot_1','many_shot_2','many_shot_3', 'few_shot_1', 'few_shot_3', 'no_learning', 'no_learning_10K', 'learning_loss', 'learning_loss_start_random', 'learning_loss_start_random_tuning'],
+                         choices=['default', 'no_learning_5K_5_open_classes', 'no_learning_5_open_classes', 'no_learning_5K_50_open_classes', 'no_learning_50_open_classes',  'open_set_leave_one_out', 'open_set_leave_one_out_new', 'open_active_1', 'open_active_2', 'many_shot_1','many_shot_2','many_shot_3', 'few_shot_1', 'few_shot_3', 'no_learning', 'no_learning_10K', 'learning_loss', 'learning_loss_start_random', 'learning_loss_start_random_tuning',
+                                  'cifar100_open_50', 'cifar100_open_80', 'cifar100_open_20'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
 exp_vs_acc_arg.add_argument('--label_picker',
                             default='uncertainty_measure',
-                            choices=['uncertainty_measure', 'coreset_measure'],
+                            choices=['uncertainty_measure', 'coreset_measure', 'open_active'],
+                            )
+exp_vs_acc_arg.add_argument('--open_active_setup', # If label_picker is open_active
+                            default='active',
+                            choices=['half', 'active', 'open'], # half is half of each score (normalize to [0..1] first).
                             )
 
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
@@ -342,8 +347,8 @@ uncertainty_sampling_arg.add_argument('--active_random_sampling',
                                       help='If true, use the random sampling scheme in "Learning Loss Active Learning" paper',
                                       )
 uncertainty_sampling_arg.add_argument('--coreset_measure',
-                                      default='k_center_greedy',
-                                      choices=['k_center_greedy'],
+                                      default='greedy',
+                                      choices=['greedy'],
                                       )
 uncertainty_sampling_arg.add_argument('--coreset_feature',
                                       default='before_fc',
@@ -377,7 +382,7 @@ pseudo_open_arg.add_argument('--pseudo_same_network',
                             )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,
-                             choices=['default', 'advanced', 'morealpha', 'open_set', 'toy'],
+                             choices=['default', 'advanced', 'morealpha', 'open_set', 'toy', 'open_set_more'],
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 

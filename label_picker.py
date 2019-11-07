@@ -6,6 +6,7 @@ import sys, random
 import trainer_machine
 import learning_loss
 from instance_info import BasicInfoCollector, ClusterInfoCollector, LearningLossInfoCollector
+from open_info import OpenCollector
 from utils import get_subset_loader, get_target_unmapping_dict
 
 class LabelPicker(object):
@@ -18,6 +19,9 @@ class LabelPicker(object):
         self.trainer_machine = trainer_machine # Should have a variable log to store all new instance's information
         self._generate_new_log()
 
+        self.open_active_setup = self.config.open_active_setup
+        assert self.open_active_setup in ['half', 'active', 'open']
+        
         # New: After reading active learning papers
         self.active_random_sampling = self.config.active_random_sampling
 
@@ -35,24 +39,24 @@ class LabelPicker(object):
         # Generate new log in self.trainer_machine
         self.trainer_machine.log = []
 
-def least_confident(outputs):
-    softmax_outputs = F.softmax(outputs, dim=1)
-    score, _ = torch.max(softmax_outputs, 1)
-    return score
+# def least_confident(outputs):
+#     softmax_outputs = F.softmax(outputs, dim=1)
+#     score, _ = torch.max(softmax_outputs, 1)
+#     return score
 
-def most_confident(outputs):
-    softmax_outputs = F.softmax(outputs, dim=1)
-    score, _ = torch.max(softmax_outputs, 1)
-    return -score
+# def most_confident(outputs):
+#     softmax_outputs = F.softmax(outputs, dim=1)
+#     score, _ = torch.max(softmax_outputs, 1)
+#     return -score
 
-def entropy(outputs):
-    # The negative entropy
-    softmax_outputs = F.softmax(outputs, dim=1)
-    entropy = (softmax_outputs*softmax_outputs.log()).sum(1) # This is the negative entropy
-    return entropy
+# def entropy(outputs):
+#     # The negative entropy
+#     softmax_outputs = F.softmax(outputs, dim=1)
+#     entropy = (softmax_outputs*softmax_outputs.log()).sum(1) # This is the negative entropy
+#     return entropy
 
-def random_query(outputs):
-    return torch.rand(outputs.size(0), device=outputs.device)
+# def random_query(outputs):
+#     return torch.rand(outputs.size(0), device=outputs.device)
 
 def highest_loss(outputs):
     _, losses = outputs
@@ -68,15 +72,28 @@ class UncertaintyMeasure(LabelPicker):
         super(UncertaintyMeasure, self).__init__(*args, **kwargs)
         assert isinstance(self.trainer_machine, trainer_machine.Network)
         assert self.config.label_picker == 'uncertainty_measure'
+
         # Make sure Network (parent class) is at last branch
-        if self.config.trainer in uncertainty_type_dict['osdn']:
+        # Each branch must consider the following branches
+        if self.config.trainer in uncertainty_type_dict['learning_loss']:
+            print("Using LearningLoss's uncertainty_measure")
+            assert self.config.uncertainty_measure in ['highest_loss', 'lowest_loss']
+            self.info_collector_class = LearningLossInfoCollector
+            def learning_loss_measure_func(outputs):
+                network_outputs, losses = outputs
+                if self.config.uncertainty_measure == 'highest_loss': 
+                    return -losses.view(losses.size(0)) # Higher the loss, more uncertain score
+                elif self.config.uncertainty_measure == 'lowest_loss':
+                    return losses.view(losses.size(0))
+            self.measure_func = learning_loss_measure_func
+        elif self.config.trainer in uncertainty_type_dict['osdn']:
             assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query', 'entropy']
-            self.info_collector_class = BasicInfoCollector
+            self.info_collector_class = BasicInfoCollector            
             def openmax_measure_func(outputs):
                 if self.config.trainer in uncertainty_type_dict['icalr']:
-                    openmax_outputs = self.trainer_machine.compute_open_max(outputs, None)[0]
+                    openmax_outputs = self.trainer_machine.compute_open_max(outputs, None, log_thresholds=False)[0]
                 else:
-                    openmax_outputs = self.trainer_machine.compute_open_max(outputs)[0]
+                    openmax_outputs = self.trainer_machine.compute_open_max(outputs, log_thresholds=False)[0]
                 score, _ = torch.max(openmax_outputs, 1)
                 if self.config.uncertainty_measure == 'least_confident':
                     return score
@@ -97,17 +114,23 @@ class UncertaintyMeasure(LabelPicker):
                 elif self.config.uncertainty_measure == 'random_query':
                     return torch.rand_like(score, device=score.device)
             self.measure_func = cluster_measure_func
-        elif self.config.trainer in uncertainty_type_dict['learning_loss']:
-            print("Using LearningLoss's uncertainty_measure")
-            assert self.config.uncertainty_measure in ['highest_loss', 'lowest_loss', 'least_confident', 'most_confident', 'random_query']
-            self.info_collector_class = LearningLossInfoCollector
-            self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
-            # raise NotImplementedError()
         elif self.config.trainer in uncertainty_type_dict['network'] or self.config.trainer in uncertainty_type_dict['sigmoid']:
             print("Using Network's uncertainty_measure")
             assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query', 'entropy']
             self.info_collector_class = BasicInfoCollector
-            self.measure_func = getattr(sys.modules[__name__], self.config.uncertainty_measure)
+            def network_measure_func(outputs):
+                softmax_outputs = F.softmax(outputs, dim=1)
+                score, _ = torch.max(softmax_outputs, 1)
+                if self.config.uncertainty_measure == 'least_confident':
+                    return score
+                elif self.config.uncertainty_measure == 'most_confident':
+                    return -score
+                elif self.config.uncertainty_measure == 'entropy':
+                    entropy = (softmax_outputs*softmax_outputs.log()).sum(1) # This is the negative entropy
+                    return entropy
+                elif self.config.uncertainty_measure == 'random_query':
+                    return torch.rand_like(score, device=score.device)
+            self.measure_func = network_measure_func
         else:
             raise NotImplementedError()
 
@@ -145,7 +168,7 @@ class UncertaintyMeasure(LabelPicker):
                                        unlabeled_pool,
                                        None, # target transform is None,
                                        batch_size=self.config.batch,
-                                       shuffle=False,
+                                       shuffle=False, # Very important!
                                        workers=self.config.workers)
 
         info_collector = self.info_collector_class(
@@ -154,11 +177,30 @@ class UncertaintyMeasure(LabelPicker):
                              seen_classes,
                              self.measure_func
                          )
-        scores, info = info_collector.gather_instance_info(
-                           dataloader,
-                           self.model,
-                           device=self.config.device
-                       )
+        active_scores, info = info_collector.gather_instance_info(
+                                  dataloader,
+                                  self.model,
+                                  device=self.config.device
+                              )
+
+        open_collector = OpenCollector(self.trainer_machine)
+
+        if self.open_active_setup in ['half', 'open']:
+            open_scores = open_collector.gather_open_info(
+                              dataloader,
+                              device=self.config.device
+                          )
+
+        if self.open_active_setup == 'active':
+            scores = active_scores
+        elif self.open_active_setup == 'open':
+            scores = -open_scores
+        elif self.open_active_setup == 'half':
+            active_scores = active_scores - active_scores.min()
+            active_scores = active_scores / active_scores.max()
+            open_scores = open_scores - open_scores.min()
+            open_scores = open_scores / open_scores.max()
+            scores = active_scores-open_scores
 
         sorted_scores, rankings = torch.sort(scores, descending=False)
         rankings = list(rankings[:self.config.budget])
@@ -178,16 +220,16 @@ class CoresetMeasure(LabelPicker):
         assert isinstance(self.trainer_machine, trainer_machine.Network)
         assert self.config.label_picker == 'coreset_measure'
         self.coreset_feature = self.config.coreset_feature
+
+
         # Make sure Network (parent class) is at last branch
         if isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
-            import pdb; pdb.set_trace()  # breakpoint b5ff94cd //
-            
+            pass            
         elif isinstance(self.trainer_machine, trainer_machine.ClusterNetwork):
             import pdb; pdb.set_trace()  # breakpoint 37c80b49 //
             
         elif isinstance(self.trainer_machine, learning_loss.NetworkLearningLoss):
             import pdb; pdb.set_trace()  # breakpoint 7988875e //
-
         elif isinstance(self.trainer_machine, trainer_machine.Network):
             print("Using Network's coreset_measure")
         else:
@@ -233,7 +275,7 @@ class CoresetMeasure(LabelPicker):
             features = torch.cat((features, cur_features[0].cpu()),dim=0)
 
         hook_handle.remove()
-        return features
+        return features, dataloader
 
     def select_new_data(self, s_train, seen_classes):
         self.model = self.trainer_machine.model
@@ -258,15 +300,42 @@ class CoresetMeasure(LabelPicker):
                 random.shuffle(unlabeled_pool)
                 unlabeled_pool = unlabeled_pool[:int(len(unlabeled_pool)*.2)]
 
-        unlabeled_features = self.get_features(unlabeled_pool).cpu()
-        labeled_features = self.get_features(s_train).cpu()
+
+
+        unlabeled_features, unlabeled_dataloader = self.get_features(unlabeled_pool)
+        unlabeled_features = unlabeled_features.cpu()
+        labeled_features, _ = self.get_features(s_train)
+        labeled_features = labeled_features.cpu()
 
         unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]
         unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features)
 
+        # Normalize the distances to 0-1 by dividing max
+
+        dist_max = torch.max(unlabel_to_label_dist.max(), unlabel_to_unlabel_dist.max())
+        unlabel_to_label_dist = unlabel_to_label_dist/dist_max
+        unlabel_to_unlabel_dist = unlabel_to_unlabel_dist/dist_max
+
+        if self.open_active_setup in ['half']:
+            open_collector = OpenCollector(self.trainer_machine)
+            open_scores = open_collector.gather_open_info(
+                              unlabeled_dataloader,
+                              device=self.config.device
+                          )
+            open_scores = open_scores - open_scores.min()
+            open_scores = open_scores / open_scores.max()
+        elif self.open_active_setup in ['open']:
+            raise NotImplementedError()
+        else:
+            open_scores = None
 
         sorted_dist, rankings = torch.sort(unlabel_to_label_dist, descending=True)
-        score_ranking_pair = [(int(r), float(sorted_dist[i])) for i, r in enumerate(rankings)]
+        if self.open_active_setup in ['half']:
+            score_ranking_pair = [(int(r), float(sorted_dist[i]), float(open_scores[r])) for i, r in enumerate(rankings)]
+            score_ranking_pair.sort(key=lambda x: x[1]+x[2], reverse=True)
+        else:
+            score_ranking_pair = [(int(r), float(sorted_dist[i]), 0) for i, r in enumerate(rankings)]
+        
         t_train = set() # New labeled samples
         t_classes = set() # New classes (may include seen classes)
         while len(t_train) < self.config.budget:
@@ -275,23 +344,13 @@ class CoresetMeasure(LabelPicker):
             t_train.add(new_sample)
             t_classes.add(self.train_instance.train_labels[new_sample])
 
-
             score_ranking_pair = score_ranking_pair[1:]
             score_ranking_pair_new = []
-            for i, (r, s) in enumerate(score_ranking_pair):
+            for i, (r, s, o) in enumerate(score_ranking_pair):
                 min_score = min(s, float(unlabel_to_unlabel_dist[real_idx, r]))
-                score_ranking_pair_new.append((r, min_score))
-            score_ranking_pair_new.sort(key=lambda x: x[1], reverse=True)
+                score_ranking_pair_new.append((r, min_score, o))
+            score_ranking_pair_new.sort(key=lambda x: x[1]+x[2], reverse=True)
             score_ranking_pair = score_ranking_pair_new
-        # sorted_scores, rankings = torch.sort(scores, descending=False)
-        # rankings = list(rankings[:self.config.budget])
-
-        
-        # for idx in rankings:
-        #     new_sample = unlabeled_pool[idx]
-        #     self.trainer_machine.log.append(info[idx])
-        #     t_train.add(new_sample)
-        #     t_classes.add(self.train_instance.train_labels[new_sample])
         return t_train, t_classes
 
 def distance_matrix(A, B):

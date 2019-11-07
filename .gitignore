@@ -17,4 +17,5 @@ old_c2ae_results/*
 */.*
 learning_loss/*
 open_active_results/
-
+old_open_active_results/
+open_active_results_graph/
