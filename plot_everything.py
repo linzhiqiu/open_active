@@ -439,6 +439,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     # 4: plot closed set accuracy over round (discovered) based on the threshold
     # 5: Plot overall accuracy based on the threshold
     # 6: Plot ROC curve over rounds on a single plot
+    if printed: print(f"Working on {output_folder}")
     sorted_keys = sorted(list(dictionary.keys()), key=lambda x: int(x)) # Sort by round
     parsed_results = {}
     output_folder_interval = os.path.join(output_folder, f'plot_every_{args.interval}_round_{threshold}_threshold')
