@@ -26,7 +26,7 @@ def best_fit_slope_and_intercept(xs,ys):
     
     return m, b
 
-def plot_roc(round_results, output_folder=None):
+def plot_roc(round_results, output_folder=None, round_idx=0):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
     open_scores = np.array(round_results['thresholds']['open_set_score'])
@@ -49,12 +49,12 @@ def plot_roc(round_results, output_folder=None):
         
     parsed_results = {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
 
-    save_path = os.path.join(output_folder, f"roc_auroc_{auc_score}.png")
+    save_path = os.path.join(output_folder, f"roc_auroc_{auc_score}_round_{round_idx}.png")
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'ROC curve plot', y=0.96)
+    plt.title(f'ROC curve plot at round {round_idx}', y=0.96)
     plt.xlabel("False Positive Rate (Closed set examples classified as open set)")
     plt.ylabel("True Positive Rate (Open set example classified as open set)")
 
@@ -68,7 +68,7 @@ def plot_roc(round_results, output_folder=None):
     plt.close('all')
     return parsed_results
 
-def plot_our(round_results, output_folder=None):
+def plot_our(round_results, output_folder=None, round_idx=0):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_predicted = np.array(round_results['thresholds']['open_predicted'])
@@ -114,12 +114,12 @@ def plot_our(round_results, output_folder=None):
     max_acc = total_corrects / num_closed_set
     parsed_results = {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
 
-    save_path = os.path.join(output_folder, f"our_auroc_{auc_score}_maxacc_{max_acc}.png")
+    save_path = os.path.join(output_folder, f"our_auroc_{auc_score}_maxacc_{max_acc}_round_{round_idx}.png")
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'Open set classification rate plot', y=0.96)
+    plt.title(f'Open set classification rate plot at round {round_idx}', y=0.96)
     axes.set_xscale('log')
     axes.autoscale(enable=True, axis='x', tight=True)
     plt.xlabel("False Positive Rate (Open set examples classified as closed set)")
@@ -162,7 +162,7 @@ def calc_auc_score(x, y):
         area = area.dtype.type(area)
     return area
 
-def plot_histo(round_results, output_folder=None, threshold='default'):
+def plot_histo(round_results, output_folder=None, threshold='default', round_idx=0):
     # Plot histogram
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_scores = np.array(round_results['thresholds']['open_set_score'])
@@ -174,7 +174,7 @@ def plot_histo(round_results, output_folder=None, threshold='default'):
     opens = open_scores[gt == 1]
     closeds = open_scores[gt == 0]
     
-    histo_file = os.path.join(output_folder, f"histogram.png")
+    histo_file = os.path.join(output_folder, f"histogram_{round_idx}.png")
 
     max_score = max(open_scores)
     min_score = min(open_scores)
@@ -367,9 +367,9 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
     # parsed_open_scores = parse_open_scores(round_results) # Use round_results['thresholds']
     # 5: Plot delta accuracy
     # 6: Plot query class accuracy
-    roc_results = plot_roc(round_results, output_folder=output_folder) # {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
-    our_results = plot_our(round_results, output_folder=output_folder) # {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
-    picked_threshold = plot_histo(round_results, output_folder=output_folder, threshold=threshold) # return picked threshold
+    roc_results = plot_roc(round_results, output_folder=output_folder, round_idx=round_idx) # {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
+    our_results = plot_our(round_results, output_folder=output_folder, round_idx=round_idx) # {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
+    picked_threshold = plot_histo(round_results, output_folder=output_folder, round_idx=round_idx, threshold=threshold) # return picked threshold
     # picked_threshold = pick_threshold(roc_results, our_results, threshold=threshold)
     results = parse_round_results(round_results,
                                   roc_results=roc_results,
@@ -399,6 +399,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.xlabel('Class label (Those with * are new class just discovered).')
         plt.ylabel('Test accuracy for each class')
         plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+        plt.axhline(y=results['discovered_closed_acc'], label=f"Mean Accuracy {results['discovered_closed_acc']}", linestyle='--', color='black')
         save_path_query = os.path.join(output_folder, f"query_class_correct_fraction_{round_idx}.png")
         plt.savefig(save_path_query)
         plt.close('all')
@@ -410,6 +411,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         x_class_prev, y_class_prev = prev_round['class_accuracy']
         valid_class = (x_class >= 0) & (x_class_prev >= 0)
         new_class = (x_class >= 0) & (x_class_prev < 0)
+        import pdb; pdb.set_trace()  # breakpoint 8e7a4d2c //
         x_delta = np.arange(len(x_class))
         y_delta = np.zeros_like(x_delta).astype('float')
         x_delta_ticks = ["" if not valid_class[i] else str(i)+"*" if new_class[i] else str(i) for i in range(len(x_delta))]
@@ -427,7 +429,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.title(f'Delta test accuracy for discovered classes in round {round_idx}.')
         plt.bar(x_delta, y_delta_pos, align='center', color='g')
         plt.bar(x_delta, y_delta_neg, align='center', color='r')
-        plt.axhline(y=mean_delta, label=f"Mean Accuracy Delta {mean_delta}", linestyle='--')
+        plt.axhline(y=mean_delta, label=f"Mean Accuracy Delta {mean_delta}", linestyle='--', color='black')
         plt.xticks(x_delta, x_delta_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
