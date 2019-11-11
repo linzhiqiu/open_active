@@ -239,11 +239,11 @@ class Network(TrainerMachine):
 
     def _get_criterion(self, dataloader, target_mapping_func, seen_classes=set(), criterion_class=nn.CrossEntropyLoss):
         assert seen_classes.__len__() > 0
-        assert self.config.class_weight in ['uniform', 'class_imbalanced']
+        assert self.config.class_weight in ['uniform', 'imbal']
         if self.config.class_weight == 'uniform':
             weight = None
             print('Using uniform class weight.')
-        elif self.config.class_weight == 'class_imbalanced':
+        elif self.config.class_weight == 'imbal':
             weight = torch.zeros(len(seen_classes))
             total = 0.0
             for _, data in enumerate(tqdm(dataloader, ncols=80)):
