@@ -301,10 +301,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
 
     plt.scatter(scatter_x_total, scatter_y_open)
-    m_open, b_open = best_fit_slope_and_intercept(scatter_x_total,scatter_y_open)
-    x_open = np.array([0,max(scatter_x_total)])
-    y_open = m_open*x_open+b_open
-    plt.plot(x_open, y_open, label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
+    m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
+    plt.plot(np.unique(scatter_x_total), np.poly1d(m_open, b_open)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
@@ -322,12 +320,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.ylabel("Test Accuracy")
 
     plt.scatter(scatter_x_total, scatter_y_correct)
-    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-    #            ncol=1, mode="expand", borderaxespad=0.)
-    m_correct, b_correct = best_fit_slope_and_intercept(scatter_x_total,scatter_y_correct)
-    x_correct = np.array([0,max(scatter_x_total)])
-    y_correct = m_correct*x_correct+b_correct
-    plt.plot(x_correct, y_correct, label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
+    m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
+    plt.plot(np.unique(scatter_x_total), np.poly1d(m_correct, b_correct)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
@@ -336,6 +330,9 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     
     # plt.close()
     plt.close('all')
+
+    parsed_round_results['slope_open_set_detection_rate_vs_num_example'] = m_open
+    parsed_round_results['slope_closed_set_accuracy_vs_num_example'] = m_correct
 
     return parsed_round_results
     # self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
