@@ -121,7 +121,6 @@ def train_epochs(model, dataloaders, optimizer, scheduler, criterion, target_map
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     _, preds = torch.max(outputs, 1)
-                    import pdb; pdb.set_trace()  # breakpoint 2dd15192 //
                     loss = criterion(outputs, labels)
 
                     if phase == 'train':
@@ -245,7 +244,7 @@ class Network(TrainerMachine):
             weight = None
             print('Using uniform class weight.')
         elif self.config.class_weight == 'imbal':
-            weight = torch.zeros(len(seen_classes))
+            weight = torch.zeros(len(seen_classes)).to(self.device)
             total = 0.0
             for _, data in enumerate(tqdm(dataloader, ncols=80)):
                 _, real_labels = data

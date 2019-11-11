@@ -105,7 +105,7 @@ class ResNetLearningLoss(nn.Module):
         return out_f, pred_loss
 
 
-def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, target_mapping_func, mode='default', lmb=1.0, margin=1.0, start_prop_epoch=0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
+def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, crossentropy_criterion, target_mapping_func, mode='default', lmb=1.0, margin=1.0, start_prop_epoch=0, stop_prop_epoch=120, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
     """Regular PyTorch training procedure: Train model using data in dataloaders['train'] from start_epoch to max_epochs-1
     """
     assert start_epoch < max_epochs
@@ -159,6 +159,7 @@ def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, target_
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs, pred_losses = model(inputs)
                     _, preds = torch.max(outputs, 1)
+                    real_loss = crossentropy_criterion(outputs, labels)
                     loss = criterion(outputs, labels)
                     pred_losses = pred_losses.view(inputs.shape[0])
 
@@ -185,9 +186,9 @@ def train_epochs_learning_loss(model, dataloaders, optimizer, scheduler, target_
                             loss_loss = nn.MSELoss()(loss, pred_losses)
 
                     if epoch >= start_prop_epoch:
-                        combined_loss = loss.mean() + 2*lmb*loss_loss.mean()
+                        combined_loss = real_loss + 2*lmb*loss_loss.mean()
                     else:
-                        combined_loss = loss.mean()
+                        combined_loss = real_loss
 
                     if phase == 'train':
                         combined_loss.backward()
@@ -245,9 +246,10 @@ class NetworkLearningLoss(Network):
         optimizer = self._get_network_optimizer(model)
         scheduler = self._get_network_scheduler(optimizer)
 
-        # self.criterion = self._get_criterion(self.dataloaders['train'],
-        #                                      seen_classes=seen_classes,
-        #                                      criterion_class=self.criterion_class)
+        self.criterion = self._get_criterion(self.dataloaders['train'],
+                                             target_mapping_func,
+                                             seen_classes=seen_classes,
+                                             criterion_class=self.criterion_class)
 
         with SetPrintMode(hidden=not self.config.verbose):
             train_loss, train_acc, loss_loss, loss_acc = train_epochs_learning_loss(
@@ -255,7 +257,7 @@ class NetworkLearningLoss(Network):
                                                              self.dataloaders,
                                                              optimizer,
                                                              scheduler,
-                                                             # self.criterion,
+                                                             self.criterion,
                                                              target_mapping_func,
                                                              mode=self.learning_loss_train_mode,
                                                              lmb=self.learning_loss_lambda,
@@ -401,7 +403,7 @@ def get_learning_loss_class(base_class):
                                                                  self.dataloaders,
                                                                  optimizer,
                                                                  scheduler,
-                                                                 # self.criterion,
+                                                                 self.criterion,
                                                                  target_mapping_func,
                                                                  mode=self.learning_loss_train_mode,
                                                                  lmb=self.learning_loss_lambda,
