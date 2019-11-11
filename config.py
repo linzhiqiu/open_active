@@ -79,7 +79,7 @@ trainer_args.add_argument('--trainer',
 trainer_args = add_argument_group('Imbalanced dataset Param.')
 trainer_args.add_argument('--class_weight',
                           default='uniform',
-                          choices=['uniform', 'class_imbalanced' # Weight of each class is Total_Num/Total_Num_of_class
+                          choices=['uniform', 'imbalanced' # Weight of each class is Total_Num/Total_Num_of_class
                           ],
                           )
 
