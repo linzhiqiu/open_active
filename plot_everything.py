@@ -302,7 +302,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
-    plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.array(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
+    plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
