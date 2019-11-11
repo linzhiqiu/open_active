@@ -270,7 +270,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
     # For each class log the accuracy.
     x_class = np.zeros((int(round_results['num_seen_classes']) + int(round_results['num_unseen_classes']))) - 1 # -1 is nondiscovered class
-    y_class = np.zeros_like(acc).astype('float')
+    y_class = np.zeros_like(x_class).astype('float')
     for discovered_label in discovered_info_dict.keys():
         acc = discovered_info_dict[discovered_label]['pred_correct'] / float(discovered_info_dict[discovered_label]['total'] )
         x_class[discovered_label] = discovered_label
