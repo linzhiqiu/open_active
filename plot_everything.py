@@ -450,7 +450,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         if int(round_idx) == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None)
         else:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[int(round_idx)-1], prev_round=parsed_results[int(round_idx)-1])
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[str(int(round_idx)-1)], prev_round=parsed_results[int(round_idx)-1])
         parsed_results[int(round_idx)] = round_results
 
     # These are the available gadgets
