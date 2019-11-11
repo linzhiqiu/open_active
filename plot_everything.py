@@ -303,8 +303,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    #            ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_open)
@@ -322,8 +322,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    #            ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_correct)
@@ -398,7 +398,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.xticks(x_delta, x_delta_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
-        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='x-small', width=0.02)
+        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
         save_path_delta = os.path.join(output_folder, f"delta_class_accuracy.png")
         plt.savefig(save_path_delta)
         plt.close('all')
@@ -420,7 +420,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.xticks(x_query, x_query_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Test accuracy for each class')
-        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='x-small', width=0.02)
+        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
         save_path_query = os.path.join(output_folder, f"query_class_correct_fraction.png")
         plt.savefig(save_path_query)
         plt.close('all')
