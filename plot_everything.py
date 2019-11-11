@@ -411,10 +411,9 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         x_class_prev, y_class_prev = prev_round['class_accuracy']
         valid_class = (x_class >= 0) & (x_class_prev >= 0)
         new_class = (x_class >= 0) & (x_class_prev < 0)
-        import pdb; pdb.set_trace()  # breakpoint 8e7a4d2c //
         x_delta = np.arange(len(x_class))
         y_delta = np.zeros_like(x_delta).astype('float')
-        x_delta_ticks = ["" if not valid_class[i] else str(i)+"*" if new_class[i] else str(i) for i in range(len(x_delta))]
+        x_delta_ticks = [str(i)+"*" if new_class[i] else "" if not valid_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = y_class[valid_class_indices] - y_class_prev[valid_class_indices]
         y_delta_pos = np.zeros_like(y_delta).astype('float')
