@@ -303,8 +303,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
-    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-    #            ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc='lower left',
+               ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_open)
@@ -322,8 +322,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
-    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-    #            ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc='lower left',
+               ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_correct)
@@ -390,7 +390,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
 
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(20,35))
         axes = plt.gca()
         axes.set_ylim([-1,1])
         plt.title(f'Delta test accuracy for discovered classes.')
@@ -412,7 +412,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         for query_class in query_classes:
             y_query[query_class] = results['class_accuracy'][1][query_class]
         
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(20,35))
         axes = plt.gca()
         axes.set_ylim([0,1])
         plt.title(f'Test accuracy for classes being queried in this round.')
