@@ -389,11 +389,10 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         y_delta = np.zeros_like(x_delta).astype('float')
         x_delta_ticks = ["" if not valid_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
-        y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
+        y_delta[valid_class_indices] = y_class[valid_class_indices] - y_class_prev[valid_class_indices]
         y_delta_pos = np.zeros_like(y_delta).astype('float')
         y_delta_neg = np.zeros_like(y_delta).astype('float')
 
-        import pdb; pdb.set_trace()  # breakpoint e3b0da77 //
         y_delta_pos[y_delta > 0] =  y_delta[y_delta>0]
         y_delta_neg[y_delta < 0] =  y_delta[y_delta<0]
 
