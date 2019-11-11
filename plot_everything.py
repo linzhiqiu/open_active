@@ -18,6 +18,14 @@ def break_if_too_long(name, split=80):
     else:
         return name
 
+def best_fit_slope_and_intercept(xs,ys):
+    m = (((mean(xs)*mean(ys)) - mean(xs*ys)) /
+         ((mean(xs)*mean(xs)) - mean(xs*xs)))
+    
+    b = mean(ys) - m*mean(xs)
+    
+    return m, b
+
 def plot_roc(round_results, output_folder=None):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
@@ -57,8 +65,6 @@ def plot_roc(round_results, output_folder=None):
         
     plt.tight_layout()
     plt.savefig(save_path)
-    # print(f"Fig save to {save_path}")
-    # plt.close()
     plt.close('all')
     return parsed_results
 
@@ -277,16 +283,21 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
-    axes.set_xlim([0,max(scatter_x_total)])
+    axes.set_xlim([0,max(scatter_x_total)+5])
     plt.title(f'Scatter Plot of Open Set Fraction for discovered classes')
     # axes.autoscale(enable=True, axis='x', tight=True)
     plt.xlabel("Number of samples in this discovered class")
     plt.ylabel("Fraction wrongly predicted as open set")
 
+
     plt.scatter(scatter_x_total, scatter_y_open)
-    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-    #            ncol=1, mode="expand", borderaxespad=0.)
-        
+    m_open, b_open = best_fit_slope_and_intercept(scatter_x_total,scatter_y_open)
+    x_open = np.array([0,max(scatter_x_total)])
+    y_open = m_open*x_open+b_open
+    plt.plot(x_open, y_open, label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
+    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+               ncol=1, mode="expand", borderaxespad=0.)
+
     plt.tight_layout()
     plt.savefig(save_path_open)
     plt.close('all')
@@ -294,7 +305,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
-    axes.set_xlim([0,max(scatter_x_total)])
+    axes.set_xlim([0,max(scatter_x_total)+5])
     plt.title(f'Scatter Plot of Accuracy for discovered classes (ignore open set detection)')
     # axes.autoscale(enable=True, axis='x', tight=True)
     plt.xlabel("Number of samples in this discovered class")
@@ -303,7 +314,13 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
     #            ncol=1, mode="expand", borderaxespad=0.)
-        
+    m_correct, b_correct = best_fit_slope_and_intercept(scatter_x_total,scatter_y_correct)
+    x_correct = np.array([0,max(scatter_x_total)])
+    y_correct = m_correct*x_correct+b_correct
+    plt.plot(x_correct, y_correct, label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
+    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+               ncol=1, mode="expand", borderaxespad=0.)
+
     plt.tight_layout()
     plt.savefig(save_path_correct)
     

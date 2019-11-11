@@ -365,7 +365,7 @@ def get_learning_loss_class(base_class):
     class LearningLoss(base_class):
         def __init__(self, *args, **kwargs):
             super(LearningLoss, self).__init__(*args, **kwargs)
-            assert self.config.class_weight in ['uniform'] # No 'class_imbalanced'
+            # assert self.config.class_weight in ['uniform'] # No 'class_imbalanced'
             self.learning_loss_train_mode = self.config.learning_loss_train_mode
             self.learning_loss_lambda = self.config.learning_loss_lambda
             self.learning_loss_margin = self.config.learning_loss_margin
@@ -390,9 +390,9 @@ def get_learning_loss_class(base_class):
             optimizer = self._get_network_optimizer(model)
             scheduler = self._get_network_scheduler(optimizer)
 
-            # self.criterion = self._get_criterion(self.dataloaders['train'],
-            #                                      seen_classes=seen_classes,
-            #                                      criterion_class=self.criterion_class)
+            self.criterion = self._get_criterion(self.dataloaders['train'],
+                                                 seen_classes=seen_classes,
+                                                 criterion_class=self.criterion_class)
 
             with SetPrintMode(hidden=not self.config.verbose):
                 train_loss, train_acc, loss_loss, loss_acc = train_epochs_learning_loss(
