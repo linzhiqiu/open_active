@@ -19,10 +19,10 @@ def break_if_too_long(name, split=80):
         return name
 
 def best_fit_slope_and_intercept(xs,ys):
-    m = (((mean(xs)*mean(ys)) - mean(xs*ys)) /
-         ((mean(xs)*mean(xs)) - mean(xs*xs)))
+    m = (((xs.mean()*ys.mean()) - (xs*ys).mean()) /
+         ((xs.mean()*xs.mean()) - (xs*xs).mean()))
     
-    b = mean(ys) - m*mean(xs)
+    b = ys.mean() - m*xs.mean()
     
     return m, b
 
