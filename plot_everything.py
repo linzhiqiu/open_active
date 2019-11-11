@@ -302,7 +302,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left',borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left',borderaxespad=0.)
+    plt.legend()
 
     plt.tight_layout()
     plt.savefig(save_path_open)
@@ -321,7 +322,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
     plt.axhline(y=parsed_round_results['discovered_closed_acc'], label=f"Mean Accuracy {parsed_round_results['discovered_closed_acc']}", linestyle='--')
-    plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left', borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left', borderaxespad=0.)
+    plt.legend()
 
     plt.tight_layout()
     plt.savefig(save_path_correct)
@@ -379,15 +381,38 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
     if type(prev_dict) == type(None) or type(prev_round) == type(None):
         pass
     else:
+        # 6: Plot query class accuracy
+        query_samples = np.array(list(set(round_results['seen_samples']).difference(prev_dict['seen_samples'])))
+        query_classes = set(list(np.array(round_results['train_labels'])[query_samples]))
+        y_query = np.zeros_like(results['class_accuracy'][0]).astype('float')
+        x_query_ticks = ["" if not i in query_classes else str(i) for i in range(len(y_query))]
+        x_query = np.arange(len(y_query))
+        for query_class in query_classes:
+            y_query[query_class] = results['class_accuracy'][1][query_class]
+        
+        plt.figure(figsize=(20,12))
+        axes = plt.gca()
+        axes.set_ylim([0,1])
+        plt.title(f'Test accuracy for classes being queried in round {round_idx}.')
+        plt.bar(x_query, y_query, align='center')
+        plt.xticks(x_query, x_query_ticks)
+        plt.xlabel('Class label (Those with * are new class just discovered).')
+        plt.ylabel('Test accuracy for each class')
+        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+        save_path_query = os.path.join(output_folder, f"query_class_correct_fraction_{round_idx}.png")
+        plt.savefig(save_path_query)
+        plt.close('all')
+
         # 5: Plot delta accuracy
         mean_delta = results['discovered_closed_acc'] - prev_round['discovered_closed_acc']
 
         x_class, y_class = results['class_accuracy']
         x_class_prev, y_class_prev = prev_round['class_accuracy']
         valid_class = (x_class >= 0) & (x_class_prev >= 0)
+        new_class = (x_class >= 0) & (x_class_prev < 0)
         x_delta = np.arange(len(x_class))
         y_delta = np.zeros_like(x_delta).astype('float')
-        x_delta_ticks = ["" if not valid_class[i] else str(i) for i in range(len(x_delta))]
+        x_delta_ticks = ["" if not valid_class[i] else str(i)+"*" if new_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = y_class[valid_class_indices] - y_class_prev[valid_class_indices]
         y_delta_pos = np.zeros_like(y_delta).astype('float')
@@ -410,28 +435,6 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.legend()
         save_path_delta = os.path.join(output_folder, f"delta_class_accuracy_{round_idx}.png")
         plt.savefig(save_path_delta)
-        plt.close('all')
-
-        # 6: Plot query class accuracy
-        query_samples = np.array(list(set(round_results['seen_samples']).difference(prev_dict['seen_samples'])))
-        query_classes = set(list(np.array(round_results['train_labels'])[query_samples]))
-        y_query = np.zeros_like(results['class_accuracy'][0]).astype('float')
-        x_query_ticks = ["" if not i in query_classes else str(i) for i in range(len(y_query))]
-        x_query = np.arange(len(y_query))
-        for query_class in query_classes:
-            y_query[query_class] = results['class_accuracy'][1][query_class]
-        
-        plt.figure(figsize=(20,12))
-        axes = plt.gca()
-        axes.set_ylim([0,1])
-        plt.title(f'Test accuracy for classes being queried in round {round_idx}.')
-        plt.bar(x_query, y_query, align='center')
-        plt.xticks(x_query, x_query_ticks)
-        plt.xlabel('Class label')
-        plt.ylabel('Test accuracy for each class')
-        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
-        save_path_query = os.path.join(output_folder, f"query_class_correct_fraction_{round_idx}.png")
-        plt.savefig(save_path_query)
         plt.close('all')
     return results
 
