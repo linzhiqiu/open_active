@@ -406,7 +406,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         query_samples = np.array(list(set(round_results['seen_samples']).difference(prev_dict['seen_samples'])))
         query_classes = set(list(np.array(round_results['train_labels'])[query_samples]))
         y_query = np.zeros_like(results['class_accuracy'][0]).astype('float')
-        x_query_ticks = ["X" if not i in query_class else str(i) for i in range(len(y_query))]
+        x_query_ticks = ["X" if not i in query_classes else str(i) for i in range(len(y_query))]
         x_query = np.arange(len(y_query))
         for query_class in query_classes:
             y_query[query_class] = results['class_accuracy'][1][query_class]
