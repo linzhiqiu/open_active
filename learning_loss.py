@@ -391,6 +391,7 @@ def get_learning_loss_class(base_class):
             scheduler = self._get_network_scheduler(optimizer)
 
             self.criterion = self._get_criterion(self.dataloaders['train'],
+                                                 target_mapping_func,
                                                  seen_classes=seen_classes,
                                                  criterion_class=self.criterion_class)
 
