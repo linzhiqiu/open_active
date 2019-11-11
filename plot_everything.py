@@ -450,7 +450,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         if round_idx == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None)
         else:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[round_idx-1], prev_round=parsed_results[int(round_idx)-1])
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[int(round_idx)-1], prev_round=parsed_results[int(round_idx)-1])
         parsed_results[int(round_idx)] = round_results
 
     # These are the available gadgets
@@ -526,7 +526,7 @@ def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--saved_dir', default='open_active_results') # Where the log files will be saved
-    parser.add_argument('--out_dir', default='open_active_results_graph') # Where output of this script will be saved
+    parser.add_argument('--out_dir', default='open_active_results_graph_new') # Where output of this script will be saved
     parser.add_argument('--format', default='.json') # Output file  will be saved at {name[index]}.{args.output_format}
     parser.add_argument('--interval', default=1, type=int) # Plot every [interval] rounds
     parser.add_argument('--threshold', default='default', choices=['default']) # How to pick the open set threshold.
