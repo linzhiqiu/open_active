@@ -447,7 +447,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     for round_idx in sorted_keys_tqdm:
         output_folder_round = os.path.join(output_folder_interval, round_idx)
         if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
-        if round_idx == 0:
+        if int(round_idx) == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None)
         else:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[int(round_idx)-1], prev_round=parsed_results[int(round_idx)-1])
