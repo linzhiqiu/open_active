@@ -302,7 +302,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
-    plt.plot(np.unique(scatter_x_total), np.poly1d(m_open, b_open)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
+    plt.plot(np.unique(scatter_x_total), np.poly1d(m_open, b_open)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}")
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
@@ -321,7 +321,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
-    plt.plot(np.unique(scatter_x_total), np.poly1d(m_correct, b_correct)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
+    plt.plot(np.unique(scatter_x_total), np.poly1d(m_correct, b_correct)(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}")
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
@@ -386,18 +386,19 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         valid_class = (x_class >= 0) & (x_class_prev >= 0)
         x_delta = np.arange(len(x_class))
         y_delta = np.zeros_like(x_delta)
-        x_delta_ticks = ["X" if not valid_class[i] else str(i) for i in range(len(x_delta))]
+        x_delta_ticks = ["" if not valid_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
 
         plt.figure(figsize=(10,10))
         axes = plt.gca()
         axes.set_ylim([-1,1])
-        plt.title(f'Delta test accuracy for discovered classes (X means not available).')
+        plt.title(f'Delta test accuracy for discovered classes.')
         plt.bar(x_delta, y_delta, align='center')
         plt.xticks(x_delta, x_delta_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
+        plt.setp(axes.get_xticklabels(), rotation=30, horizontalalignment='right', fontsize='x-small')
         save_path_delta = os.path.join(output_folder, f"delta_class_accuracy.png")
         plt.savefig(save_path_delta)
         plt.close('all')
@@ -406,7 +407,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         query_samples = np.array(list(set(round_results['seen_samples']).difference(prev_dict['seen_samples'])))
         query_classes = set(list(np.array(round_results['train_labels'])[query_samples]))
         y_query = np.zeros_like(results['class_accuracy'][0]).astype('float')
-        x_query_ticks = ["X" if not i in query_classes else str(i) for i in range(len(y_query))]
+        x_query_ticks = ["" if not i in query_classes else str(i) for i in range(len(y_query))]
         x_query = np.arange(len(y_query))
         for query_class in query_classes:
             y_query[query_class] = results['class_accuracy'][1][query_class]
@@ -414,11 +415,12 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.figure(figsize=(10,10))
         axes = plt.gca()
         axes.set_ylim([0,1])
-        plt.title(f'Test accuracy for classes being queried in this round. (X means not discovered)')
+        plt.title(f'Test accuracy for classes being queried in this round.')
         plt.bar(x_query, y_query, align='center')
         plt.xticks(x_query, x_query_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Test accuracy for each class')
+        plt.setp(axes.get_xticklabels(), rotation=30, horizontalalignment='right', fontsize='x-small')
         save_path_query = os.path.join(output_folder, f"query_class_correct_fraction.png")
         plt.savefig(save_path_query)
         plt.close('all')
