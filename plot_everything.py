@@ -344,7 +344,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     #                                            'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
     #                                           } # A list of dictionary
 
-def plot_round(round_results, output_folder, threshold='default', prev_dict=None, prev_round=None):    
+def plot_round(round_results, output_folder, threshold='default', prev_dict=None, prev_round=None, round_idx=0):    
     # 1: Plot ROC curve (discovered v.s. hold-out), save fig, get
         # a: float - AUROC
         # b: curve - ROC
@@ -373,7 +373,8 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
                                   roc_results=roc_results,
                                   our_results=our_results,
                                   picked_threshold=picked_threshold,
-                                  output_folder=output_folder)
+                                  output_folder=output_folder,
+                                  round_idx=round_idx)
 
     if type(prev_dict) == type(None) or type(prev_round) == type(None):
         pass
@@ -389,19 +390,26 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         x_delta_ticks = ["" if not valid_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
+        y_delta_pos = np.zeros_like(y_delta).astype('float')
+        y_delta_neg = np.zeros_like(y_delta).astype('float')
+
+        import pdb; pdb.set_trace()  # breakpoint e3b0da77 //
+        y_delta_pos[y_delta > 0] =  y_delta[y_delta>0]
+        y_delta_neg[y_delta < 0] =  y_delta[y_delta<0]
 
         plt.figure(figsize=(20,12))
         axes = plt.gca()
         axes.set_ylim([-1,1])
-        plt.title(f'Delta test accuracy for discovered classes.')
-        plt.bar(x_delta, y_delta, align='center')
+        plt.title(f'Delta test accuracy for discovered classes in round {round_idx}.')
+        plt.bar(x_delta, y_delta_pos, align='center', color='g')
+        plt.bar(x_delta, y_delta_neg, align='center', color='r')
         plt.axhline(y=mean_delta, label=f"Mean Accuracy Delta {mean_delta}", linestyle='--')
         plt.xticks(x_delta, x_delta_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
         plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
         plt.legend()
-        save_path_delta = os.path.join(output_folder, f"delta_class_accuracy.png")
+        save_path_delta = os.path.join(output_folder, f"delta_class_accuracy_{round_idx}.png")
         plt.savefig(save_path_delta)
         plt.close('all')
 
@@ -417,13 +425,13 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.figure(figsize=(20,12))
         axes = plt.gca()
         axes.set_ylim([0,1])
-        plt.title(f'Test accuracy for classes being queried in this round.')
+        plt.title(f'Test accuracy for classes being queried in round {round_idx}.')
         plt.bar(x_query, y_query, align='center')
         plt.xticks(x_query, x_query_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Test accuracy for each class')
         plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
-        save_path_query = os.path.join(output_folder, f"query_class_correct_fraction.png")
+        save_path_query = os.path.join(output_folder, f"query_class_correct_fraction_{round_idx}.png")
         plt.savefig(save_path_query)
         plt.close('all')
     return results
@@ -449,9 +457,9 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         output_folder_round = os.path.join(output_folder_interval, round_idx)
         if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
         if int(round_idx) == 0:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None)
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx))
         else:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[str(int(round_idx)-1)], prev_round=parsed_results[int(round_idx)-1])
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[str(int(round_idx)-1)], prev_round=parsed_results[int(round_idx)-1], round_idx=int(round_idx))
         parsed_results[int(round_idx)] = round_results
 
     # These are the available gadgets
