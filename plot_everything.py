@@ -299,12 +299,10 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.xlabel("Number of samples in this discovered class")
     plt.ylabel("Fraction wrongly predicted as open set")
 
-
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left',borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_open)
@@ -322,8 +320,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    plt.axhline(y=parsed_round_results['discovered_closed_acc'], label=f"Mean Accuracy {parsed_round_results['discovered_closed_acc']}", linestyle='--')
+    plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left', borderaxespad=0.)
 
     plt.tight_layout()
     plt.savefig(save_path_correct)
@@ -381,6 +379,8 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         pass
     else:
         # 5: Plot delta accuracy
+        mean_delta = results['discovered_closed_acc'] - prev_round['discovered_closed_acc']
+
         x_class, y_class = results['class_accuracy']
         x_class_prev, y_class_prev = prev_round['class_accuracy']
         valid_class = (x_class >= 0) & (x_class_prev >= 0)
@@ -388,6 +388,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         y_delta = np.zeros_like(x_delta)
         x_delta_ticks = ["" if not valid_class[i] else str(i) for i in range(len(x_delta))]
         valid_class_indices = np.where(valid_class)[0]
+        import pdb; pdb.set_trace()  # breakpoint 176d598d //
         y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
 
         plt.figure(figsize=(20,12))
@@ -395,10 +396,12 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         axes.set_ylim([-1,1])
         plt.title(f'Delta test accuracy for discovered classes.')
         plt.bar(x_delta, y_delta, align='center')
+        plt.axhline(y=mean_delta, label=f"Mean Accuracy Delta {mean_delta}", linestyle='--')
         plt.xticks(x_delta, x_delta_ticks)
         plt.xlabel('Class label')
         plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
         plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+        plt.legend()
         save_path_delta = os.path.join(output_folder, f"delta_class_accuracy.png")
         plt.savefig(save_path_delta)
         plt.close('all')
