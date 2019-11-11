@@ -54,7 +54,7 @@ def plot_roc(round_results, output_folder=None):
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'ROC curve plot')
+    plt.title(f'ROC curve plot', y=0.92)
     plt.xlabel("False Positive Rate (Closed set examples classified as open set)")
     plt.ylabel("True Positive Rate (Open set example classified as open set)")
 
@@ -119,7 +119,7 @@ def plot_our(round_results, output_folder=None):
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'Our open set metric curve plot')
+    plt.title(f'Open set classification rate plot', y=0.92)
     axes.set_xscale('log')
     axes.autoscale(enable=True, axis='x', tight=True)
     plt.xlabel("False Positive Rate (Open set examples classified as closed set)")
@@ -303,7 +303,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc='lower left',
+    plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
@@ -322,7 +322,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc='lower left',
+    plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
 
     plt.tight_layout()
