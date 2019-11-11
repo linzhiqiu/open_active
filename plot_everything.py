@@ -199,7 +199,7 @@ def plot_histo(round_results, output_folder=None, threshold='default'):
         raise NotImplementedError()
     # return threshold
 
-def parse_round_results(round_results, roc_results=None, our_results=None, picked_threshold=None, output_folder=None):
+def parse_round_results(round_results, roc_results=None, our_results=None, picked_threshold=None, output_folder=None, round_idx=0):
     # 4: Use the threshold to compute 
         # a: float - overall accuracy
         # b: scatter - closed set accuracy for each discovered class (w.r.t num of samples) (doesn't really need the threshold)
@@ -287,8 +287,8 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
         scatter_y_open[i] = discovered_info_dict[x_idx]['pred_open'] / float(discovered_info_dict[x_idx]['total'])
         scatter_y_correct[i] = discovered_info_dict[x_idx]['pred_correct'] / float(discovered_info_dict[x_idx]['total'] )
 
-    save_path_open = os.path.join(output_folder, f"scatterplot_discovered_set_open_fraction.png")
-    save_path_correct = os.path.join(output_folder, f"scatterplot_discovered_set_correct_fraction.png")
+    save_path_open = os.path.join(output_folder, f"scatterplot_discovered_set_open_fraction_{round_idx}.png")
+    save_path_correct = os.path.join(output_folder, f"scatterplot_discovered_set_correct_fraction_{round_idx}.png")
     
     plt.figure(figsize=(10,10))
     axes = plt.gca()
