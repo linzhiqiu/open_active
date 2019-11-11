@@ -121,6 +121,7 @@ def train_epochs(model, dataloaders, optimizer, scheduler, criterion, target_map
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
                     _, preds = torch.max(outputs, 1)
+                    import pdb; pdb.set_trace()  # breakpoint 2dd15192 //
                     loss = criterion(outputs, labels)
 
                     if phase == 'train':
