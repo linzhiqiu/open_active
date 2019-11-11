@@ -175,6 +175,19 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 0,
             'use_random_classes' : False
         },
+        'no_learning_9K' : {
+            'num_init_classes' : 90,
+            'sample_per_class' : 100,
+            'num_open_classes' : 10,
+            'use_random_classes' : False
+        },
+        'no_learning_9K_randomsample' : {
+            'num_init_classes' : 90,
+            'sample_per_class' : 100,
+            'num_open_classes' : 10,
+            'use_random_classes' : False,
+            'use_random_samples' : True,
+        },
         'no_learning_50_open_classes' : {
             'num_init_classes' : 50,
             'sample_per_class' : 500,

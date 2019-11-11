@@ -189,6 +189,8 @@ def get_data_active_param(config):
     name += ['icalr', str(config.icalr_strategy)]
     if config.icalr_strategy == 'naive':
         name += ['mode', str(config.icalr_naive_strategy)]
+    elif config.icalr_strategy == 'smooth':
+        name += ['smooth_eps', str(config.smooth_epochs)]
     elif config.icalr_strategy == 'proto':
         name += ['mode', str(config.icalr_proto_strategy)]
     
@@ -245,6 +247,8 @@ def get_experiment_name(config):
         name += ['mode', str(config.icalr_naive_strategy)]
     elif config.icalr_strategy == 'proto':
         name += ['mode', str(config.icalr_proto_strategy)]
+    elif config.icalr_strategy == 'smooth':
+        name += ['smooth_eps', str(config.smooth_epochs)]
     name_str += "_".join(name) + os.sep
     
     name = []

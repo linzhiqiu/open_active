@@ -18,15 +18,6 @@ def break_if_too_long(name, split=80):
     else:
         return name
 
-
-
-def break_if_too_long(name, split=80):
-    if len(name) > split:
-        names = [name[x:x+split] for x in range(0, len(name), split)]
-        return "\n".join(names)
-    else:
-        return name
-
 def plot_roc(round_results, output_folder=None):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
@@ -37,10 +28,15 @@ def plot_roc(round_results, output_folder=None):
     open_scores = open_scores[selected_indices]
     gt = gt[selected_indices]
 
-    fpr, tpr, _ = roc_curve(gt, open_scores)
+    # fpr, tpr, _ = roc_curve(gt, open_scores)
     try:
+        if np.any(np.isnan(open_scores)):
+            print(f"There is {np.sum(np.isnan(open_scores))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
+            open_scores[np.where(np.isnan(open_scores))] = open_scores[np.where(~np.isnan(open_scores))].mean()
+        fpr, tpr, _ = roc_curve(gt, open_scores)
         auc_score = roc_auc_score(gt, open_scores)
     except:
+        print(f"Wrong AUC!!! for {output_folder}")
         import pdb; pdb.set_trace()  # breakpoint 3c78e0d4 //
         
     parsed_results = {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
@@ -84,6 +80,9 @@ def plot_our(round_results, output_folder=None):
     N_below_threshold = 0 # A counter of correctly classified closed set examples
     threshold = open_scores.min() # We slide the threshold from low to high
     total_corrects = 0.
+    if np.any(np.isnan(open_scores)):
+        print(f"There is {np.sum(np.isnan(open_scores))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
+        open_scores[np.where(np.isnan(open_scores))] = open_scores[np.where(~np.isnan(open_scores))].mean()
     for idx in sorted_indices:
         gt_label = gt[idx]
         curr_open_score = open_scores[idx]
@@ -173,6 +172,8 @@ def plot_histo(round_results, output_folder=None, threshold='default'):
 
     max_score = max(open_scores)
     min_score = min(open_scores)
+    if min_score == max_score:
+        max_score += 1e-5
 
     bins = np.linspace(min_score, max_score, 100)
     plt.figure(figsize=(10,10))
@@ -218,6 +219,9 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     real_labels = np.array(round_results['thresholds']['real_labels'])
     closed_predicted_real = np.array(round_results['thresholds']['closed_predicted_real'])
     open_set_score = np.array(round_results['thresholds']['open_set_score'])
+    if np.any(np.isnan(open_set_score)):
+        print(f"There is {np.sum(np.isnan(open_set_score))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
+        open_set_score[np.where(np.isnan(open_set_score))] = open_set_score[np.where(~np.isnan(open_set_score))].mean()
     open_set_pred = open_set_score > picked_threshold # True then open set. False then closed set.
 
     overall_corrects = (open_set_pred == (ground_truth < 0)) & (real_labels == closed_predicted_real | (ground_truth < 0)) # 1: Open set correct 2: closed set correct on discovered examples
@@ -348,10 +352,11 @@ def plot_round(round_results, output_folder, threshold='default'):
                               output_folder=output_folder)
     return results
 
-def plot_json(json_file, output_folder, interval=1, threshold='default'):
+def plot_json(json_file, output_folder, interval=1, threshold='default', printed=True):
     try:
         dictionary = json.load(open(json_file, "r"))
     except:
+        print(f"Wrong reading the file {json_file}")
         import pdb; pdb.set_trace()  # breakpoint b5f4d9b0 //
     # 1: plot the number of seen classes
     # 2: plot AUROC (ours+ROC) over round
@@ -362,7 +367,8 @@ def plot_json(json_file, output_folder, interval=1, threshold='default'):
     sorted_keys = sorted(list(dictionary.keys()), key=lambda x: int(x)) # Sort by round
     parsed_results = {}
     output_folder_interval = os.path.join(output_folder, f'plot_every_{args.interval}_round_{threshold}_threshold')
-    for round_idx in tqdm.tqdm(sorted_keys):
+    sorted_keys_tqdm = tqdm.tqdm(sorted_keys) if printed else sorted_keys
+    for round_idx in sorted_keys_tqdm:
         output_folder_round = os.path.join(output_folder_interval, round_idx)
         if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
         round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold)
@@ -394,8 +400,10 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
         save_path = os.path.join(output_folder, f"{item}.png")
         plt.figure(figsize=(10,10))
         axes = plt.gca()
-        axes.set_ylim([min(y),max(y)])
-        axes.set_xlim([min(x),max(x)])
+        if min(y) != max(y):
+            axes.set_ylim([min(y),max(y)])
+        if min(x) != max(x):
+            axes.set_xlim([min(x),max(x)])
         plt.title(f'{item}')
         plt.xlabel("Round Index")
         plt.ylabel(f"{item}")
@@ -415,7 +423,7 @@ if __name__ == "__main__":
     parser.add_argument('--format', default='.json') # Output file  will be saved at {name[index]}.{args.output_format}
     parser.add_argument('--interval', default=1, type=int) # Plot every [interval] rounds
     parser.add_argument('--threshold', default='default', choices=['default']) # How to pick the open set threshold.
-    # parser.add_argument('--sorted', default='final_acc', choices=['final_acc']) # Sorted by final test accuracy at last round
+    parser.add_argument('--multi_worker', default=0, type=int) # The number of workers to use
     args = parser.parse_args()
 
     # Output a folder for each json file
@@ -431,6 +439,7 @@ if __name__ == "__main__":
     DATASET_LISTS = glob(os.path.join(args.saved_dir, "*/"))
     print(f"Parse {len(DATASET_LISTS)} datasets.")
 
+    experiments = [] # All args
     for dataset_folder in DATASET_LISTS:
         METHODS_LIST = glob(os.path.join(dataset_folder, "*/"))
         method_results = {}
@@ -445,12 +454,15 @@ if __name__ == "__main__":
                 for json_file in JSONS_LIST:
                     output_folder = os.path.join(args.out_dir, json_file[json_file.find(os.sep)+1:json_file.rfind(".")])
                     time_str = json_file.split(os.sep)[-1]
-                    parsed_results = plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold)
-                    json_results[time_str] = parsed_results
+                    if args.multi_worker == 0:
+                        parsed_results = plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold)
+                    else:
+                        experiments.append([json_file, output_folder])
+                    # json_results[time_str] = parsed_results
 
-                if len(list(json_results.keys())) == 0:
-                    # import pdb; pdb.set_trace()  # breakpoint 07109789 //
-                    continue
+                # if len(list(json_results.keys())) == 0:
+                #     # import pdb; pdb.set_trace()  # breakpoint 07109789 //
+                #     continue
 
                 # plot_curves(json_results, folder=hyper_folder, sorted_key=args.sorted)
                 # save_scores(json_results, folder=hyper_folder, sorted_key=args.sorted)
@@ -485,6 +497,15 @@ if __name__ == "__main__":
 
         # data_str = dataset_folder.split(os.sep)[-2]
         # print(f"Best method for dataset {data_str} is {sorted_keys_method[-1]} that achieves {best_method_result[args.sorted]} {args.sorted} score.")
+    if args.multi_worker > 0:
+        # Run multiproecssing
+        from multiprocessing import Pool
 
+        def f(lst):
+            json_file, output_folder = lst
+            plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold, printed=False)
+
+        with Pool(args.multi_worker) as p:
+            p.map(f, experiments)
 
 

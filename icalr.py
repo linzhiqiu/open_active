@@ -47,6 +47,8 @@ class ICALR(Network):
         self.icalr_retrain_threshold = self.config.icalr_retrain_threshold
 
         self.icalr_strategy = self.config.icalr_strategy
+        assert self.icalr_strategy in ['proto', 'naive', 'smooth']
+        self.smooth_epochs = self.config.smooth_epochs
         # if self.icalr_strategy == 'naive':
         #     raise NotImplementedError()
         self.icalr_naive_strategy = self.config.icalr_naive_strategy
@@ -76,7 +78,7 @@ class ICALR(Network):
     def _train_new_samples(self, model, new_round_samples, seen_classes, start_epoch=0):
         if self.icalr_strategy == 'proto':
             return 0.0, 0.0
-        elif self.icalr_strategy == 'naive':
+        elif self.icalr_strategy in ['naive', 'smooth']:
             # raise NotImplementedError()
             if self.icalr_naive_strategy == 'fixed':
                 self.fixed_rep_dataset = self._update_fixed_representation_dataset(self.fixed_rep_dataset, model, new_round_samples)
@@ -186,7 +188,7 @@ class ICALR(Network):
 
     def _train(self, model, s_train, seen_classes, start_epoch=0):
         results = super(ICALR, self)._train(model, s_train, seen_classes, start_epoch=start_epoch)
-        if self.icalr_strategy == 'naive':
+        if self.icalr_strategy in ['naive','smooth']:
             if self.icalr_naive_strategy == 'fixed':
                 # Store current representation
                 self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, s_train)
@@ -203,15 +205,18 @@ class ICALR(Network):
                 self.cur_retrain_threshold += 1
             else: raise NotImplementedError()
 
+        if self.icalr_strategy == 'smooth' and self.round > 0:
+            self.max_epochs = self.smooth_epochs
+
         # Retrain on first round or if criterion meets
-        to_retrain_all_exemplar = self.round == 0 or (self.cur_retrain_threshold - self.past_retrain_threshold) / self.icalr_retrain_threshold >= 1.
+        to_retrain_all_exemplar = self.round == 0 or (self.cur_retrain_threshold - self.past_retrain_threshold) / self.icalr_retrain_threshold >= 1. or self.icalr_strategy == 'smooth'
 
         self.round += 1
         if self.round <= self.pseudo_open_set_rounds and to_retrain_all_exemplar:
             pseudo_s_train, pseudo_seen_classes = self._filter_pseudo_open_set(s_train, seen_classes)
             self._train(self.pseudo_open_model, pseudo_s_train, pseudo_seen_classes, start_epoch=0)
             pseudo_exemplar_set = self._update_exemplar_set(pseudo_s_train, {})
-            self._update_proto_vector(pseudo_exemplar_set)
+            self._update_proto_vector(pseudo_exemplar_set, model=self.pseudo_open_model)
             self._meta_learning(self.pseudo_open_model, s_train, pseudo_seen_classes)
 
         new_round_samples = self._get_new_round_samples(s_train)
@@ -232,11 +237,16 @@ class ICALR(Network):
         eval_results = self._eval(self.model, test_dataset, seen_classes, verbose=eval_verbose)
         return train_loss, train_acc, eval_results
 
-    def _update_proto_vector(self, exemplar_set):
-        if self.icalr_strategy == 'naive':
+    def _update_proto_vector(self, exemplar_set, model=None):
+        if self.icalr_strategy in ['naive', 'smooth']:
             pass
         elif self.icalr_strategy == 'proto':
-            self._eval_mode()
+            if type(model) == type(None):
+                self._eval_mode()
+                model = self.model
+            else:
+                model.eval()
+
             seen_classes = list(exemplar_set.keys())
             if self.config.arch == 'ResNet50':
                 feature_size = 2048
@@ -251,7 +261,7 @@ class ICALR(Network):
             cur_features = []
             def forward_hook_func(module, inputs, outputs):
                 cur_features.append(inputs[0])
-            handle = self.model.fc.register_forward_hook(forward_hook_func)
+            handle = model.fc.register_forward_hook(forward_hook_func)
 
             for class_idx in seen_classes:
                 num_class_i_samples = float(len(exemplar_set[class_idx]))
@@ -270,7 +280,7 @@ class ICALR(Network):
                         inputs, _ = data
                         
                         inputs = inputs.to(self.device)
-                        _ = self.model(inputs)
+                        _ = model(inputs)
 
                         self.proto[target_class_idx,:] += (cur_features[0] / num_class_i_samples).sum(dim=0).detach()
                         cur_features = []
@@ -345,7 +355,7 @@ class ICALR(Network):
                     if self.icalr_strategy == 'proto':
                         preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0]) # Open set index == UNSEEN_CLASS_INDEX
                         cur_features = []
-                    elif self.icalr_strategy == 'naive':
+                    elif self.icalr_strategy in ['naive', 'smooth']:
                         preds = open_set_prediction(outputs, inputs=inputs, features=None) # Open set index == UNSEEN_CLASS_INDEX
                     # loss = open_set_criterion(outputs, labels)
 
@@ -708,6 +718,7 @@ class ICALROSDNNetwork(ICALR):
         #     cur_target_seen_classes.append(exemplar_target_mapping_func(class_idx))
         # self.proto = self.proto[cur_target_seen_classes, :] # TO be restore later
 
+        # import pdb; pdb.set_trace()  # breakpoint b11583a1 //
         print("Perform cross validation using pseudo open class..")
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
         training_features = self._gather_correct_features(pseudo_open_model,
@@ -816,6 +827,7 @@ class ICALROSDNNetwork(ICALR):
                 outputs = -(difference*difference).sum(2)**0.5
                 cur_features = []
                 _, preds = torch.max(outputs, 1)
+                # There is a pdb
                 correct_indices = preds == labels.data
                 for i in range(inputs.size(0)):
                     if mav_features_selection == 'correct':
@@ -1171,7 +1183,7 @@ class ICALRBinarySoftmaxNetwork(ICALR):
         def open_set_prediction(outputs, inputs=None, features=None):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
-            if self.icalr_strategy == 'naive':
+            if self.icalr_strategy in ['naive', 'smooth']:
                 features = outputs
 
             # First step is to normalize the features
@@ -1203,7 +1215,7 @@ class ICALRBinarySoftmaxNetwork(ICALR):
         target_mapping_func = get_target_mapping_func(self.train_instance.classes,
                                                       seen_classes,
                                                       self.train_instance.open_classes)
-        if self.icalr_strategy == 'naive':
+        if self.icalr_strategy in ['naive', 'smooth']:
             # Use network output as prototype
             self.proto = torch.zeros((len(seen_classes), len(seen_classes))).to(self.device)
         elif self.icalr_strategy == 'proto':

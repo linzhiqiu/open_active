@@ -465,7 +465,7 @@ def get_learning_loss_class(base_class):
             self.model.eval()
 
         def get_open_score_func(self):
-            if isinstance(self, icalr.ICALR) and self.icalr_strategy == 'naive':
+            if isinstance(self, icalr.ICALR) and self.icalr_strategy in ['naive', 'smooth']:
                 def open_score_func(inputs):
                     outputs, _ = self.model(inputs)
                     softmax_outputs = F.softmax(outputs, dim=1)
