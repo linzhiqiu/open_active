@@ -268,6 +268,16 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
         discovered_info_dict[discovered_label]['pred_open'] = open_set_pred[class_mask].sum()
         discovered_info_dict[discovered_label]['pred_correct'] = (closed_predicted_real[class_mask] == discovered_label).sum()
 
+    # For each class log the accuracy.
+    x_class = np.zeros((int(round_results['num_seen_classes']) + int(round_results['num_unseen_classes']))) - 1 # -1 is nondiscovered class
+    y_class = np.zeros_like(acc).astype('float')
+    for discovered_label in discovered_info_dict.keys():
+        acc = discovered_info_dict[discovered_label]['pred_correct'] / float(discovered_info_dict[discovered_label]['total'] )
+        x_class[discovered_label] = discovered_label
+        y_class[discovered_label] = acc
+    parsed_round_results['class_accuracy'] = (x_class, y_class)
+
+    # Scatterplot
     x = np.array(list(discovered_info_dict.keys()))
     scatter_x_total = np.zeros_like(x).astype('float')
     scatter_y_open = np.zeros_like(x).astype('float')
@@ -339,7 +349,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     #                                            'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
     #                                           } # A list of dictionary
 
-def plot_round(round_results, output_folder, threshold='default'):    
+def plot_round(round_results, output_folder, threshold='default', prev_dict=None, prev_round=None):    
     # 1: Plot ROC curve (discovered v.s. hold-out), save fig, get
         # a: float - AUROC
         # b: curve - ROC
@@ -358,15 +368,63 @@ def plot_round(round_results, output_folder, threshold='default'):
         # f: float - closed set accuracy (considering open set) on discovered classes
         # g: float - closed set accuracy (not considering open set) on discovered classes (doesn't really need the threshold)
     # parsed_open_scores = parse_open_scores(round_results) # Use round_results['thresholds']
+    # 5: Plot delta accuracy
+    # 6: Plot query class accuracy
     roc_results = plot_roc(round_results, output_folder=output_folder) # {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
     our_results = plot_our(round_results, output_folder=output_folder) # {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
     picked_threshold = plot_histo(round_results, output_folder=output_folder, threshold=threshold) # return picked threshold
     # picked_threshold = pick_threshold(roc_results, our_results, threshold=threshold)
     results = parse_round_results(round_results,
-                              roc_results=roc_results,
-                              our_results=our_results,
-                              picked_threshold=picked_threshold,
-                              output_folder=output_folder)
+                                  roc_results=roc_results,
+                                  our_results=our_results,
+                                  picked_threshold=picked_threshold,
+                                  output_folder=output_folder)
+
+    if type(prev_dict) == type(None) or type(prev_round) == type(None):
+        pass
+    else:
+        # 5: Plot delta accuracy
+        x_class, y_class = results['class_accuracy']
+        x_class_prev, y_class_prev = prev_round['class_accuracy']
+        valid_class = x_class >= 0 & x_class_prev >= 0
+        x_delta = np.arange(len(x_class))
+        y_delta = np.zeros_like(x_delta)
+        x_delta_ticks = ["X" if not valid_class[i] else str(i) for i in range(len(x_delta))]
+        valid_class_indices = np.where(valid_class)[0]
+        y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
+
+        plt.figure(figsize=(10,10))
+        axes = plt.gca()
+        axes.set_ylim([-1,1])
+        plt.title(f'Delta test accuracy for discovered classes (X means not available).')
+        plt.bar(x_delta, y_delta, align='center')
+        plt.xticks(x_delta, x_delta_ticks)
+        plt.xlabel('Class label')
+        plt.ylabel('Delta accuracy for each class: (Current round accuracy - Previous round accuracy)')
+        save_path_delta = os.path.join(output_folder, f"delta_class_accuracy.png")
+        plt.savefig(save_path_delta)
+        plt.close('all')
+
+        # 6: Plot query class accuracy
+        query_samples = np.array(list(set(round_results['seen_samples']).difference(prev_dict['seen_samples'])))
+        query_classes = np.array(round_results['train_labels'])[query_samples]
+        y_query = np.zeros_like(results['class_accuracy'][0]).astype('float')
+        x_query_ticks = ["X" if not i in query_class else str(i) for i in range(len(y_query))]
+        x_query = np.arange(len(y_query))
+        for query_class in set(list(query_classes)):
+            y_query[query_class] = results['class_accuracy'][1][query_class]
+        
+        plt.figure(figsize=(10,10))
+        axes = plt.gca()
+        axes.set_ylim([0,1])
+        plt.title(f'Test accuracy for classes being queried in this round. (X means not discovered)')
+        plt.bar(x_query, y_query, align='center')
+        plt.xticks(x_query, x_query_ticks)
+        plt.xlabel('Class label')
+        plt.ylabel('Test accuracy for each class')
+        save_path_query = os.path.join(output_folder, f"query_class_correct_fraction.png")
+        plt.savefig(save_path_query)
+        plt.close('all')
     return results
 
 def plot_json(json_file, output_folder, interval=1, threshold='default', printed=True):
@@ -388,7 +446,10 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     for round_idx in sorted_keys_tqdm:
         output_folder_round = os.path.join(output_folder_interval, round_idx)
         if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
-        round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold)
+        if round_idx == 0:
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None)
+        else:
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[round_idx-1], prev_round=parsed_results[int(round_idx)-1])
         parsed_results[int(round_idx)] = round_results
 
     # These are the available gadgets
@@ -401,8 +462,10 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     # parsed_round_results['our_auroc'] = our_results['auc_score']
     # parsed_round_results['num_seen_classes'] = our_results['num_seen_classes']
     # parsed_round_results['threshold'] = picked_threshold
+    # Plus the class accuracy tuple (x_class, y_class) each is of size number_total_classes_to_discover
 
     plot_accumulated_rounds(parsed_results, output_folder=output_folder_interval)
+    plot_closed_set_accuracy(parsed_results, classes=[0,10], output_folder=output_folder_interval)
     return parsed_results
 
 def plot_accumulated_rounds(parsed_results, output_folder=None):
@@ -411,6 +474,8 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
     plot_items = list(parsed_results[first_round_idx].keys())
     x = np.array(round_indices)
     for item in plot_items:
+        if item == 'class_accuracy':
+            continue
         y = np.zeros_like(x).astype('float')
         for idx, round_idx in enumerate(x):
             y[idx] = parsed_results[round_idx][item]
@@ -430,6 +495,30 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
         plt.savefig(save_path)
         # print(f"Fig save to {save_path}")
         # plt.close()
+        plt.close('all')
+
+def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
+    assert "class_accuracy" in parsed_results
+    round_indices = sorted(list(parsed_results.keys()), key=lambda x: int(x))
+    x = np.array(round_indices)
+    for class_idx in classes:
+        y = np.zeros_like(x).astype('float')
+        for idx, round_idx in enumerate(x):
+            y[idx] = parsed_results[round_idx]['class_accuracy'][1][class_idx]
+        save_path = os.path.join(output_folder, f"class_{class_idx}_closed_set_acc.png")
+        plt.figure(figsize=(10,10))
+        axes = plt.gca()
+        if min(y) != max(y):
+            axes.set_ylim([0,1])
+        if min(x) != max(x):
+            axes.set_xlim([min(x),max(x)])
+        plt.title(f'{item}')
+        plt.xlabel("Round Index")
+        plt.ylabel(f"{item}")
+
+        plt.plot(x, y, linestyle='-')            
+        plt.tight_layout()
+        plt.savefig(save_path)
         plt.close('all')
 
 
