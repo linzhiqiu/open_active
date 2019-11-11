@@ -400,6 +400,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.ylabel('Test accuracy for each class')
         plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
         plt.axhline(y=results['discovered_closed_acc'], label=f"Mean Accuracy {results['discovered_closed_acc']}", linestyle='--', color='black')
+        plt.legend()
         save_path_query = os.path.join(output_folder, f"query_class_correct_fraction_{round_idx}.png")
         plt.savefig(save_path_query)
         plt.close('all')
