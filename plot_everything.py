@@ -54,7 +54,7 @@ def plot_roc(round_results, output_folder=None):
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'ROC curve plot', y=0.92)
+    plt.title(f'ROC curve plot', y=0.96)
     plt.xlabel("False Positive Rate (Closed set examples classified as open set)")
     plt.ylabel("True Positive Rate (Open set example classified as open set)")
 
@@ -119,7 +119,7 @@ def plot_our(round_results, output_folder=None):
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'Open set classification rate plot', y=0.92)
+    plt.title(f'Open set classification rate plot', y=0.96)
     axes.set_xscale('log')
     axes.autoscale(enable=True, axis='x', tight=True)
     plt.xlabel("False Positive Rate (Open set examples classified as closed set)")
@@ -390,7 +390,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         valid_class_indices = np.where(valid_class)[0]
         y_delta[valid_class_indices] = x_class[valid_class_indices] - x_class_prev[valid_class_indices]
 
-        plt.figure(figsize=(20,35))
+        plt.figure(figsize=(20,12))
         axes = plt.gca()
         axes.set_ylim([-1,1])
         plt.title(f'Delta test accuracy for discovered classes.')
@@ -412,7 +412,7 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         for query_class in query_classes:
             y_query[query_class] = results['class_accuracy'][1][query_class]
         
-        plt.figure(figsize=(20,35))
+        plt.figure(figsize=(20,12))
         axes = plt.gca()
         axes.set_ylim([0,1])
         plt.title(f'Test accuracy for classes being queried in this round.')
