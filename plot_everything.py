@@ -443,7 +443,10 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         dictionary = json.load(open(json_file, "r"))
     except:
         print(f"Wrong reading the file {json_file}")
-        import pdb; pdb.set_trace()  # breakpoint b5f4d9b0 //
+        if printed:
+            import pdb; pdb.set_trace()  # breakpoint b5f4d9b0 //
+        else:
+            return None
     # 1: plot the number of seen classes
     # 2: plot AUROC (ours+ROC) over round
     # 3: plot closed set accuracy over round (discovered+seen) based on the threshold
