@@ -18,15 +18,25 @@ def break_if_too_long(name, split=80):
     else:
         return name
 
+def paper_version(name):
+    if "learning_loss" in name:
+        return "Learning Loss"
+    elif "coreset" in name:
+        return "Core Set (Greedy)"
+    elif "random" in name:
+        return "Random Query"
+    else:
+        return name
+
 def plot_curves(results, folder=None, sorted_key='final_acc'):
     assert folder != None
     save_path = os.path.join(folder, "test_acc.png")
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
-    plt.title(f'Test accuracy curve plot')
-    plt.xlabel("Number of samples")
-    plt.ylabel("Test accuracy")
+    plt.title(f'Test accuracy curve plot', fontsize=22)
+    plt.xlabel("Number of samples", fontsize=12)
+    plt.ylabel("Test accuracy", fontsize=12)
 
     sorted_keys = sorted(list(results.keys()), key=lambda x : results[x][sorted_key], reverse=True)
 
@@ -46,7 +56,7 @@ def plot_curves(results, folder=None, sorted_key='final_acc'):
         # plot = plot_xy(fpr, tpr, x_axis="False Positive Rate", y_axis="True Positive Rate", title=title)
         label_name = key+f"_{sorted_key}_"+str(results[key][sorted_key])[:9]
         new_label_name = break_if_too_long(label_name, split=80)
-
+        new_label_name = "Final Acc " + f"{results[key][sorted_key]:.2%}: " + paper_version(label_name)
         y = np.array(base_y.copy()).astype(np.double)
         # y = []
         for i, sample_num_key in enumerate(sample_num_entries):
@@ -54,10 +64,12 @@ def plot_curves(results, folder=None, sorted_key='final_acc'):
             y[i] = res
 
         plt.plot(x, y, label=new_label_name, linestyle='-', marker='o')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    #            ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(loc='upper left',
+               borderaxespad=0., fontsize=14)
         
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(save_path)
     print(f"Fig save to {save_path}")
 
@@ -85,7 +97,8 @@ def parse_json(json_file, sorted_key='final_acc'):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--saved_dir', default='learning_loss') # Where the log files will be saved
+    # parser.add_argument('--saved_dir', default='learning_loss') # Where the log files will be saved
+    parser.add_argument('--saved_dir', default='temp_learning_loss') # Where the log files will be saved
     parser.add_argument('--format', default='.json') # Output file  will be saved at {name[index]}.{args.output_format}
     parser.add_argument('--sorted', default='final_acc', choices=['final_acc']) # Sorted by final test accuracy at last round
     args = parser.parse_args()

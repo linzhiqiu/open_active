@@ -142,6 +142,13 @@ INIT_TRAIN_SET_CONFIG = {
             'use_random_classes' : False,
             'use_random_samples' : False, # sample size at first is num_init_classes * sample_per_class
         },
+        'open_active_0' : {
+            'num_init_classes' : 40,
+            'sample_per_class' : 25,
+            'num_open_classes' : 10,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
         'open_active_1' : {
             'num_init_classes' : 40,
             'sample_per_class' : 25,
@@ -184,6 +191,19 @@ INIT_TRAIN_SET_CONFIG = {
         'no_learning_9K_randomsample' : {
             'num_init_classes' : 90,
             'sample_per_class' : 100,
+            'num_open_classes' : 10,
+            'use_random_classes' : False,
+            'use_random_samples' : True,
+        },
+        'no_learning_8280' : {
+            'num_init_classes' : 90,
+            'sample_per_class' : 92,
+            'num_open_classes' : 10,
+            'use_random_classes' : False
+        },
+        'no_learning_8280_randomsample' : {
+            'num_init_classes' : 90,
+            'sample_per_class' : 92,
             'num_open_classes' : 10,
             'use_random_classes' : False,
             'use_random_samples' : True,

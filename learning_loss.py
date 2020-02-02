@@ -311,7 +311,9 @@ class NetworkLearningLoss(Network):
             if self.config.threshold_metric == 'softmax':
                 scores = softmax_max
             elif self.config.threshold_metric == 'entropy':
-                scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                neg_entropy = softmax_outputs*softmax_outputs.log()
+                neg_entropy[softmax_outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
@@ -419,6 +421,8 @@ def get_learning_loss_class(base_class):
                   f"Label_Loss {train_loss}, Accuracy {train_acc}"
                   f"Pred_Loss {loss_loss}, Accuracy {loss_acc}")
 
+            # self.learningloss_trainacc[self.round] = loss_acc
+
             if isinstance(self, icalr.ICALR):
                 if self.icalr_strategy == 'naive':
                     if self.icalr_naive_strategy == 'fixed':
@@ -430,6 +434,7 @@ def get_learning_loss_class(base_class):
             parent_open_set_pred_func = super(LearningLoss, self)._get_open_set_pred_func()
             def open_set_prediction(outputs_tuple, **kwargs):
                 outputs, losses = outputs_tuple
+                self.thresholds_checkpoints[self.round]['learningloss_pred_loss'] += losses.tolist()
                 return parent_open_set_pred_func(outputs, **kwargs)
             return open_set_prediction
 
@@ -476,7 +481,9 @@ def get_learning_loss_class(base_class):
                     if self.config.threshold_metric == 'softmax':
                         scores = softmax_max
                     elif self.config.threshold_metric == 'entropy':
-                        scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                        neg_entropy = softmax_outputs*softmax_outputs.log()
+                        neg_entropy[softmax_outputs < 1e-5] = 0
+                        scores = neg_entropy.sum(dim=1) # negative entropy!
                     self.cur_features = []
                     return -scores
                 return open_score_func

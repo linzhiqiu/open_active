@@ -108,7 +108,7 @@ class ICALR(Network):
                                                 device=self.device,
                                                 start_epoch=start_epoch,
                                                 # max_epochs=self.max_epochs,
-                                                max_epochs=30,
+                                                max_epochs=5,
                                                 verbose=self.config.verbose,
                                             )
                 print(f"Train => {self.round} round => "
@@ -305,6 +305,8 @@ class ICALR(Network):
                                                    'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
                                                    'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
                                                    'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
+                                                   'learningloss_pred_loss' : [], # Loss predicted by learning loss
+                                                   'actual_loss' : [], # actual losses
                                                   } # A list of dictionary
 
         target_mapping_func = self._get_target_mapp_func(seen_classes)
@@ -338,7 +340,9 @@ class ICALR(Network):
                                 'all_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all open class examples (unseen open + hold-out open)
                                 }
 
-
+            if self.config.debug:
+                import pdb; pdb.set_trace()  # breakpoint a8dffc68 //
+                
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
                     inputs, real_labels = data
@@ -350,13 +354,15 @@ class ICALR(Network):
                                                   torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
                                                   labels
                                               ) # This change hold out open set examples' indices to unseen open set examples indices
-
+                    label_for_learnloss = labels.clone()
+                    label_for_learnloss[label_for_learnloss<0] = 0
+                    
                     outputs = model(inputs)
                     if self.icalr_strategy == 'proto':
-                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0]) # Open set index == UNSEEN_CLASS_INDEX
+                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0], label_for_learnloss=label_for_learnloss) # Open set index == UNSEEN_CLASS_INDEX
                         cur_features = []
                     elif self.icalr_strategy in ['naive', 'smooth']:
-                        preds = open_set_prediction(outputs, inputs=inputs, features=None) # Open set index == UNSEEN_CLASS_INDEX
+                        preds = open_set_prediction(outputs, inputs=inputs, features=None, label_for_learnloss=label_for_learnloss) # Open set index == UNSEEN_CLASS_INDEX
                     # loss = open_set_criterion(outputs, labels)
 
                     # labels_for_ground_truth = torch.where(
@@ -498,7 +504,7 @@ class ICALR(Network):
             # threshold = self.pseuopen_threshold
             raise NotImplementedError()
 
-        def open_set_prediction(outputs, inputs=None, features=None):
+        def open_set_prediction(outputs, inputs=None, features=None, label_for_learnloss=None):
             if self.icalr_strategy == 'proto':
                 # First step is to normalize the features
                 features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
@@ -512,7 +518,9 @@ class ICALR(Network):
             if self.config.threshold_metric == 'softmax':
                 scores = softmax_max
             elif self.config.threshold_metric == 'entropy':
-                scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                neg_entropy = softmax_outputs*softmax_outputs.log()
+                neg_entropy[softmax_outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
@@ -520,7 +528,9 @@ class ICALR(Network):
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += softmax_max.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += softmax_preds.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
-            
+            self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
+
+
             preds = torch.where(scores < threshold,
                                 torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
@@ -546,7 +556,9 @@ class ICALR(Network):
                 if self.config.threshold_metric == 'softmax':
                     scores = softmax_max
                 elif self.config.threshold_metric == 'entropy':
-                    scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                    neg_entropy = softmax_outputs*softmax_outputs.log()
+                    neg_entropy[softmax_outputs < 1e-5] = 0
+                    scores = neg_entropy.sum(dim=1) # negative entropy!
                 self.cur_features = []
                 return -scores
             return open_score_func
@@ -558,7 +570,9 @@ class ICALR(Network):
                 if self.config.threshold_metric == 'softmax':
                     scores = softmax_max
                 elif self.config.threshold_metric == 'entropy':
-                    scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                    neg_entropy = softmax_outputs*softmax_outputs.log()
+                    neg_entropy[softmax_outputs < 1e-5] = 0
+                    scores = neg_entropy.sum(dim=1) # negative entropy!
                 self.cur_features = []
                 return -scores
             return open_score_func
@@ -894,7 +908,7 @@ class ICALROSDNNetwork(ICALR):
                 weibull[index]['weibull_model'] = mr
         return weibull
 
-    def compute_open_max(self, outputs, features, log_thresholds=True):
+    def compute_open_max(self, outputs, features, label_for_learnloss, log_thresholds=True):
         """ Return (openset_score, openset_preds)
             If features is None, then use the outputs
         """
@@ -951,6 +965,7 @@ class ICALROSDNNetwork(ICALR):
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
+            self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
 
         # Return the prediction
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
@@ -981,7 +996,7 @@ class ICALROSDNNetwork(ICALR):
     def _get_open_set_pred_func(self):
         """ Caveat: Open set class is represented as -1.
         """
-        return lambda outputs, inputs, features : self.compute_open_max(outputs, features)[1]
+        return lambda outputs, inputs, features, label_for_learnloss : self.compute_open_max(outputs, features, label_for_learnloss)[1]
 
     def _eval(self, model, test_dataset, seen_classes, verbose=False, training_features=None):
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
@@ -1029,7 +1044,7 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
         # doesn't change the activation score of the seen classes.
         super(ICALROSDNNetworkModified, self).__init__(*args, **kwargs)
 
-    def compute_open_max(self, outputs, features, log_thresholds=True):
+    def compute_open_max(self, outputs, features, label_for_learnloss, log_thresholds=True):
         """ Return (openset_score, openset_preds)
         """
         if type(features) != type(None):
@@ -1083,7 +1098,7 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
-
+            self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
         
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
@@ -1180,7 +1195,7 @@ class ICALRBinarySoftmaxNetwork(ICALR):
 
         assert self.icalr_binary_softmax_train_mode in ['fixed_variance','default']
 
-        def open_set_prediction(outputs, inputs=None, features=None):
+        def open_set_prediction(outputs, inputs=None, features=None, label_for_learnloss=None):
             softmax_outputs = F.softmax(outputs, dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
             if self.icalr_strategy in ['naive', 'smooth']:
@@ -1202,7 +1217,8 @@ class ICALRBinarySoftmaxNetwork(ICALR):
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += softmax_max.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += softmax_preds.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
-            
+            self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
+
             preds = torch.where(scores < threshold,
                                 torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)

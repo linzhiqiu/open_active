@@ -120,15 +120,22 @@ def main():
         # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
         # if not os.path.exists(save_dir):
         #     os.makedirs(save_dir)
+        assert not (config.log_first_round_model and config.save_first_round_model)
+
         if config.log_everything:
             log_strs = utils.get_experiment_name(config).split(os.sep)
             dataset_str = utils.get_data_active_param(config)
             method_str = utils.get_method_param(config)
             active_str = utils.get_active_param(config)
             training_str = '_'.join(log_strs[2:])
-            save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
+            save_dir = os.path.join('open_active_results_new', dataset_str, "_".join([method_str, active_str]), training_str)
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
+
+        if config.log_first_round_model:
+            trainer.trainer_machine.model = torch.load(f"{config.init_mode}.pt")
+            print("Didn't train. Load model.")
+            assert config.epochs == 0
 
         train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
         
@@ -171,6 +178,10 @@ def main():
             f.close()
 
         if round_i == 0:
+            if config.save_first_round_model:
+                print("save model!!!")
+                torch.save(trainer.trainer_machine.model, f"{config.init_mode}.pt")
+
             if config.log_first_round_thresholds:
                 log_strs = utils.get_experiment_name(config).split(os.sep)
                 dataset_str = utils.get_data_param(config)

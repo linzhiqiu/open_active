@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import tqdm
+import pickle
 
 def break_if_too_long(name, split=80):
     if len(name) > split:
@@ -17,6 +18,12 @@ def break_if_too_long(name, split=80):
         return "\n".join(names)
     else:
         return name
+
+def shuffle_in_unison_scary(a, b):
+    rng_state = np.random.get_state()
+    np.random.shuffle(a)
+    np.random.set_state(rng_state)
+    np.random.shuffle(b)
 
 def best_fit_slope_and_intercept(xs,ys):
     m = (((xs.mean()*ys.mean()) - (xs*ys).mean()) /
@@ -26,7 +33,7 @@ def best_fit_slope_and_intercept(xs,ys):
     
     return m, b
 
-def plot_roc(round_results, output_folder=None, round_idx=0):
+def plot_roc(round_results, output_folder=None, round_idx=0, printed=True):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
     open_scores = np.array(round_results['thresholds']['open_set_score'])
@@ -40,35 +47,38 @@ def plot_roc(round_results, output_folder=None, round_idx=0):
     try:
         if np.any(np.isnan(open_scores)):
             print(f"There is {np.sum(np.isnan(open_scores))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
-            open_scores[np.where(np.isnan(open_scores))] = open_scores[np.where(~np.isnan(open_scores))].mean()
+            open_scores[np.where(np.isnan(open_scores))] = open_scores.nanmean()
         fpr, tpr, _ = roc_curve(gt, open_scores)
         auc_score = roc_auc_score(gt, open_scores)
     except:
         print(f"Wrong AUC!!! for {output_folder}")
-        import pdb; pdb.set_trace()  # breakpoint 3c78e0d4 //
-        
+        if printed: import pdb; pdb.set_trace()  # breakpoint 3c78e0d4 //
+        else:
+            return {'auc_score' : 0.}
+
     parsed_results = {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
 
-    save_path = os.path.join(output_folder, f"roc_auroc_{auc_score}_round_{round_idx}.png")
+    save_path = os.path.join(output_folder, f"roc_auroc_{auc_score:.4f}_round_{round_idx}.png")
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'ROC curve plot at round {round_idx}', y=0.96)
-    plt.xlabel("False Positive Rate (Closed set examples classified as open set)")
-    plt.ylabel("True Positive Rate (Open set example classified as open set)")
+    plt.title(f'ROC curve plot at round {round_idx}', y=0.96, fontsize=12)
+    plt.xlabel("False Positive Rate (Closed set examples classified as open set)", fontsize=12)
+    plt.ylabel("True Positive Rate (Open set example classified as open set)", fontsize=12)
 
-    label_name = f"AUROC_"+str(auc_score)
+    label_name = f"AUC_"+f"{auc_score:.3f}"
     plt.plot(fpr, tpr, label=label_name, linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
-        
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    #            ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(loc='upper left',
+               borderaxespad=0., fontsize=10)
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close('all')
     return parsed_results
 
-def plot_our(round_results, output_folder=None, round_idx=0):
+def plot_our(round_results, output_folder=None, round_idx=0, printed=True):
     # Discovered v.s. Hold-out open
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_predicted = np.array(round_results['thresholds']['open_predicted'])
@@ -88,7 +98,13 @@ def plot_our(round_results, output_folder=None, round_idx=0):
     total_corrects = 0.
     if np.any(np.isnan(open_scores)):
         print(f"There is {np.sum(np.isnan(open_scores))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
-        open_scores[np.where(np.isnan(open_scores))] = open_scores[np.where(~np.isnan(open_scores))].mean()
+        try:
+            open_scores[np.where(np.isnan(open_scores))] = open_scores.nanmean()
+        except:
+            if printed: import pdb; pdb.set_trace()  # breakpoint 33b10776 //
+            else:
+                return {'auc_score' : 0.}
+    
     for idx in sorted_indices:
         gt_label = gt[idx]
         curr_open_score = open_scores[idx]
@@ -114,22 +130,24 @@ def plot_our(round_results, output_folder=None, round_idx=0):
     max_acc = total_corrects / num_closed_set
     parsed_results = {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
 
-    save_path = os.path.join(output_folder, f"our_auroc_{auc_score}_maxacc_{max_acc}_round_{round_idx}.png")
+    save_path = os.path.join(output_folder, f"our_auroc_{auc_score:.4f}_maxacc_{max_acc:.4f}_round_{round_idx}.png")
     plt.figure(figsize=(10,10))
     axes = plt.gca()
     axes.set_ylim([0,1])
     axes.set_xlim([0,1])
-    plt.title(f'Open set classification rate plot at round {round_idx}', y=0.96)
+    plt.title(f'Open set classification rate plot at round {round_idx}', y=0.96, fontsize=12)
     axes.set_xscale('log')
     axes.autoscale(enable=True, axis='x', tight=True)
-    plt.xlabel("False Positive Rate (Open set examples classified as closed set)")
-    plt.ylabel("Correct Classification Rate (Closed set examples classified into correct class)")
+    plt.xlabel("False Positive Rate (Open set examples classified as closed set)", fontsize=12)
+    plt.ylabel("Correct Classification Rate (Closed set examples classified into correct class)", fontsize=12)
     y_axis_key = 'tcr'
 
-    label_name = f"AUROC_"+str(auc_score)+"MAXACC_"+str(max_acc)
+    label_name = f"AUC_"+f"{auc_score:.3f}"#+"MAXACC_"+str(max_acc)
     plt.plot(FPR, TCR, label=label_name, linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-               ncol=1, mode="expand", borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    #            ncol=1, mode="expand", borderaxespad=0.)
+    plt.legend(loc='upper left',
+               borderaxespad=0., fontsize=10)
         
     plt.tight_layout()
     plt.savefig(save_path)
@@ -162,14 +180,24 @@ def calc_auc_score(x, y):
         area = area.dtype.type(area)
     return area
 
-def plot_histo(round_results, output_folder=None, threshold='default', round_idx=0):
+def plot_histo(round_results, output_folder=None, threshold='default', round_idx=0, printed=True):
     # Plot histogram
+
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_scores = np.array(round_results['thresholds']['open_set_score'])
     gt[gt >= 0] = 0
     gt[gt == OPEN_CLASS_INDEX] = 1
     selected_indices = gt != UNSEEN_CLASS_INDEX
     open_scores = open_scores[selected_indices]
+    if np.any(np.isnan(open_scores)):
+        try:
+            open_scores[np.where(np.isnan(open_scores))] = open_scores.nanmean()
+        except:
+            print("Computing mean wrong..")
+            if printed: import pdb; pdb.set_trace()  # breakpoint 33b10776 //
+            else:
+                return 0
+
     gt = gt[selected_indices]
     opens = open_scores[gt == 1]
     closeds = open_scores[gt == 0]
@@ -225,6 +253,49 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     real_labels = np.array(round_results['thresholds']['real_labels'])
     closed_predicted_real = np.array(round_results['thresholds']['closed_predicted_real'])
     open_set_score = np.array(round_results['thresholds']['open_set_score'])
+
+    if 'learningloss_pred_loss' in round_results['thresholds'].keys():
+        learningloss_pred_loss = np.array(round_results['thresholds']['learningloss_pred_loss']).flatten()
+        actual_loss = np.array(round_results['thresholds']['actual_loss'])
+        if len(learningloss_pred_loss) > 0:
+            assert len(learningloss_pred_loss) == len(actual_loss)
+            
+            if len(learningloss_pred_loss) % 2 != 0:
+                learningloss_pred_loss = learningloss_pred_loss[:-1]
+                actual_loss = actual_loss[:-1]
+
+            shuffle_in_unison_scary(learningloss_pred_loss, actual_loss)
+            
+            learningloss_pred_loss_part_1 = learningloss_pred_loss[:int(len(actual_loss)/2)]
+            learningloss_pred_loss_part_2 = learningloss_pred_loss[int(len(actual_loss)/2):]
+            actual_loss_part_1 = actual_loss[:int(len(actual_loss)/2)]
+            actual_loss_part_2 = actual_loss[int(len(actual_loss)/2):]
+            actual_pred = actual_loss_part_1 >= actual_loss_part_2
+            learningloss_pred = learningloss_pred_loss_part_1 >= learningloss_pred_loss_part_2
+            learningloss_acc = learningloss_pred == actual_pred
+            parsed_round_results['learnloss_open_acc'] = (learningloss_acc).sum() / float(len(learningloss_acc))
+
+        learningloss_pred_loss = np.array(round_results['thresholds']['learningloss_pred_loss']).flatten()[ground_truth >= 0]
+        actual_loss = np.array(round_results['thresholds']['actual_loss'])[ground_truth >= 0]
+        if len(learningloss_pred_loss) > 0:
+            assert len(learningloss_pred_loss) == len(actual_loss)
+            
+            if len(learningloss_pred_loss) % 2 != 0:
+                learningloss_pred_loss = learningloss_pred_loss[:-1]
+                actual_loss = actual_loss[:-1]
+
+            shuffle_in_unison_scary(learningloss_pred_loss, actual_loss)
+            
+            learningloss_pred_loss_part_1 = learningloss_pred_loss[:int(len(actual_loss)/2)]
+            learningloss_pred_loss_part_2 = learningloss_pred_loss[int(len(actual_loss)/2):]
+            actual_loss_part_1 = actual_loss[:int(len(actual_loss)/2)]
+            actual_loss_part_2 = actual_loss[int(len(actual_loss)/2):]
+            actual_pred = actual_loss_part_1 >= actual_loss_part_2
+            learningloss_pred = learningloss_pred_loss_part_1 >= learningloss_pred_loss_part_2
+            learningloss_acc = learningloss_pred == actual_pred
+            parsed_round_results['learnloss_discovered_acc'] = (learningloss_acc).sum() / float(len(learningloss_acc))
+
+
     if np.any(np.isnan(open_set_score)):
         print(f"There is {np.sum(np.isnan(open_set_score))} NaN values for {output_folder}. Replace them by the mean of remaining scores.")
         open_set_score[np.where(np.isnan(open_set_score))] = open_set_score[np.where(~np.isnan(open_set_score))].mean()
@@ -251,6 +322,11 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     parsed_round_results['our_auroc'] = our_results['auc_score']
     parsed_round_results['num_seen_classes'] = round_results['num_seen_classes']
     parsed_round_results['picked_threshold'] = picked_threshold
+
+
+    # Calculate learning loss accuracy over discovered classes.
+
+    # Calculate learning loss accuracy over all classes.
 
     # Draw scatter plot
     seen_samples = np.array(round_results['seen_samples'])
@@ -301,7 +377,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
 
     plt.scatter(scatter_x_total, scatter_y_open)
     m_open, b_open = np.polyfit(scatter_x_total, scatter_y_open, 1)
-    plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open} x + {b_open}", linestyle='-')
+    plt.plot(np.unique(scatter_x_total), np.poly1d((m_open, b_open))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_open:.4} x + {b_open:.4f}", linestyle='-')
     # plt.legend(bbox_to_anchor=(0., 0.97, 1., .102), loc='lower left',borderaxespad=0.)
     plt.legend()
 
@@ -321,7 +397,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     plt.scatter(scatter_x_total, scatter_y_correct)
     m_correct, b_correct = np.polyfit(scatter_x_total, scatter_y_correct, 1)
     plt.plot(np.unique(scatter_x_total), np.poly1d((m_correct, b_correct))(np.unique(scatter_x_total)), label=f"Best Fit Line: y = {m_correct} x + {b_correct}", linestyle='-')
-    plt.axhline(y=parsed_round_results['discovered_closed_acc'], label=f"Mean Accuracy {parsed_round_results['discovered_closed_acc']}", linestyle='--')
+    plt.axhline(y=parsed_round_results['discovered_closed_acc'], label=f"Mean Accuracy {parsed_round_results['discovered_closed_acc']:.4f}", linestyle='--')
     # plt.legend(bbox_to_anchor=(0., 0.94, 1., .102), loc='lower left', borderaxespad=0.)
     plt.legend()
 
@@ -346,7 +422,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     #                                            'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
     #                                           } # A list of dictionary
 
-def plot_round(round_results, output_folder, threshold='default', prev_dict=None, prev_round=None, round_idx=0):    
+def plot_round(round_results, output_folder, threshold='default', prev_dict=None, prev_round=None, round_idx=0, printed=True):    
     # 1: Plot ROC curve (discovered v.s. hold-out), save fig, get
         # a: float - AUROC
         # b: curve - ROC
@@ -367,9 +443,9 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
     # parsed_open_scores = parse_open_scores(round_results) # Use round_results['thresholds']
     # 5: Plot delta accuracy
     # 6: Plot query class accuracy
-    roc_results = plot_roc(round_results, output_folder=output_folder, round_idx=round_idx) # {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
-    our_results = plot_our(round_results, output_folder=output_folder, round_idx=round_idx) # {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
-    picked_threshold = plot_histo(round_results, output_folder=output_folder, round_idx=round_idx, threshold=threshold) # return picked threshold
+    roc_results = plot_roc(round_results, output_folder=output_folder, round_idx=round_idx, printed=printed) # {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
+    our_results = plot_our(round_results, output_folder=output_folder, round_idx=round_idx, printed=printed) # {'fpr' : FPR, 'tcr' : TCR, 'max_acc' : max_acc, 'auc_score' : auc_score}
+    picked_threshold = plot_histo(round_results, output_folder=output_folder, round_idx=round_idx, threshold=threshold, printed=printed) # return picked threshold
     # picked_threshold = pick_threshold(roc_results, our_results, threshold=threshold)
     results = parse_round_results(round_results,
                                   roc_results=roc_results,
@@ -377,7 +453,9 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
                                   picked_threshold=picked_threshold,
                                   output_folder=output_folder,
                                   round_idx=round_idx)
-
+    
+    results['roc_results'] = roc_results
+    results['our_results'] = our_results
     if type(prev_dict) == type(None) or type(prev_round) == type(None):
         pass
     else:
@@ -440,9 +518,19 @@ def plot_round(round_results, output_folder, threshold='default', prev_dict=None
         plt.close('all')
     return results
 
-def plot_json(json_file, output_folder, interval=1, threshold='default', printed=True):
+def plot_json(json_file, output_folder, interval=1, threshold='default', printed=True, max_round=None):
+    parsed_results_json_path = os.path.join(output_folder, "parsed.json")
+    parsed_results = None
     try:
         dictionary = json.load(open(json_file, "r"))
+        if os.path.exists(parsed_results_json_path):
+            print(f"{parsed_results_json_path} already exists.")
+            with open(parsed_results_json_path, 'rb') as f:
+                parsed_results = pickle.load(f)
+            if len(dictionary.keys()) == len(parsed_results.keys()):
+                return parsed_results
+            else:
+                print(f"But {len(parsed_results.keys())} entries smaller than {len(dictionary.keys())}")
     except:
         print(f"Wrong reading the file {json_file}")
         if printed:
@@ -455,18 +543,27 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     # 4: plot closed set accuracy over round (discovered) based on the threshold
     # 5: Plot overall accuracy based on the threshold
     # 6: Plot ROC curve over rounds on a single plot
-    if printed: print(f"Working on {output_folder}")
     sorted_keys = sorted(list(dictionary.keys()), key=lambda x: int(x)) # Sort by round
-    parsed_results = {}
+    if type(parsed_results) == type(None):
+        parsed_results = {}
+        print(f"Working on {output_folder}")
+        start_round = 0
+    else:
+        print(f"Continue working on {output_folder} from round {len(parsed_results.keys())-1}")
+        start_round = len(parsed_results.keys())-1
     output_folder_interval = os.path.join(output_folder, f'plot_every_{args.interval}_round_{threshold}_threshold')
     sorted_keys_tqdm = tqdm.tqdm(sorted_keys) if printed else sorted_keys
     for round_idx in sorted_keys_tqdm:
+        if int(round_idx) < start_round:
+            continue
+        if max_round != None and int(round_idx) > max_round:
+            break
         output_folder_round = os.path.join(output_folder_interval, round_idx)
         if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
         if int(round_idx) == 0:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx))
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx), printed=printed)
         else:
-            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[str(int(round_idx)-1)], prev_round=parsed_results[int(round_idx)-1], round_idx=int(round_idx))
+            round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=dictionary[str(int(round_idx)-1)], prev_round=parsed_results[int(round_idx)-1], round_idx=int(round_idx), printed=printed)
         parsed_results[int(round_idx)] = round_results
 
     # These are the available gadgets
@@ -480,9 +577,17 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     # parsed_round_results['num_seen_classes'] = our_results['num_seen_classes']
     # parsed_round_results['threshold'] = picked_threshold
     # Plus the class accuracy tuple (x_class, y_class) each is of size number_total_classes_to_discover
-
+    if max_round:
+        rounds_key = sorted_keys[:max_round]
+        new_parsed_results = {}
+        for round_idx in rounds_key:
+            new_parsed_results[int(round_idx)] = parsed_results[int(round_idx)]
+        parsed_results = new_parsed_results
     plot_accumulated_rounds(parsed_results, output_folder=output_folder_interval)
     plot_closed_set_accuracy(parsed_results, classes=[0,10], output_folder=output_folder_interval)
+    with open(parsed_results_json_path, "wb") as f_out:
+        pickle.dump(parsed_results, f_out, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"Writed to {parsed_results_json_path}")
     return parsed_results
 
 def plot_accumulated_rounds(parsed_results, output_folder=None):
@@ -491,7 +596,7 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
     plot_items = list(parsed_results[first_round_idx].keys())
     x = np.array(round_indices)
     for item in plot_items:
-        if item == 'class_accuracy':
+        if item in ['class_accuracy', 'our_results', 'roc_results']:
             continue
         y = np.zeros_like(x).astype('float')
         for idx, round_idx in enumerate(x):
@@ -499,14 +604,19 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
         save_path = os.path.join(output_folder, f"{item}.png")
         plt.figure(figsize=(10,10))
         axes = plt.gca()
-        if min(y) != max(y):
-            axes.set_ylim([min(y),max(y)])
+        if 'acc' == item[-3:] or 'auroc' in item:
+            axes.set_ylim([0,1])
+            plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
+            plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
+        else:
+            if min(y) != max(y):
+                axes.set_ylim([min(y),max(y)])
         if min(x) != max(x):
             axes.set_xlim([min(x),max(x)])
         plt.title(f'{item}')
         plt.xlabel("Round Index")
         plt.ylabel(f"{item}")
-
+        plt.legend()
         plt.plot(x, y, linestyle='-')            
         plt.tight_layout()
         plt.savefig(save_path)
@@ -515,7 +625,9 @@ def plot_accumulated_rounds(parsed_results, output_folder=None):
         plt.close('all')
 
 def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
-    assert "class_accuracy" in parsed_results
+    # if not "class_accuracy" in parsed_results[0]:
+    #     print(f"No closed set accuracy plotted at {output_folder}")
+    #     return
     round_indices = sorted(list(parsed_results.keys()), key=lambda x: int(x))
     x = np.array(round_indices)
     for class_idx in classes:
@@ -529,10 +641,12 @@ def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
             axes.set_ylim([0,1])
         if min(x) != max(x):
             axes.set_xlim([min(x),max(x)])
-        plt.title(f'{item}')
+        plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
+        plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
+        plt.title(f'Class {class_idx} closed set accuracy')
         plt.xlabel("Round Index")
-        plt.ylabel(f"{item}")
-
+        plt.ylabel(f"Test Accuracy")
+        plt.legend()
         plt.plot(x, y, linestyle='-')            
         plt.tight_layout()
         plt.savefig(save_path)
@@ -541,12 +655,15 @@ def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--saved_dir', default='open_active_results') # Where the log files will be saved
-    parser.add_argument('--out_dir', default='open_active_results_graph_new') # Where output of this script will be saved
+    # parser.add_argument('--saved_dir', default='open_active_results_new') # Where the log files will be saved
+    parser.add_argument('--saved_dir', default='temp_open_active_results_360') # Where the log files will be saved
+    # parser.add_argument('--saved_dir', default='open_active_results') # Where the log files will be saved
+    parser.add_argument('--out_dir', default='open_active_results_graph_new_360') # Where output of this script will be saved
     parser.add_argument('--format', default='.json') # Output file  will be saved at {name[index]}.{args.output_format}
     parser.add_argument('--interval', default=1, type=int) # Plot every [interval] rounds
     parser.add_argument('--threshold', default='default', choices=['default']) # How to pick the open set threshold.
     parser.add_argument('--multi_worker', default=0, type=int) # The number of workers to use
+    parser.add_argument('--max_round', default=401, type=int) # The number of workers to use
     args = parser.parse_args()
 
     # Output a folder for each json file
@@ -578,10 +695,11 @@ if __name__ == "__main__":
                     output_folder = os.path.join(args.out_dir, json_file[json_file.find(os.sep)+1:json_file.rfind(".")])
                     time_str = json_file.split(os.sep)[-1]
                     if args.multi_worker == 0:
-                        parsed_results = plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold)
+                        parsed_results = plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold, max_round=args.max_round)
                     else:
                         experiments.append([json_file, output_folder])
                     # json_results[time_str] = parsed_results
+
 
                 # if len(list(json_results.keys())) == 0:
                 #     # import pdb; pdb.set_trace()  # breakpoint 07109789 //
@@ -626,7 +744,7 @@ if __name__ == "__main__":
 
         def f(lst):
             json_file, output_folder = lst
-            plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold, printed=False)
+            plot_json(json_file, output_folder=output_folder, interval=args.interval, threshold=args.threshold, printed=False, max_round=args.max_round)
 
         with Pool(args.multi_worker) as p:
             p.map(f, experiments)

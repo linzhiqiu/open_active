@@ -85,7 +85,7 @@ def get_dynamic_threshold(log : list, metric='softmax', mode='weighted'):
 def train_epochs(model, dataloaders, optimizer, scheduler, criterion, target_mapping_func, device='cuda', start_epoch=0, max_epochs=-1, verbose=True):
     """Regular PyTorch training procedure: Train model using data in dataloaders['train'] from start_epoch to max_epochs-1
     """
-    assert start_epoch < max_epochs
+    assert start_epoch <= max_epochs
     avg_loss = 0.
     avg_acc = 0.
 
@@ -254,7 +254,7 @@ class Network(TrainerMachine):
                     total += 1.
             weight = total / weight
             weight = weight / weight.min() # TODO: Figure out whether or not need this min()
-
+            weight[weight > 10.] = 10.
             class_weight_info = {}
             unmap_dict = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
             for i, w_i in enumerate(weight):
@@ -530,7 +530,9 @@ class Network(TrainerMachine):
             if self.config.threshold_metric == 'softmax':
                 scores = softmax_max
             elif self.config.threshold_metric == 'entropy':
-                scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                neg_entropy = softmax_outputs*softmax_outputs.log()
+                neg_entropy[softmax_outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
@@ -553,7 +555,9 @@ class Network(TrainerMachine):
             if self.config.threshold_metric == 'softmax':
                 scores = softmax_max
             elif self.config.threshold_metric == 'entropy':
-                scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+                neg_entropy = softmax_outputs*softmax_outputs.log()
+                neg_entropy[softmax_outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
             return -scores
         return open_score_func
 
@@ -762,7 +766,9 @@ class ClusterNetwork(Network):
                 # outputs = outputs / outputs.sum(1, keepdim=True)
                 outputs = torch.nn.functional.Softmax()(outputs)
                 maxs, preds = torch.max(outputs, 1)
-                scores = (outputs*outputs.log()).sum(dim=1) # negative entropy!
+                neg_entropy = outputs*outputs.log()
+                neg_entropy[outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])

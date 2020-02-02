@@ -20,7 +20,7 @@ class LabelPicker(object):
         self._generate_new_log()
 
         self.open_active_setup = self.config.open_active_setup
-        assert self.open_active_setup in ['half', 'active', 'open']
+        # assert self.open_active_setup in ['half', 'active', 'open']
         
         # New: After reading active learning papers
         self.active_random_sampling = self.config.active_random_sampling
@@ -38,25 +38,6 @@ class LabelPicker(object):
     def _generate_new_log(self):
         # Generate new log in self.trainer_machine
         self.trainer_machine.log = []
-
-# def least_confident(outputs):
-#     softmax_outputs = F.softmax(outputs, dim=1)
-#     score, _ = torch.max(softmax_outputs, 1)
-#     return score
-
-# def most_confident(outputs):
-#     softmax_outputs = F.softmax(outputs, dim=1)
-#     score, _ = torch.max(softmax_outputs, 1)
-#     return -score
-
-# def entropy(outputs):
-#     # The negative entropy
-#     softmax_outputs = F.softmax(outputs, dim=1)
-#     entropy = (softmax_outputs*softmax_outputs.log()).sum(1) # This is the negative entropy
-#     return entropy
-
-# def random_query(outputs):
-#     return torch.rand(outputs.size(0), device=outputs.device)
 
 def highest_loss(outputs):
     _, losses = outputs
@@ -77,7 +58,7 @@ class UncertaintyMeasure(LabelPicker):
         # Each branch must consider the following branches
         if self.config.trainer in uncertainty_type_dict['learning_loss']:
             print("Using LearningLoss's uncertainty_measure")
-            assert self.config.uncertainty_measure in ['highest_loss', 'lowest_loss']
+            assert self.config.uncertainty_measure in ['highest_loss', 'lowest_loss', 'random_query']
             self.info_collector_class = LearningLossInfoCollector
             def learning_loss_measure_func(outputs):
                 network_outputs, losses = outputs
@@ -85,6 +66,8 @@ class UncertaintyMeasure(LabelPicker):
                     return -losses.view(losses.size(0)) # Higher the loss, more uncertain score
                 elif self.config.uncertainty_measure == 'lowest_loss':
                     return losses.view(losses.size(0))
+                elif self.config.uncertainty_measure == 'random_query':
+                    return torch.rand_like(losses.view(losses.size(0)))
             self.measure_func = learning_loss_measure_func
         elif self.config.trainer in uncertainty_type_dict['osdn']:
             assert self.config.uncertainty_measure in ['least_confident', 'most_confident', 'random_query', 'entropy']
@@ -182,25 +165,36 @@ class UncertaintyMeasure(LabelPicker):
                                   self.model,
                                   device=self.config.device
                               )
+        active_scores = active_scores - active_scores.min()
+        active_scores = active_scores / active_scores.max()
 
         open_collector = OpenCollector(self.trainer_machine)
 
-        if self.open_active_setup in ['half', 'open']:
+        if self.open_active_setup in ['half', 'open', 'hr100', 'hr200', 'hr300', 'hr400']:
             open_scores = open_collector.gather_open_info(
                               dataloader,
                               device=self.config.device
                           )
+            open_scores = open_scores - open_scores.min()
+            open_scores = open_scores / open_scores.max()
 
         if self.open_active_setup == 'active':
             scores = active_scores
         elif self.open_active_setup == 'open':
             scores = -open_scores
         elif self.open_active_setup == 'half':
-            active_scores = active_scores - active_scores.min()
-            active_scores = active_scores / active_scores.max()
-            open_scores = open_scores - open_scores.min()
-            open_scores = open_scores / open_scores.max()
             scores = active_scores-open_scores
+        elif self.open_active_setup in ['hr100', 'hr200', 'hr300', 'hr400']:
+            if self.trainer_machine.round < int(self.open_active_setup[2:]):
+                print(f"Smaller than {int(self.open_active_setup[2:])}. Use random query.")
+                scores = torch.rand_like(active_scores)
+            else:
+                scores = active_scores-open_scores
+        elif self.open_active_setup in ['ar100', 'ar200', 'ar300']:
+            if self.trainer_machine.round < int(self.open_active_setup[2:]):
+                scores = torch.rand_like(active_scores)
+            else:
+                scores = active_scores
 
         sorted_scores, rankings = torch.sort(scores, descending=False)
         rankings = list(rankings[:self.config.budget])
@@ -316,7 +310,7 @@ class CoresetMeasure(LabelPicker):
         unlabel_to_label_dist = unlabel_to_label_dist/dist_max
         unlabel_to_unlabel_dist = unlabel_to_unlabel_dist/dist_max
 
-        if self.open_active_setup in ['half']:
+        if self.open_active_setup in ['half', 'hr100', 'hr200', 'hr300', 'hr400', 'open']:
             open_collector = OpenCollector(self.trainer_machine)
             open_scores = open_collector.gather_open_info(
                               unlabeled_dataloader,
@@ -324,15 +318,18 @@ class CoresetMeasure(LabelPicker):
                           )
             open_scores = open_scores - open_scores.min()
             open_scores = open_scores / open_scores.max()
-        elif self.open_active_setup in ['open']:
-            raise NotImplementedError()
         else:
             open_scores = None
 
         sorted_dist, rankings = torch.sort(unlabel_to_label_dist, descending=True)
-        if self.open_active_setup in ['half']:
+        if self.open_active_setup in ['half', 'hr100', 'hr200', 'hr300', 'hr400', 'open']:
             score_ranking_pair = [(int(r), float(sorted_dist[i]), float(open_scores[r])) for i, r in enumerate(rankings)]
-            score_ranking_pair.sort(key=lambda x: x[1]+x[2], reverse=True)
+            if self.open_active_setup == 'open':
+                score_ranking_pair.sort(key=lambda x: x[2], reverse=True)
+            elif self.open_active_setup in ['hr100', 'hr200', 'hr300',] and self.trainer_machine.round < int(self.open_active_setup[2:]):
+                random.shuffle(score_ranking_pair)
+            else:
+                score_ranking_pair.sort(key=lambda x: x[1]+x[2], reverse=True)
         else:
             score_ranking_pair = [(int(r), float(sorted_dist[i]), 0) for i, r in enumerate(rankings)]
         
@@ -349,7 +346,14 @@ class CoresetMeasure(LabelPicker):
             for i, (r, s, o) in enumerate(score_ranking_pair):
                 min_score = min(s, float(unlabel_to_unlabel_dist[real_idx, r]))
                 score_ranking_pair_new.append((r, min_score, o))
-            score_ranking_pair_new.sort(key=lambda x: x[1]+x[2], reverse=True)
+            if self.open_active_setup in ['half'] or (self.open_active_setup in ['hr100','hr200','hr300', 'hr400'] and self.trainer_machine.round >= int(self.open_active_setup[2:])):
+                score_ranking_pair_new.sort(key=lambda x: x[1]+x[2], reverse=True)
+            elif self.open_active_setup in ['active'] or (self.open_active_setup in ['ar100','ar200','ar300'] and self.trainer_machine.round >= int(self.open_active_setup[2:])):
+                score_ranking_pair_new.sort(key=lambda x: x[1], reverse=True)
+            elif self.open_active_setup in ['open']:
+                score_ranking_pair_new.sort(key=lambda x: x[2], reverse=True)
+            else:
+                pass # Keep it random shuffled
             score_ranking_pair = score_ranking_pair_new
         return t_train, t_classes
 

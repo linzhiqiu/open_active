@@ -24,7 +24,31 @@ def break_if_too_long(name, split=80):
     else:
         return name
 
-def plot_curves(results, folder=None, mode='roc', open_set='hold_out', sorted_key='auc_score'):
+def paper_version(name):
+    if "icalr_softmax" in name:
+        return "Softmax (Prototypical)"
+    elif "icalr_entropy" in name:
+        return "Entropy (Prototypical)"
+    elif "icalr_osdn_modified" in name:
+        return "Openmax No Revising (Prototypical)"
+    elif "icalr_osdn" in name:
+        return "Openmax (Prototypical)"
+    elif "icalr_binary" in name:
+        return "Binary Softmax (Prototypical)"
+    elif "network_softmax" in name:
+        return "Softmax"
+    elif "network_entropy" in name:
+        return "Entropy"
+    elif "osdn_modified" in name:
+        return "Openmax No Revising"
+    elif "osdn" in name:
+        return "Openmax"
+    elif "sigmoid" in name:
+        return "Sigmoid"
+    else:
+        raise NotImplementedError()
+
+def plot_curves(results, folder=None, mode='roc', open_set='hold_out', sorted_key='auc_score', use_for_paper=False):
     assert folder != None
     save_path = os.path.join(folder, mode+"_"+open_set+".png")
     plt.figure(figsize=(10,10))
@@ -46,15 +70,50 @@ def plot_curves(results, folder=None, mode='roc', open_set='hold_out', sorted_ke
     sorted_keys = sorted(list(results.keys()), key=lambda x : results[x][sorted_key], reverse=True)
     for key in sorted_keys:
         # plot = plot_xy(fpr, tpr, x_axis="False Positive Rate", y_axis="True Positive Rate", title=title)
-        label_name = key+f"_{sorted_key}_"+str(results[key][sorted_key])
+        label_name = key+f"_{sorted_key}_"+f"{results[key][sorted_key]:.4f}"
         new_label_name = break_if_too_long(label_name, split=80)
         plt.plot(results[key]['fpr'], results[key][y_axis_key], label=new_label_name, linestyle='-')
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
+    plt.legend(bbox_to_anchor=(0., 1.05, 1., .102), loc='lower left',
                ncol=1, mode="expand", borderaxespad=0.)
         
-    plt.tight_layout()
+    plt.tight_layout(pad=1.0)
     plt.savefig(save_path)
     print(f"Fig save to {save_path}")
+
+    if use_for_paper:
+        plt.figure(figsize=(10,10))
+        # plt.rc('font', size=20)
+        axes.set_ylim([0,1])
+        axes.set_xlim([0,1])
+        if mode == 'zhiqiu':
+            plt.title(f"GOSCR curve plot", fontsize=22)
+        else:
+            plt.title(f'ROC curve plot', fontsize=22)
+        print("Print for paper purpose")
+        if mode == 'roc':
+            plt.xlabel("False Positive Rate (Closed set examples classified as open set)", fontsize=15)
+            plt.ylabel("True Positive Rate (Open set example classified as open set)", fontsize=15)
+            y_axis_key = 'tpr'
+        elif mode in ['oscr','zhiqiu']:
+            axes.set_xscale('log')
+            axes.autoscale(enable=True, axis='x', tight=True)
+            plt.xlabel("False Positive Rate (Open set examples classified as closed set)", fontsize=15)
+            plt.ylabel("Correct Classification Rate (Closed set examples classified into correct class)", fontsize=15)
+            y_axis_key = 'tcr'
+        sorted_keys = sorted(list(results.keys()), key=lambda x : results[x][sorted_key], reverse=True)
+        for key in sorted_keys:
+            # plot = plot_xy(fpr, tpr, x_axis="False Positive Rate", y_axis="True Positive Rate", title=title)
+            label_name = key+f"_{sorted_key}_"+f"{results[key][sorted_key]:.4f}"
+            new_label_name = f"AUC ("+f"{results[key][sorted_key]:.4f}): " + paper_version(label_name)
+            plt.plot(results[key]['fpr'], results[key][y_axis_key], label=new_label_name, linestyle='-')
+        plt.legend(loc='upper left',
+                   borderaxespad=0., fontsize=12)
+        # plt.legend(fontsize=22)
+        plt.tight_layout()
+        save_path_paper = os.path.join(folder, mode+"_"+open_set+"_paper.png")
+        plt.savefig(save_path_paper)
+        print(f"Fig save to {save_path_paper}")
+        plt.close("all")
 
 def save_scores(results, folder=None, mode='roc', open_set='hold_out', sorted_key="auc_score"):
     assert folder != None
@@ -267,11 +326,12 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--saved_dir', default='first_round_thresholds') # Where the log files will be saved
+    # parser.add_argument('--saved_dir', default='first_round_thresholds') # Where the log files will be saved
+    parser.add_argument('--saved_dir', default='temp_first_round') # Where the log files will be saved
     parser.add_argument('--format', default='.json') # Output file  will be saved at {name[index]}.{args.output_format}
     parser.add_argument('--mode', default='roc', choices=['roc', 'oscr', 'zhiqiu'])
     parser.add_argument('--open_set', default='hold_out', choices=['hold_out', 'unseen', 'all']) # what are considered as open set
-    # parser.add_argument('--index', default=0, type=int, help='The index of the accuracy')
+    parser.add_argument('--use_for_paper', default=1, type=int, help='If set to 1, use the names mentioned in paper.')
     args = parser.parse_args()
 
     # Require folder structure:
@@ -333,7 +393,7 @@ if __name__ == "__main__":
             method_str = method_folder.split(os.sep)[-2]
             method_results[method_str] = best_hyper_result
 
-        plot_curves(method_results, folder=dataset_folder, mode=args.mode, open_set=args.open_set, sorted_key=sorted_key)
+        plot_curves(method_results, folder=dataset_folder, mode=args.mode, open_set=args.open_set, sorted_key=sorted_key, use_for_paper=args.use_for_paper)
         save_scores(method_results, folder=dataset_folder, mode=args.mode, open_set=args.open_set, sorted_key=sorted_key)
         sorted_keys_method = sorted(list(method_results.keys()), key=lambda x: method_results[x][sorted_key])
 

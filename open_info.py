@@ -19,7 +19,7 @@ class OpenCollector(object):
         '''
         open_score_func = self.trainer_machine.get_open_score_func() #May register a handle object
         pbar = tqdm(dataloader, ncols=80)
-        # Score each examples in the unlabeled pool
+        # Score each  examples in the unlabeled pool
         scores = torch.Tensor().to(device)
         with torch.no_grad():
             for batch, data in enumerate(pbar):

@@ -156,12 +156,12 @@ learnloss_args.add_argument('--learning_loss_start_epoch',
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')
 osdn_args.add_argument('--weibull_tail_size',
                        default='fixed_20',
-                       choices=['fixed_20'],
+                       choices=['fixed_20','fixed_50'],
                        help='How to fit the weibull distribution. Default is using the largest 20 (or fewer) per category, as in official OSDN repo.'
                        )
 osdn_args.add_argument('--alpha_rank',
                        default='fixed_10',
-                       choices=['fixed_5', 'fixed_10','fixed_20', 'fixed_40'],
+                       choices=['fixed_5', 'fixed_2', 'fixed_10','fixed_20', 'fixed_40'],
                        help='The alpha rank. Default is using the largest 10 (or fewer) per category as in official OSDN repo.'
                        )
 osdn_args.add_argument('--osdn_eval_threshold',
@@ -316,7 +316,7 @@ setting_arg.add_argument('--init_mode',
                          default='default',
                          choices=['default', 'no_learning_5K_5_open_classes', 'no_learning_5_open_classes', 'no_learning_5K_50_open_classes', 'no_learning_50_open_classes',  'open_set_leave_one_out', 'open_set_leave_one_out_new', 'open_active_1', 'open_active_2', 'many_shot_1','many_shot_2','many_shot_3', 'few_shot_1', 'few_shot_3', 'no_learning', 'no_learning_10K', 'learning_loss', 'learning_loss_start_random', 'learning_loss_start_random_tuning',
                                   'cifar100_open_50', 'cifar100_open_80', 'cifar100_open_20',
-                                  'no_learning_9K_randomsample', 'no_learning_9K'],
+                                  'no_learning_9K_randomsample', 'no_learning_9K', 'no_learning_8280_randomsample', 'no_learning_8280', 'open_active_0'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
@@ -326,7 +326,9 @@ exp_vs_acc_arg.add_argument('--label_picker',
                             )
 exp_vs_acc_arg.add_argument('--open_active_setup', # If label_picker is open_active
                             default='active',
-                            choices=['half', 'active', 'open'], # half is half of each score (normalize to [0..1] first).
+                            choices=['half', 'active', 'open', 
+                                     'hr100', 'hr200', 'hr300', 'hr400',
+                                     'ar100', 'ar200', 'ar300'], # half is half of each score (normalize to [0..1] first).
                             )
 
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
@@ -389,7 +391,6 @@ pseudo_open_arg.add_argument('--openmax_meta_learn',
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
-
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--log_everything', type=str2bool, default=False, 
                       help='Log all results.')
@@ -419,6 +420,12 @@ misc_arg.add_argument('--save_gan_output', action='store_true', default=False,
                       help='If true, save to gan_output/')
 misc_arg.add_argument('--use_random_seed', action='store_true', default=False,
                       help='If true, use a random random seed')
+misc_arg.add_argument('--save_first_round_model', action='store_true', default=False,
+                      help='If true, we save the model at first round.')
+misc_arg.add_argument('--log_first_round_model', action='store_true', default=False,
+                      help='If true, we use the model saved at first round.')
+misc_arg.add_argument('--log_first_round_model', action='store_true', default=False,
+                      help='If true, we use the model saved at first round.')
 
 def get_config():
     config, unparsed = parser.parse_known_args()
