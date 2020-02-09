@@ -530,24 +530,6 @@ class Network(TrainerMachine):
             return preds
         return open_set_prediction
 
-    # def _get_open_set_crit_func(self):
-    #     print('Ignore open set samples. TODO: Define a better criterion')
-    #     def open_set_criterion(outputs, labels):
-    #         # outputs = torch.where(
-    #         #               labels > -1, 
-    #         #               outputs,
-    #         #               torch.LongTensor([0]).expand_as(outputs).to(outputs.device)
-    #         #           )
-    #         # outputs = outputs.nonzero()
-    #         # labels = torch.where(
-    #         #               labels > -1, 
-    #         #               labels,
-    #         #               torch.LongTensor([0]).expand_as(labels).to(outputs.device)
-    #         #           )
-    #         # labels = labels.nonzero()
-    #         return nn.CrossEntropyLoss()(outputs, labels)
-    #     return None
-
     def _train_mode(self):
         self.model.train()
 
@@ -557,7 +539,7 @@ class Network(TrainerMachine):
     def _get_network_model(self):
         """ Get the regular softmax network model
         """
-        model = getattr(models, self.config.arch)()
+        model = getattr(models, self.config.arch)(last_relu=False)
         if self.config.pretrained != None:
             state_dict = self._get_pretrained_model_state_dict()
             model.load_state_dict(state_dict)
@@ -865,6 +847,81 @@ class SigmoidNetwork(Network):
             return preds
         return open_set_prediction
 
+class BinarySoftmaxNetwork(Network):
+    def __init__(self, *args, **kwargs):
+        super(BinarySoftmaxNetwork, self).__init__(*args, **kwargs)
+        # Before everything else, remove the relu from layer4
+        
+        if self.pseudo_open_set == None:
+            self.network_eval_threshold = self.config.network_eval_threshold
+        else:
+            self.network_eval_threshold = None
+
+        self.info_collector_class = lambda *args, **kwargs: SigmoidInfoCollector(*args, **kwargs)
+
+    def _get_network_model(self):
+        """ Get the regular softmax network model
+        """
+        model = getattr(models, self.config.arch)(last_relu=False)
+        if self.config.pretrained != None:
+            state_dict = self._get_pretrained_model_state_dict()
+            model.load_state_dict(state_dict)
+            del state_dict
+        else:
+            print("Using random initialized model")
+        return model.to(self.device)
+
+    def _get_open_set_pred_func(self):
+        assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
+        if self.config.network_eval_mode == 'threshold':
+            threshold = self.config.network_eval_threshold
+        elif self.config.network_eval_mode == 'dynamic_threshold':
+            assert type(self.log) == list
+            if len(self.log) == 0:
+                # First round, use default threshold
+                threshold = self.config.network_eval_threshold
+                print(f"First round. Use default threshold {threshold}")
+            else:
+                try:
+                    threshold = get_dynamic_threshold(self.log, metric=self.config.threshold_metric, mode='weighted')
+                except NoSeenClassException:
+                    # Error when no new instances from seen class
+                    threshold = self.config.network_eval_threshold
+                    print(f"No seen class instances. Threshold set to {threshold}")
+                except NoUnseenClassException:
+                    threshold = self.config.network_eval_threshold
+                    print(f"No unseen class instances. Threshold set to {threshold}")
+                else:
+                    print(f"Threshold set to {threshold} based on all existing instances.")
+        elif self.config.network_eval_mode in ['pseuopen_threshold']:
+            assert hasattr(self, 'pseuopen_threshold')
+            print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
+            threshold = self.pseuopen_threshold
+
+        def open_set_prediction(outputs, inputs=None):
+            sigmoid_outputs = nn.Sigmoid()(outputs)
+            sigmoid_max, sigmoid_preds = torch.max(sigmoid_outputs, 1)
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            # if self.config.threshold_metric == 'softmax':
+            #     scores = softmax_max
+            # elif self.config.threshold_metric == 'entropy':
+            #     scores = (softmax_outputs*softmax_outputs.log()).sum(dim=1) # negative entropy!
+            scores = sigmoid_max
+
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += softmax_max.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
+            
+            preds = torch.where(scores < threshold,
+                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                softmax_preds)
+            return preds
+        return open_set_prediction
+
 
 class OSDNNetwork(Network):
     def __init__(self, *args, **kwargs):
@@ -872,6 +929,8 @@ class OSDNNetwork(Network):
         # regular softmax network. The difference occurs during the eval stage.
         # So this is subclass from Network class, but has the eval function overwritten.
         super(OSDNNetwork, self).__init__(*args, **kwargs)
+        # self.use_feature_before_fc = self.config.trainer in ['osdn_fc', 'osdn_modified_fc']
+
         assert self.config.threshold_metric == 'softmax'
 
         self.div_eu = self.config.div_eu
@@ -953,8 +1012,8 @@ class OSDNNetwork(Network):
                                       pseudo_open_model,
                                       curr_train_set,
                                       pseudo_seen_classes,
-                                      verbose=False,
-                                      # verbose=True,
+                                      # verbose=False,
+                                      verbose=True,
                                       training_features=training_features # If not None, can save time by not recomputing it
                                   )
                     if self.pseudo_open_set_metric == 'weighted':
@@ -1004,6 +1063,12 @@ class OSDNNetwork(Network):
         else:
             pbar = train_loader
 
+        # cur_features = []
+        # if self.use_feature_before_fc:
+        #     def forward_hook_func(self, inputs, outputs):
+        #         cur_features.append(inputs[0])
+        #     handle = self.model.fc.register_forward_hook(forward_hook_func)
+
         for batch, data in enumerate(pbar):
             inputs, labels = data
             
@@ -1012,8 +1077,14 @@ class OSDNNetwork(Network):
 
             with torch.set_grad_enabled(False):
                 outputs = model(inputs)
+
+                cur_features = []
                 _, preds = torch.max(outputs, 1)
                 correct_indices = preds == labels.data
+
+                # if self.use_feature_before_fc:
+                #     outputs = cur_features[0]
+
                 for i in range(inputs.size(0)):
                     if mav_features_selection == 'correct':
                         if not correct_indices[i]:
@@ -1042,6 +1113,10 @@ class OSDNNetwork(Network):
             print("These classes has no correct feature. So we use all inputs.")
             print(none_correct_classes)
             features_dict = new_features_dict
+
+        # if self.use_feature_before_fc:
+        #     handle.remove()
+
         return features_dict
 
     def _gather_weibull_distribution(self, training_features, distance_metric='eucos', weibull_tail_size=20):
@@ -1077,7 +1152,7 @@ class OSDNNetwork(Network):
                 weibull[index]['weibull_model'] = mr
         return weibull
 
-    def compute_open_max(self, outputs):
+    def compute_open_max(self, outputs, features=None):
         """ Return (openset_score, openset_preds)
         """
         alpha_weights = [((self.alpha_rank+1) - i)/float(self.alpha_rank) for i in range(1, self.alpha_rank+1)]
@@ -1086,6 +1161,9 @@ class OSDNNetwork(Network):
         
         open_scores = torch.zeros(outputs.size(0)).to(outputs.device)
         for batch_i in range(outputs.size(0)):
+            # if self.use_feature_before_fc:
+            #     batch_i_output = features[batch_i]
+            # else:
             batch_i_output = outputs[batch_i]
             batch_i_rank = softmax_rank[batch_i]
             
@@ -1261,7 +1339,6 @@ class OSDNNetworkModified(OSDNNetwork):
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
-
 
 def get_acc_from_performance_dict(dict):
     result_dict = {}

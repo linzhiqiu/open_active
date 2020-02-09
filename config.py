@@ -58,12 +58,20 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
                           choices=['network',
+                                   'binary_softmax', # Softmax network train but use sigmoid function
+                                   'icalr',
+                                   'icalr_learning_loss',
+                                   'icalr_binary_softmax',
                                    'sigmoid', # Use 1 v.s. rest sigmoid network instead of softmax.
                                    'c2ae',
                                    'gan',
                                    'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
                                    'osdn_modified', # Open Set Deep Network. Without modifying the seen class score.
+                                   'icalr_osdn_neg', # Open Set Deep Network negative scores
+                                   'icalr_osdn_modified_neg', # Open Set Deep Network. Without modifying the seen class score. Negative score
+                                   'icalr_osdn',
+                                   'icalr_osdn_modified',
                                    'network_learning_loss'
                           ],
                           )
@@ -99,6 +107,14 @@ sigmoid_args.add_argument('--sigmoid_train_mode',
                           choices=['sum', 'mean'], 
                           help="Sum is to add all class score (e.g. logsigmoid or 1-logsigmoid). Mean is to take average of all classes for each example")
 
+
+icalr_binary_softmax_args = add_argument_group('icalr_binary_softmax_train_mode Trainer Machine Param.')
+icalr_binary_softmax_args.add_argument('--icalr_binary_softmax_train_mode',
+                                        default='default',
+                                        choices=['default', 'fixed_variance'], 
+                                        help="Default is to use variance of distances to each class mean. Fixed variance use 1.")
+
+
 c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
 c2ae_args.add_argument('--c2ae_train_mode',
                           default='default',
@@ -121,7 +137,7 @@ c2ae_args.add_argument('--c2ae_train_in_eval_mode',
 learnloss_args = add_argument_group('Learning Loss Param.')
 learnloss_args.add_argument('--learning_loss_train_mode',
                             default='default',
-                            choices=['default'],
+                            choices=['default', 'mse'],
                             help="Learning loss config")
 learnloss_args.add_argument('--learning_loss_lambda',
                             default=1.0, type=float,
@@ -131,7 +147,10 @@ learnloss_args.add_argument('--learning_loss_margin',
                             help="Learning loss margin")
 learnloss_args.add_argument('--learning_loss_stop_epoch',
                             default=120, type=int,
-                            help="Learning loss stop propagation epoch")
+                            help="Learning loss stop propagation (to target model) epoch")
+learnloss_args.add_argument('--learning_loss_start_epoch',
+                            default=0, type=int,
+                            help="Learning loss start working epoch")
 
 
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')
@@ -212,6 +231,30 @@ cluster_args.add_argument('--cluster_level',
                           default='after_fc', choices=['after_fc', 'before_fc'],
                           help='Where to take the feature')
 
+icalr_args = add_argument_group('ICaLR Network Trainer Machine Param.')
+icalr_args.add_argument('--icalr_mode',
+                          default='default',
+                          choices=['default'],
+                          help='The ICALR training mode.')
+icalr_args.add_argument('--icalr_exemplar_size',
+                          default=None, type=int,
+                          help='Size of exemplar set for each class. None then no limit.')
+icalr_args.add_argument('--icalr_retrain_criterion',
+                          default='round', choices=['round', 'sample', 'class'],
+                          help='Retrain network criterion.')
+icalr_args.add_argument('--icalr_strategy',
+                          default=None, choices=['naive', 'proto'],
+                          help='Naive just simply trains new weight vector. Proto use prototype as activation score.')
+icalr_args.add_argument('--icalr_naive_strategy',
+                          default=None, choices=['fixed', 'finetune'],
+                          help='For naive strategy: Fixed is fixing weight of network representation. Finetune just try the entire network.')
+icalr_args.add_argument('--icalr_proto_strategy',
+                          default=None, choices=['default'],
+                          help='For proto strategy: Only default mode available. Strictly follows the ICALR paper if there is budget limit.')
+icalr_args.add_argument('--icalr_retrain_threshold',
+                          default=10, type=int,
+                          help='Retrain network threshold (e.g. 10 classes, 10 rounds, 200 samples.)')
+
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
                           choices=['alexnet', 'vgg16', 'resnet101', 'ResNet50', 
@@ -269,13 +312,13 @@ open_act_arg.add_argument('--budget',
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
                          default='default',
-                         choices=['default', 'open_set_leave_one_out', 'no_learning', 'no_learning_10K', 'learning_loss'],
+                         choices=['default', 'no_learning_5K_5_open_classes', 'no_learning_5_open_classes', 'no_learning_5K_50_open_classes', 'no_learning_50_open_classes',  'open_set_leave_one_out', 'open_set_leave_one_out_new', 'open_active_1', 'open_active_2', 'many_shot_1','many_shot_2','many_shot_3', 'few_shot_1', 'few_shot_3', 'no_learning', 'no_learning_10K', 'learning_loss', 'learning_loss_start_random', 'learning_loss_start_random_tuning'],
                          help="How to select the initial training/hold-out open set")
 
 exp_vs_acc_arg = add_argument_group('Exploitation v.s. accuracy Param.')
 exp_vs_acc_arg.add_argument('--label_picker',
                             default='uncertainty_measure',
-                            choices=['uncertainty_measure'],
+                            choices=['uncertainty_measure', 'coreset_measure'],
                             )
 
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
@@ -286,16 +329,25 @@ uncertainty_sampling_arg.add_argument('--uncertainty_measure',
                                                'random_query',
                                                'margin_sampling',
                                                'entropy',
-                                               'learning_loss'],
+                                               'highest_loss',
+                                               'lowest_loss'],
                                       )
 uncertainty_sampling_arg.add_argument('--active_random_sampling',
-                                      default=None,
+                                      default='none',
                                       type=str,
                                       choices=['fixed_10K', # As in learning the loss paper
                                                '1_out_of_5',  # 1/5 of the unlabled pool. Or budget if smaller than budget.
                                                'none',
                                               ],
                                       help='If true, use the random sampling scheme in "Learning Loss Active Learning" paper',
+                                      )
+uncertainty_sampling_arg.add_argument('--coreset_measure',
+                                      default='k_center_greedy',
+                                      choices=['k_center_greedy'],
+                                      )
+uncertainty_sampling_arg.add_argument('--coreset_feature',
+                                      default='before_fc',
+                                      choices=['before_fc', 'after_fc'],
                                       )
 
 pseudo_open_arg = add_argument_group('Pseudo-open set hyper tuning Param.')
@@ -325,12 +377,14 @@ pseudo_open_arg.add_argument('--pseudo_same_network',
                             )
 pseudo_open_arg.add_argument('--openmax_meta_learn',
                              default=None,
-                             choices=['default', 'advanced', 'morealpha', 'open_set'],
+                             choices=['default', 'advanced', 'morealpha', 'open_set', 'toy'],
                              help='The meta learning setting for OpenMax/Modified OpenMax algorithm when using pseudo-open classes'
                             )
 
 
 misc_arg = add_argument_group('Misc.')
+misc_arg.add_argument('--log_everything', type=str2bool, default=False, 
+                      help='Log all results.')
 misc_arg.add_argument('--log_first_round', type=str2bool, default=False, #default='first_round.txt'
                       help='If True, log first round results to first_round/')
 misc_arg.add_argument('--log_first_round_thresholds', type=str2bool, default=False, #default='first_round.txt'
@@ -355,6 +409,8 @@ misc_arg.add_argument('--verbose', action='store_true', default=False,
                       help='chatty')
 misc_arg.add_argument('--save_gan_output', action='store_true', default=False, 
                       help='If true, save to gan_output/')
+misc_arg.add_argument('--use_random_seed', action='store_true', default=False,
+                      help='If true, use a random random seed')
 
 def get_config():
     config, unparsed = parser.parse_known_args()

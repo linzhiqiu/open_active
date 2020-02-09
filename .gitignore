@@ -16,4 +16,5 @@ old_c2ae_results/*
 .*.sh
 */.*
 learning_loss/*
+open_active_results/
 
