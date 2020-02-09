@@ -24,7 +24,45 @@ from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrin
 from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
 # from vector import clamp_to_unit_sphere
 SAVE_FIG_EVERY_EPOCH = 500
-def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32'):
+
+class NMPicker:
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self.iter_counter = iter(dataloader)
+        self.batch_data, self.batch_label = self._get_new_batch()
+        self.batch_index = 0
+        self.batch_size = dataloader.batch_size
+    
+    def _get_new_batch(self):
+        """
+        Get the next batch of data, start over from the begining if needed
+        """
+        try:
+            data, label = next(self.iter_counter)
+        except StopIteration:
+            self.iter_counter = iter(self.dataloader)
+            data, label = next(self.iter_counter)
+        return data, label
+
+    def get_non_match_images(self, labels):
+        """
+        Return a batch of images with different label in labels
+        returning dimension: N*C*H*W
+        """
+        results = []
+        result_labels = []
+        for cur_label in labels:
+            while cur_label == self.batch_label[self.batch_index]:  # See if the label matches
+                self.batch_index += 1
+                if self.batch_index >= self.batch_size:
+                    self.batch_index = 0
+                    self.batch_data, self.batch_label = self._get_new_batch()
+            results.append(self.batch_data[self.batch_index])
+            result_labels.append(self.batch_label[self.batch_index])
+        return torch.stack(results, dim=0).cuda()
+
+
+def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32', new_nonmatch=True):
     assert start_epoch < max_epochs
     avg_loss = 0.
     avg_match_loss = 0.
@@ -36,6 +74,7 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
     #                       'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']
     if 'default' in train_mode:
         nonmatch_ratio = 1.-alpha
+        print("C2AE using 1-alpha")
     else:
         nonmatch_ratio = alpha-1.
 
@@ -71,6 +110,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                 pbar = tqdm(dataloaders[phase], ncols=80)
             else:
                 pbar = dataloaders[phase]
+            
+            nmpicker = NMPicker(dataloaders[phase])
 
             for batch, data in enumerate(pbar):
                 inputs, labels = data
@@ -87,7 +128,12 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                     perm = torch.multinomial(dist,1).reshape(-1)
                     nm_labels = torch.remainder(labels + perm + 1, num_classes)
                     nonmatch_outputs = autoencoder(inputs, nm_labels)
-                    nonmatch_loss = criterion(nonmatch_outputs, inputs)
+
+                    if new_nonmatch: # the paper implementation
+                        nonmatch_target = nmpicker.get_non_match_images(labels)
+                        nonmatch_loss = criterion(nonmatch_outputs, nonmatch_target)
+                    else:  # the original implementation
+                        nonmatch_loss = criterion(nonmatch_outputs, inputs)
 
                     matched_outputs = autoencoder(inputs, labels)
                     match_loss = criterion(matched_outputs, inputs)
