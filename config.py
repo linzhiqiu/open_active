@@ -424,8 +424,6 @@ misc_arg.add_argument('--save_first_round_model', action='store_true', default=F
                       help='If true, we save the model at first round.')
 misc_arg.add_argument('--log_first_round_model', action='store_true', default=False,
                       help='If true, we use the model saved at first round.')
-misc_arg.add_argument('--log_first_round_model', action='store_true', default=False,
-                      help='If true, we use the model saved at first round.')
 
 def get_config():
     config, unparsed = parser.parse_known_args()
