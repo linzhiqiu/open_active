@@ -1,0 +1,1 @@
+python train.py CIFAR100 --verbose True --log_first_round_thresholds True --init_mode open_set_leave_one_out --writer False --save_ckpt False --data_path ./data --trainer c2ae --batch 64 --arch classifier32 --lr 0.0003 --epochs 150 --uncertainty_measure least_confident --optim adam --c2ae_alpha 0.7 --c2ae_train_mode default;
