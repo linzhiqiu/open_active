@@ -42,7 +42,7 @@ class NMPicker:
         except StopIteration:
             self.iter_counter = iter(self.dataloader)
             data, label = next(self.iter_counter)
-        return data, label
+        return data.cuda(), label.cuda()
 
     def get_non_match_images(self, labels):
         """
