@@ -16,11 +16,6 @@ def add_argument_group(name):
 
 parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Active Algorithm')
 
-graphite_args = add_argument_group('Graphite Usage')
-graphite_args.add_argument('--graphite',
-                           default=False, type=str2bool,
-                           help='Enable Graphite.')
-
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data', 
                           default="CIFAR100",

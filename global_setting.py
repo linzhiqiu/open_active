@@ -72,7 +72,7 @@ INIT_TRAIN_SET_CONFIG = {
         'default' : {
             'num_init_classes' : 40,
             'sample_per_class' : 12, # initially 40 x 12 = 480 samples
-            'num_open_classes' : 20, # So num_unseen_classes = 100 - 30 - 20 = 50
+            'num_open_classes' : 20, # So num_undiscovered_classes = 100 - 30 - 20 = 50
             'use_random_classes' : False
         },
         'open_set_leave_one_out' : {
@@ -246,20 +246,20 @@ INIT_TRAIN_SET_CONFIG = {
         'learning_loss' : {
             'num_init_classes' : 10,
             'sample_per_class' : 100, # initially 40 x 12 = 480 samples
-            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'num_open_classes' : 0, # So num_undiscovered_classes = 10 - 10 = 0
             'use_random_classes' : False
         },
         'learning_loss_start_random' : {
             'num_init_classes' : 10,
             'sample_per_class' : 100,
-            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'num_open_classes' : 0, # So num_undiscovered_classes = 10 - 10 = 0
             'use_random_classes' : False,
             'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
         },
         'learning_loss_start_random_tuning' : {
             'num_init_classes' : 10,
             'sample_per_class' : 100,
-            'num_open_classes' : 0, # So num_unseen_classes = 10 - 10 = 0
+            'num_open_classes' : 0, # So num_undiscovered_classes = 10 - 10 = 0
             'use_random_classes' : False,
             'use_random_samples' : True, # sample size at first is num_init_classes * sample_per_class
         },

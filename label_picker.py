@@ -31,7 +31,7 @@ class LabelPicker(object):
     def load_checkpoint(self, checkpoint):
         raise NotImplementedError()
 
-    def select_new_data(self, s_train, seen_classes):
+    def select_new_data(self, discovered_samples, discovered_classes):
         # Require: Update the self.trainer_machine.log in each call
         raise NotImplementedError()
 
@@ -124,19 +124,19 @@ class UncertaintyMeasure(LabelPicker):
     def load_checkpoint(self, checkpoint):
         pass
 
-    def select_new_data(self, s_train, seen_classes):
+    def select_new_data(self, discovered_samples, discovered_classes):
         self.model = self.trainer_machine.model
-        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
+        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
 
-        unlabeled_pool = self.train_instance.query_samples.difference(s_train)
+        unlabeled_pool = self.train_instance.query_samples.difference(discovered_samples)
         unlabeled_pool = list(unlabeled_pool)
-        unseen_classes = self.train_instance.query_classes.difference(seen_classes)
+        undiscovered_classes = self.train_instance.query_classes.difference(discovered_classes)
         if len(unlabeled_pool) < self.config.budget:
             print("Remaining data is fewer than the budget constraint. Label all.")
-            return unlabeled_pool, unseen_classes
+            return unlabeled_pool, undiscovered_classes
         elif self.config.budget == 0:
             print("No label budget")
-            return set(), seen_classes
+            return set(), discovered_classes
 
         if self.active_random_sampling == 'fixed_10K':
             if len(unlabeled_pool) > 10000:
@@ -157,7 +157,7 @@ class UncertaintyMeasure(LabelPicker):
         info_collector = self.info_collector_class(
                              self.trainer_machine.round,
                              self.unmapping,
-                             seen_classes,
+                             discovered_classes,
                              self.measure_func
                          )
         active_scores, info = info_collector.gather_instance_info(
@@ -271,19 +271,19 @@ class CoresetMeasure(LabelPicker):
         hook_handle.remove()
         return features, dataloader
 
-    def select_new_data(self, s_train, seen_classes):
+    def select_new_data(self, discovered_samples, discovered_classes):
         self.model = self.trainer_machine.model
-        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
+        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
 
-        unlabeled_pool = self.train_instance.query_samples.difference(s_train)
+        unlabeled_pool = self.train_instance.query_samples.difference(discovered_samples)
         unlabeled_pool = list(unlabeled_pool)
-        unseen_classes = self.train_instance.query_classes.difference(seen_classes)
+        undiscovered_classes = self.train_instance.query_classes.difference(discovered_classes)
         if len(unlabeled_pool) < self.config.budget:
             print("Remaining data is fewer than the budget constraint. Label all.")
-            return unlabeled_pool, unseen_classes
+            return unlabeled_pool, undiscovered_classes
         elif self.config.budget == 0:
             print("No label budget")
-            return set(), seen_classes
+            return set(), discovered_classes
 
         if self.active_random_sampling == 'fixed_10K':
             if len(unlabeled_pool) > 10000:
@@ -298,7 +298,7 @@ class CoresetMeasure(LabelPicker):
 
         unlabeled_features, unlabeled_dataloader = self.get_features(unlabeled_pool)
         unlabeled_features = unlabeled_features.cpu()
-        labeled_features, _ = self.get_features(s_train)
+        labeled_features, _ = self.get_features(discovered_samples)
         labeled_features = labeled_features.cpu()
 
         unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]

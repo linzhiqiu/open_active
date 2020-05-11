@@ -35,7 +35,7 @@ class ICALR(Network):
         # self.scheduler = self._get_network_scheduler(self.optimizer)
 
         # Current training state. Update in train_new_round(). Used in other functions.
-        self.seen_classes = set()
+        self.discovered_classes = set()
 
         # Below are ICALR parameters.
         self.icalr_mode = self.config.icalr_mode
@@ -54,7 +54,7 @@ class ICALR(Network):
         self.icalr_naive_strategy = self.config.icalr_naive_strategy
         self.icalr_proto_strategy = self.config.icalr_proto_strategy
 
-        self.proto = torch.Tensor().to(self.device) # Size is (num_seen_classes, feature_size)
+        self.proto = torch.Tensor().to(self.device) # Size is (num_discovered_classes, feature_size)
         self.exemplar_set = {} # class indices mapping to list of example indices
 
         if self.config.pseudo_open_set != None:
@@ -75,26 +75,26 @@ class ICALR(Network):
         else:
             raise NotImplementedError()
 
-    def _train_new_samples(self, model, new_round_samples, seen_classes, start_epoch=0):
+    def _train_new_samples(self, model, new_round_samples, discovered_classes, start_epoch=0):
         if self.icalr_strategy == 'proto':
             return 0.0, 0.0
         elif self.icalr_strategy in ['naive', 'smooth']:
             # raise NotImplementedError()
             if self.icalr_naive_strategy == 'fixed':
                 self.fixed_rep_dataset = self._update_fixed_representation_dataset(self.fixed_rep_dataset, model, new_round_samples)
-                target_mapping_func = self._get_target_mapp_func(seen_classes)
+                target_mapping_func = self._get_target_mapp_func(discovered_classes)
                 dataloaders = get_dataloaders(self.fixed_rep_dataset,
                                               batch_size=self.config.batch,
                                               workers=self.config.workers,
                                               shuffle=True)
                 
-                self._update_last_layer(model, len(seen_classes), device=self.device)
+                self._update_last_layer(model, len(discovered_classes), device=self.device)
                 fc_optimizer = self._get_network_optimizer(model.fc)
                 fc_scheduler = self._get_network_scheduler(fc_optimizer)
 
                 self.criterion = self._get_criterion(self.dataloaders['train'],
                                                      target_mapping_func,
-                                                     seen_classes=seen_classes,
+                                                     discovered_classes=discovered_classes,
                                                      criterion_class=self.criterion_class)
                 fc_model = model.fc
                 with SetPrintMode(hidden=not self.config.verbose):
@@ -118,14 +118,14 @@ class ICALR(Network):
                 raise NotImplementedError()
         else: raise NotImplementedError()
 
-    # def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_seen_classes):
+    # def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
     #     assert self.round <= self.pseudo_open_set_rounds
-    #     unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_seen_classes)
-    #     info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_seen_classes)
+    #     unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_discovered_classes)
+    #     info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_discovered_classes)
     #     dataloader = get_subset_loader(self.train_instance.train_dataset,
     #                                    list(full_train_set),
     #                                    None, # No target transform is needed! 
-    #                                    # self._get_target_mapp_func(pseudo_seen_classes), # it should map the pseudo open classes to OPEN_INDEX
+    #                                    # self._get_target_mapp_func(pseudo_discovered_classes), # it should map the pseudo open classes to OPEN_INDEX
     #                                    shuffle=False,
     #                                    batch_size=self.config.batch,
     #                                    workers=self.config.workers)
@@ -135,23 +135,23 @@ class ICALR(Network):
     #     self.pseuopen_threshold = get_dynamic_threshold(info, metric=self.config.threshold_metric, mode=self.pseudo_open_set_metric)
     #     print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
 
-    def _get_new_round_samples(self, s_train):
+    def _get_new_round_samples(self, discovered_samples):
         # Return the new samples this round
-        old_s_train = []
+        old_discovered_samples = []
         for class_idx in self.exemplar_set:
-            old_s_train += self.exemplar_set[class_idx]
-        old_s_train = set(old_s_train)
-        diff_s_train = set(s_train).difference(old_s_train)
-        return list(diff_s_train)
+            old_discovered_samples += self.exemplar_set[class_idx]
+        old_discovered_samples = set(old_discovered_samples)
+        diff_discovered_samples = set(discovered_samples).difference(old_discovered_samples)
+        return list(diff_discovered_samples)
 
-    def _get_fixed_representation_dataset(self, model, s_train):
+    def _get_fixed_representation_dataset(self, model, discovered_samples):
         model.eval()
-        # seen_classes = list(exemplar_set.keys())
+        # discovered_classes = list(exemplar_set.keys())
         if self.config.arch == 'ResNet50':
             feature_size = 2048
         else:
             feature_size = 512
-        # fixed_rep = torch.zeros((len(s_train), feature_size)).cpu()
+        # fixed_rep = torch.zeros((len(discovered_samples), feature_size)).cpu()
         fixed_rep = torch.Tensor().cpu()
         fixed_label = torch.LongTensor().cpu()        
 
@@ -161,7 +161,7 @@ class ICALR(Network):
         handle = self.model.fc.register_forward_hook(forward_hook_func)
 
         dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                             list(s_train),
+                                             list(discovered_samples),
                                              [], # TODO: Make a validation set
                                              None,
                                              batch_size=self.config.batch,
@@ -186,15 +186,15 @@ class ICALR(Network):
         data, label = fixed_rep_dataset.data_tensor, fixed_rep_dataset.target_tensor
         return FixedRepresentationDataset(torch.cat((data, data_new),dim=0), torch.cat((label, label_new)))
 
-    def _train(self, model, s_train, seen_classes, start_epoch=0):
-        results = super(ICALR, self)._train(model, s_train, seen_classes, start_epoch=start_epoch)
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
+        results = super(ICALR, self)._train(model, discovered_samples, discovered_classes, start_epoch=start_epoch)
         if self.icalr_strategy in ['naive','smooth']:
             if self.icalr_naive_strategy == 'fixed':
                 # Store current representation
-                self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, s_train)
+                self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, discovered_samples)
         return results
 
-    def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=True, start_epoch=0):
+    def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True, start_epoch=0):
         if self.round == 0:
             # Initialize retrain threshold and exemplar set
             if self.icalr_retrain_criterion == 'round':
@@ -213,28 +213,28 @@ class ICALR(Network):
 
         self.round += 1
         if self.round <= self.pseudo_open_set_rounds and to_retrain_all_exemplar:
-            pseudo_s_train, pseudo_seen_classes = self._filter_pseudo_open_set(s_train, seen_classes)
-            self._train(self.pseudo_open_model, pseudo_s_train, pseudo_seen_classes, start_epoch=0)
-            pseudo_exemplar_set = self._update_exemplar_set(pseudo_s_train, {})
+            pseudo_discovered_samples, pseudo_discovered_classes = self._filter_pseudo_open_set(discovered_samples, discovered_classes)
+            self._train(self.pseudo_open_model, pseudo_discovered_samples, pseudo_discovered_classes, start_epoch=0)
+            pseudo_exemplar_set = self._update_exemplar_set(pseudo_discovered_samples, {})
             self._update_proto_vector(pseudo_exemplar_set, model=self.pseudo_open_model)
-            self._meta_learning(self.pseudo_open_model, s_train, pseudo_seen_classes)
+            self._meta_learning(self.pseudo_open_model, discovered_samples, pseudo_discovered_classes)
 
-        new_round_samples = self._get_new_round_samples(s_train)
+        new_round_samples = self._get_new_round_samples(discovered_samples)
 
         if to_retrain_all_exemplar:
             self.past_retrain_threshold = self.cur_retrain_threshold
             # in self._train(), train set will be augmented with new round samples. Further, proto_vectors will be updated.
-            train_loss, train_acc = self._train(self.model, s_train, seen_classes, start_epoch=0)
+            train_loss, train_acc = self._train(self.model, discovered_samples, discovered_classes, start_epoch=0)
 
         else:
-            train_loss, train_acc = self._train_new_samples(self.model, new_round_samples, seen_classes, start_epoch=0)  
+            train_loss, train_acc = self._train_new_samples(self.model, new_round_samples, discovered_classes, start_epoch=0)  
         
         # Will update self.exemplar_set
         self.exemplar_set = self._update_exemplar_set(new_round_samples, self.exemplar_set)
         # Most importantly, recompute the class mean vector (normalized) using the train example following the ICaLR paper
         self._update_proto_vector(self.exemplar_set)
 
-        eval_results = self._eval(self.model, test_dataset, seen_classes, verbose=eval_verbose)
+        eval_results = self._eval(self.model, test_dataset, discovered_classes, verbose=eval_verbose)
         return train_loss, train_acc, eval_results
 
     def _update_proto_vector(self, exemplar_set, model=None):
@@ -247,14 +247,14 @@ class ICALR(Network):
             else:
                 model.eval()
 
-            seen_classes = list(exemplar_set.keys())
+            discovered_classes = list(exemplar_set.keys())
             if self.config.arch == 'ResNet50':
                 feature_size = 2048
             else:
                 feature_size = 512
-            self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
+            self.proto = torch.zeros((len(discovered_classes), feature_size)).to(self.device)
             target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                          seen_classes,
+                                                          discovered_classes,
                                                           self.train_instance.open_classes)
             
 
@@ -263,7 +263,7 @@ class ICALR(Network):
                 cur_features.append(inputs[0])
             handle = model.fc.register_forward_hook(forward_hook_func)
 
-            for class_idx in seen_classes:
+            for class_idx in discovered_classes:
                 num_class_i_samples = float(len(exemplar_set[class_idx]))
                 class_sample_indices = exemplar_set[class_idx]
                 target_class_idx = target_mapping_func(class_idx)
@@ -290,7 +290,7 @@ class ICALR(Network):
             self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
 
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=True):
+    def _eval(self, model, test_dataset, discovered_classes, verbose=True):
         self._eval_mode()
 
         # Update self.thresholds_checkpoints
@@ -309,10 +309,10 @@ class ICALR(Network):
                                                    'actual_loss' : [], # actual losses
                                                   } # A list of dictionary
 
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
-        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(seen_classes) # Only for transforming predicted label (in network indices) to real indices
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
         dataloader = get_loader(test_dataset,
-                                # self._get_target_mapp_func(seen_classes),
+                                # self._get_target_mapp_func(discovered_classes),
                                 None,
                                 shuffle=False,
                                 batch_size=self.config.batch,
@@ -714,7 +714,7 @@ class ICALROSDNNetwork(ICALR):
         self.weibull_distributions = None # The dictionary that contains all weibull related information
         # self.training_features = None # A dictionary holding the features of all examples
 
-    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_seen_classes):
+    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
         ''' Meta learning on self.curr_full_train_set and self.pseudo_open_set_classes
             Pick and update the best openmax hyper including:
                 self.weibull_tail_size
@@ -723,21 +723,21 @@ class ICALROSDNNetwork(ICALR):
         '''
         # old_proto = self.proto.clone()
         
-        # cur_target_seen_classes = []
-        # exemplar_seen_classes = list(self.exemplar_set.keys())
-        # exemplar_target_mapping_func = self._get_target_mapp_func(exemplar_seen_classes)
-        # cur_target_mapping_func = self._get_target_mapp_func(pseudo_seen_classes)
-        # cur_seen_classes = sorted([(idx, cur_target_mapping_func(idx)) for idx in pseudo_seen_classes], key=lambda x: x[1])
-        # for class_idx, _ in cur_seen_classes:
-        #     cur_target_seen_classes.append(exemplar_target_mapping_func(class_idx))
-        # self.proto = self.proto[cur_target_seen_classes, :] # TO be restore later
+        # cur_target_discovered_classes = []
+        # exemplar_discovered_classes = list(self.exemplar_set.keys())
+        # exemplar_target_mapping_func = self._get_target_mapp_func(exemplar_discovered_classes)
+        # cur_target_mapping_func = self._get_target_mapp_func(pseudo_discovered_classes)
+        # cur_discovered_classes = sorted([(idx, cur_target_mapping_func(idx)) for idx in pseudo_discovered_classes], key=lambda x: x[1])
+        # for class_idx, _ in cur_discovered_classes:
+        #     cur_target_discovered_classes.append(exemplar_target_mapping_func(class_idx))
+        # self.proto = self.proto[cur_target_discovered_classes, :] # TO be restore later
 
         # import pdb; pdb.set_trace()  # breakpoint b11583a1 //
         print("Perform cross validation using pseudo open class..")
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
         training_features = self._gather_correct_features(pseudo_open_model,
                                                           self.dataloaders['train'], # from super._train()
-                                                          seen_classes=pseudo_seen_classes,
+                                                          discovered_classes=pseudo_discovered_classes,
                                                           mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
         
         from global_setting import OPENMAX_META_LEARN
@@ -767,7 +767,7 @@ class ICALROSDNNetwork(ICALR):
                     eval_result = self._eval(
                                       pseudo_open_model,
                                       curr_train_set,
-                                      pseudo_seen_classes,
+                                      pseudo_discovered_classes,
                                       verbose=False,
                                       # verbose=True,
                                       training_features=training_features # If not None, can save time by not recomputing it
@@ -796,14 +796,14 @@ class ICALROSDNNetwork(ICALR):
         self.osdn_eval_threshold = best_res['threshold']
         print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
 
-    def _gather_correct_features(self, model, train_loader, seen_classes=set(), mav_features_selection='correct'):
-        assert len(seen_classes) > 0
+    def _gather_correct_features(self, model, train_loader, discovered_classes=set(), mav_features_selection='correct'):
+        assert len(discovered_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
         mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                               seen_classes,
+                                               discovered_classes,
                                                self.train_instance.open_classes)
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
-        seen_class_softmax_indices = [mapping_func(i) for i in seen_classes]
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        seen_class_softmax_indices = [mapping_func(i) for i in discovered_classes]
 
         if mav_features_selection == 'correct':
             print("Gather feature vectors for each class that are predicted correctly")
@@ -941,13 +941,13 @@ class ICALROSDNNetwork(ICALR):
         openmax_outputs = F.softmax(torch.cat((outputs, open_scores.unsqueeze(1)), dim=1), dim=1)
         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
-        closed_preds = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
                                    openmax_preds2[:, 1],
                                    openmax_preds)
-        closed_maxs = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_maxs = torch.where(openmax_preds == self.num_discovered_classes, 
                                   openmax_top2[:, 1],
                                   openmax_max)
-        openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
+        openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         
@@ -958,9 +958,9 @@ class ICALROSDNNetwork(ICALR):
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
             if self.use_positive_score:
-                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_discovered_classes]).tolist()
             else:
-                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_discovered_classes]).tolist()
             self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
@@ -968,7 +968,7 @@ class ICALROSDNNetwork(ICALR):
             self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
 
         # Return the prediction
-        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
+        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
@@ -998,23 +998,23 @@ class ICALROSDNNetwork(ICALR):
         """
         return lambda outputs, inputs, features, label_for_learnloss : self.compute_open_max(outputs, features, label_for_learnloss)[1]
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=False, training_features=None):
+    def _eval(self, model, test_dataset, discovered_classes, verbose=False, training_features=None):
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
         if training_features == None:
             training_features = self._gather_correct_features(model,
                                                               self.dataloaders['train'], # from super._train()
-                                                              seen_classes=seen_classes,
+                                                              discovered_classes=discovered_classes,
                                                               mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
 
         self.weibull_distributions = self._gather_weibull_distribution(training_features,
                                                                        distance_metric=self.distance_metric,
                                                                        weibull_tail_size=self.weibull_tail_size) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
 
-        assert len(self.weibull_distributions.keys()) == len(seen_classes)
-        self.num_seen_classes = len(seen_classes)
+        assert len(self.weibull_distributions.keys()) == len(discovered_classes)
+        self.num_discovered_classes = len(discovered_classes)
         self._reset_open_set_stats() # Open set status is the summary of 1/ Number of threshold reject 2/ Number of Open Class reject
         
-        eval_result = super(ICALROSDNNetwork, self)._eval(model, test_dataset, seen_classes, verbose=verbose)
+        eval_result = super(ICALROSDNNetwork, self)._eval(model, test_dataset, discovered_classes, verbose=verbose)
         if verbose:
             print(f"Rejection details: Total rejects {self.open_set_stats['total_reject']}. "
                   f"By threshold ({self.osdn_eval_threshold}) {self.open_set_stats['threshold_reject']}. "
@@ -1024,10 +1024,10 @@ class ICALROSDNNetwork(ICALR):
 
     def _update_open_set_stats(self, openmax_max, openmax_preds):
         # For each batch
-        self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes) ))
+        self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes) ))
         assert self.open_set_stats['threshold_reject'] + self.open_set_stats['open_class_reject'] + self.open_set_stats['both_reject'] == self.open_set_stats['total_reject']
 
     def _reset_open_set_stats(self):
@@ -1074,13 +1074,13 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
 
-        closed_preds = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
                                    openmax_preds2[:, 1],
                                    openmax_preds)
-        closed_maxs = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_maxs = torch.where(openmax_preds == self.num_discovered_classes, 
                                   openmax_top2[:, 1],
                                   openmax_max)
-        openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
+        openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
                                               torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         
@@ -1091,16 +1091,16 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
             if self.use_positive_score:
-                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_discovered_classes]).tolist()
             else:
-                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_seen_classes]).tolist()
+                self.thresholds_checkpoints[self.round]['open_set_score'] += (-openmax_outputs[:, self.num_discovered_classes]).tolist()
             self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
             self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
         
-        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
+        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
                             torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
@@ -1123,8 +1123,8 @@ class ICALRBinarySoftmaxNetwork(ICALR):
     # def _update_proto_vector(self, exemplar_set):
     #     super(ICALRBinarySoftmaxNetwork, self)._update_proto_vector(exemplar_set)
     #     return
-    #     # seen_classes = list(exemplar_set.keys())
-    #     # target_mapping_func = self._get_target_mapp_func(seen_classes)
+    #     # discovered_classes = list(exemplar_set.keys())
+    #     # target_mapping_func = self._get_target_mapp_func(discovered_classes)
 
     #     # cur_features = []
     #     # def forward_hook_func(self, inputs, outputs):
@@ -1133,7 +1133,7 @@ class ICALRBinarySoftmaxNetwork(ICALR):
 
     #     # self.abs_distances = {} # key is target_class_idx, value is a list of distances
 
-    #     # for class_idx in seen_classes:
+    #     # for class_idx in discovered_classes:
     #     #     num_class_i_samples = float(len(exemplar_set[class_idx]))
     #     #     class_sample_indices = exemplar_set[class_idx]
     #     #     target_class_idx = target_mapping_func(class_idx)
@@ -1227,26 +1227,26 @@ class ICALRBinarySoftmaxNetwork(ICALR):
 
     def _update_proto_vector(self, exemplar_set):
         self._eval_mode()
-        seen_classes = list(exemplar_set.keys())
+        discovered_classes = list(exemplar_set.keys())
         target_mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                                      seen_classes,
+                                                      discovered_classes,
                                                       self.train_instance.open_classes)
         if self.icalr_strategy in ['naive', 'smooth']:
             # Use network output as prototype
-            self.proto = torch.zeros((len(seen_classes), len(seen_classes))).to(self.device)
+            self.proto = torch.zeros((len(discovered_classes), len(discovered_classes))).to(self.device)
         elif self.icalr_strategy == 'proto':
             if self.config.arch == 'ResNet50':
                 feature_size = 2048
             else:
                 feature_size = 512
-            self.proto = torch.zeros((len(seen_classes), feature_size)).to(self.device)
+            self.proto = torch.zeros((len(discovered_classes), feature_size)).to(self.device)
             
             cur_features = []
             def forward_hook_func(module, inputs, outputs):
                 cur_features.append(inputs[0])
             handle = self.model.fc.register_forward_hook(forward_hook_func)
 
-        for class_idx in seen_classes:
+        for class_idx in discovered_classes:
             num_class_i_samples = float(len(exemplar_set[class_idx]))
             class_sample_indices = exemplar_set[class_idx]
             target_class_idx = target_mapping_func(class_idx)
@@ -1276,8 +1276,8 @@ class ICALRBinarySoftmaxNetwork(ICALR):
 
         # Now compute the proto variance
         if self.icalr_binary_softmax_train_mode == 'default':
-            self.proto_var = torch.zeros((1, len(seen_classes))).to(self.device)
-            for class_idx in seen_classes:
+            self.proto_var = torch.zeros((1, len(discovered_classes))).to(self.device)
+            for class_idx in discovered_classes:
                 num_class_i_samples = float(len(exemplar_set[class_idx]))
                 class_sample_indices = exemplar_set[class_idx]
                 target_class_idx = target_mapping_func(class_idx)

@@ -562,23 +562,23 @@ class C2AE(Network):
             raise NotImplementedError() # Disable pseudo open set training
 
 
-    def _train(self, model, s_train, seen_classes, start_epoch=0):
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
         self._train_mode()
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                  list(s_train),
+                                                  list(discovered_samples),
                                                   [], # TODO: Make a validation set
                                                   target_mapping_func,
                                                   batch_size=self.config.batch,
                                                   workers=self.config.workers)
         
         # Restore last fc layer
-        self._update_last_layer(model, len(seen_classes), device=self.device)
+        self._update_last_layer(model, len(discovered_classes), device=self.device)
         optimizer = self._get_network_optimizer(model)
         scheduler = self._get_network_scheduler(optimizer)
 
         self.criterion = self._get_criterion(self.dataloaders['train'],
-                                             seen_classes=seen_classes,
+                                             discovered_classes=discovered_classes,
                                              criterion_class=self.criterion_class)
 
         save_dir = f"c2ae_results/encoder_model_epoch_{self.max_epochs}_arch_{self.config.arch}"
@@ -633,7 +633,7 @@ class C2AE(Network):
         
         self.decoder = decoder_class(latent_size=2048,
                                      batch_size=self.config.batch,
-                                     num_classes=len(seen_classes),
+                                     num_classes=len(discovered_classes),
                                      generator_class=generator_class,
                                      **decoder_params).to(self.device)
         
@@ -643,9 +643,9 @@ class C2AE(Network):
         if self.c2ae_train_mode in ['debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce']:
             self.autoencoder = Autoencoder().to(self.device)
         elif self.c2ae_train_mode in ['debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']:
-            self.autoencoder = ConditionedAutoencoder(latent_size=2048, num_classes=len(seen_classes)).to(self.device)
+            self.autoencoder = ConditionedAutoencoder(latent_size=2048, num_classes=len(discovered_classes)).to(self.device)
         elif self.c2ae_train_mode in ['UNet_mse', 'UNet']:
-            self.autoencoder = UNet(latent_size=16384, num_classes=len(seen_classes)).to(self.device)
+            self.autoencoder = UNet(latent_size=16384, num_classes=len(discovered_classes)).to(self.device)
         else:
             self.autoencoder = get_autoencoder(model, self.decoder, arch=self.config.arch)
         # criterion_autoencoder = torch.nn.L1Loss()
@@ -658,7 +658,7 @@ class C2AE(Network):
                                         optimizer_decoder,
                                         scheduler_decoder,
                                         self.c2ae_alpha,
-                                        len(seen_classes),
+                                        len(discovered_classes),
                                         train_mode=self.c2ae_train_mode,
                                         device=self.device,
                                         start_epoch=0,

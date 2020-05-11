@@ -55,13 +55,13 @@ class InfoCollector(object):
         raise NotImplementedError()
 
 class BasicInfoCollector(InfoCollector):
-    def __init__(self, round_index, unmapping_dict, seen_classes, measure_func=lambda x:torch.Tensor([0])):
+    def __init__(self, round_index, unmapping_dict, discovered_classes, measure_func=lambda x:torch.Tensor([0])):
         '''Args:
             measure_func : Input --> a batch of outputs, Output --> A tensor of float scores
         '''
         super(BasicInfoCollector, self).__init__()
         self.round_index = round_index
-        self.seen_classes = seen_classes
+        self.discovered_classes = discovered_classes
         self.unmapping_dict = unmapping_dict
         self.measure_func = measure_func
 
@@ -81,7 +81,7 @@ class BasicInfoCollector(InfoCollector):
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])]) 
             # predicted_label_i = int(predicted_labels[i])
             label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, label_i in self.seen_classes)
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
@@ -137,7 +137,7 @@ class LearningLossInfoCollector(BasicInfoCollector):
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
             loss_i = float(losses[i])
-            instance_info = LearningLossInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, loss_i, label_i in self.seen_classes)
+            instance_info = LearningLossInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, loss_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
@@ -166,7 +166,7 @@ class ClusterInfoCollector(BasicInfoCollector):
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
-            instance_info = ClusterInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, gaussian_i, label_i in self.seen_classes)
+            instance_info = ClusterInstanceInfo(self.round_index, label_i, predicted_label_i, prob_score_i, entropy_i, gaussian_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
@@ -193,7 +193,7 @@ class SigmoidInfoCollector(BasicInfoCollector):
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
@@ -220,7 +220,7 @@ class BinarySoftmaxInfoCollector(BasicInfoCollector):
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info
 
@@ -248,6 +248,6 @@ class C2AEInfoCollector(BasicInfoCollector):
             prob_score_i = float(prob_scores[i])
             predicted_label_i = int(self.unmapping_dict[int(predicted_labels[i])])
             label_i = int(labels[i])
-            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.seen_classes)
+            instance_info = BasicInstanceInfo(self.round_index, label_i, predicted_label_i, open_i, entropy_i, label_i in self.discovered_classes)
             batch_instances_info.append(instance_info)
         return batch_instances_info

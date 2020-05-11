@@ -21,9 +21,9 @@ def break_if_too_long(name, split=80):
     else:
         return name
 
-def first_round_seen_all(dictionary, num_seen_classes=90):
+def first_round_seen_all(dictionary, num_discovered_classes=90):
     for round_idx in dictionary.keys():
-        return num_seen_classes == dictionary[round_idx]['num_seen_classes']
+        return num_discovered_classes == dictionary[round_idx]['num_discovered_classes']
 
 def paper_version_title(name):
     if "our_auroc" in name:

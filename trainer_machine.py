@@ -15,7 +15,7 @@ from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoC
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
 
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
 import libmr
 import math
@@ -165,7 +165,7 @@ class TrainerMachine(object):
     def load_checkpoint(self, checkpoint):
         raise NotImplementedError()
 
-    def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=True):
+    def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True):
         raise NotImplementedError()
 
     def remove_handle(self):
@@ -174,14 +174,14 @@ class TrainerMachine(object):
             self.handle.remove()
 
     # Below are some helper functions shared by all subclasses
-    def _get_target_mapp_func(self, seen_classes):
+    def _get_target_mapp_func(self, discovered_classes):
         return get_target_mapping_func_for_tensor(self.train_instance.classes,
-                                                  seen_classes,
+                                                  discovered_classes,
                                                   self.train_instance.open_classes)
 
-    def _get_target_unmapping_func_for_list(self, seen_classes):
+    def _get_target_unmapping_func_for_list(self, discovered_classes):
         return get_target_unmapping_func_for_list(self.train_instance.classes,
-                                                  seen_classes)
+                                                  discovered_classes)
 
 class Network(TrainerMachine):
     def __init__(self, *args, **kwargs):
@@ -197,7 +197,7 @@ class Network(TrainerMachine):
         # self.scheduler = self._get_network_scheduler(self.optimizer)
 
         # Current training state. Update in train_new_round(). Used in other functions.
-        self.seen_classes = set()
+        self.discovered_classes = set()
 
         if self.config.pseudo_open_set != None:
             if self.config.pseudo_same_network:
@@ -237,14 +237,14 @@ class Network(TrainerMachine):
         # self.optimizer.load_state_dict(checkpoint['optimizer'])
         # self.scheduler.load_state_dict(checkpoint['scheduler'])
 
-    def _get_criterion(self, dataloader, target_mapping_func, seen_classes=set(), criterion_class=nn.CrossEntropyLoss):
-        assert seen_classes.__len__() > 0
+    def _get_criterion(self, dataloader, target_mapping_func, discovered_classes=set(), criterion_class=nn.CrossEntropyLoss):
+        assert discovered_classes.__len__() > 0
         assert self.config.class_weight in ['uniform', 'imbal']
         if self.config.class_weight == 'uniform':
             weight = None
             print('Using uniform class weight.')
         elif self.config.class_weight == 'imbal':
-            weight = torch.zeros(len(seen_classes)).to(self.device)
+            weight = torch.zeros(len(discovered_classes)).to(self.device)
             total = 0.0
             for _, data in enumerate(tqdm(dataloader, ncols=80)):
                 _, real_labels = data
@@ -256,7 +256,7 @@ class Network(TrainerMachine):
             weight = weight / weight.min() # TODO: Figure out whether or not need this min()
             weight[weight > 10.] = 10.
             class_weight_info = {}
-            unmap_dict = get_target_unmapping_dict(self.train_instance.classes, seen_classes)
+            unmap_dict = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
             for i, w_i in enumerate(weight):
                 class_weight_info[unmap_dict[i]] = float(w_i)
             print(f'Using class weight: {class_weight_info}')
@@ -268,28 +268,28 @@ class Network(TrainerMachine):
             assert pseudo_open_class in all_seen_class
 
         # Remove pseudo open class examples from training
-        remaining_seen_classes = all_seen_class.difference(self.pseudo_open_set_classes)
+        remaining_discovered_classes = all_seen_class.difference(self.pseudo_open_set_classes)
         # pseudo_open_samples = list(filter(lambda x : self.train_instance.train_labels[x] in self.pseudo_open_set_classes, samples))
-        remaining_samples = list(filter(lambda x : self.train_instance.train_labels[x] in remaining_seen_classes, samples))
-        return remaining_samples, remaining_seen_classes
+        remaining_samples = list(filter(lambda x : self.train_instance.train_labels[x] in remaining_discovered_classes, samples))
+        return remaining_samples, remaining_discovered_classes
 
-    def _train(self, model, s_train, seen_classes, start_epoch=0):
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
         self._train_mode()
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                  list(s_train),
+                                                  list(discovered_samples),
                                                   [], # TODO: Make a validation set
                                                   None, # No target transform is made
                                                   batch_size=self.config.batch,
                                                   workers=self.config.workers)
         
-        self._update_last_layer(model, len(seen_classes), device=self.device)
+        self._update_last_layer(model, len(discovered_classes), device=self.device)
         optimizer = self._get_network_optimizer(model)
         scheduler = self._get_network_scheduler(optimizer)
 
         self.criterion = self._get_criterion(self.dataloaders['train'],
                                              target_mapping_func,
-                                             seen_classes=seen_classes,
+                                             discovered_classes=discovered_classes,
                                              criterion_class=self.criterion_class)
 
         with SetPrintMode(hidden=not self.config.verbose):
@@ -309,10 +309,10 @@ class Network(TrainerMachine):
               f"Loss {train_loss}, Accuracy {train_acc}")
         return train_loss, train_acc
 
-    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_seen_classes):
+    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
         assert self.round <= self.pseudo_open_set_rounds
-        unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_seen_classes)
-        info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_seen_classes)
+        unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_discovered_classes)
+        info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_discovered_classes)
         dataloader = get_subset_loader(self.train_instance.train_dataset,
                                        list(full_train_set),
                                        None, # No target transform is needed! 
@@ -325,27 +325,27 @@ class Network(TrainerMachine):
         self.pseuopen_threshold = get_dynamic_threshold(info, metric=self.config.threshold_metric, mode=self.pseudo_open_set_metric)
         print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
 
-    def train_then_eval(self, s_train, seen_classes, test_dataset, eval_verbose=True, start_epoch=0):
+    def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True, start_epoch=0):
         self.round += 1
         if self.round <= self.pseudo_open_set_rounds:
-            # self.curr_full_train_set = s_train.copy() # Save for self._get_open_pred_func()
-            # full_train_set = s_train.copy()
-            # full_seen_classes = seen_classes.copy()
-            pseudo_s_train, pseudo_seen_classes = self._filter_pseudo_open_set(s_train, seen_classes)
-            self._train(self.pseudo_open_model, pseudo_s_train, pseudo_seen_classes, start_epoch=0)
-            self._meta_learning(self.pseudo_open_model, s_train, pseudo_seen_classes)
+            # self.curr_full_train_set = discovered_samples.copy() # Save for self._get_open_pred_func()
+            # full_train_set = discovered_samples.copy()
+            # full_discovered_classes = discovered_classes.copy()
+            pseudo_discovered_samples, pseudo_discovered_classes = self._filter_pseudo_open_set(discovered_samples, discovered_classes)
+            self._train(self.pseudo_open_model, pseudo_discovered_samples, pseudo_discovered_classes, start_epoch=0)
+            self._meta_learning(self.pseudo_open_model, discovered_samples, pseudo_discovered_classes)
         
-        train_loss, train_acc = self._train(self.model, s_train, seen_classes, start_epoch=0)  
-        eval_results = self._eval(self.model, test_dataset, seen_classes, verbose=eval_verbose)
+        train_loss, train_acc = self._train(self.model, discovered_samples, discovered_classes, start_epoch=0)  
+        eval_results = self._eval(self.model, test_dataset, discovered_classes, verbose=eval_verbose)
         return train_loss, train_acc, eval_results
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=True):
+    def _eval(self, model, test_dataset, discovered_classes, verbose=True):
         self._eval_mode()
 
         # Update self.thresholds_checkpoints
         # assert self.round not in self.thresholds_checkpoints.keys()
         # Caveat: Currently, the open_set_score is updated in the open_set_prediction function. Yet the grouth_truth is updated in self._eval()
-        self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+        self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
                                                    'real_labels' : [], # The real labels for CIFAR100 or other datasets.
                                                    'open_set_score' : [], # Higher the score, more likely to be open set
                                                    'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?
@@ -356,10 +356,10 @@ class Network(TrainerMachine):
                                                    'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
                                                   } # A list of dictionary
 
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
-        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(seen_classes) # Only for transforming predicted label (in network indices) to real indices
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
         dataloader = get_loader(test_dataset,
-                                # self._get_target_mapp_func(seen_classes),
+                                # self._get_target_mapp_func(discovered_classes),
                                 None,
                                 shuffle=False,
                                 batch_size=self.config.batch,
@@ -389,12 +389,12 @@ class Network(TrainerMachine):
                     labels = target_mapping_func(real_labels.to(self.device))
                     labels_for_openset_pred = torch.where(
                                                   labels == OPEN_CLASS_INDEX,
-                                                  torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
+                                                  torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(labels.device),
                                                   labels
                                               ) # This change hold out open set examples' indices to unseen open set examples indices
 
                     outputs = model(inputs)
-                    preds = open_set_prediction(outputs, inputs=inputs) # Open set index == UNSEEN_CLASS_INDEX
+                    preds = open_set_prediction(outputs, inputs=inputs) # Open set index == UNDISCOVERED_CLASS_INDEX
 
                     self.thresholds_checkpoints[self.round]['ground_truth'] += labels.tolist()
                     self.thresholds_checkpoints[self.round]['real_labels'] += real_labels.tolist()
@@ -403,7 +403,7 @@ class Network(TrainerMachine):
                     performance_dict['overall_acc']['count'] += inputs.size(0)
                     performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
                     
-                    unseen_open_indices = labels == UNSEEN_CLASS_INDEX
+                    unseen_open_indices = labels == UNDISCOVERED_CLASS_INDEX
                     seen_closed_indices = labels >= 0
                     hold_out_open_indices = labels == OPEN_CLASS_INDEX
                     train_class_indices = unseen_open_indices | seen_closed_indices
@@ -445,7 +445,7 @@ class Network(TrainerMachine):
                                                                        ).float()
                     performance_dict['seen_closed_acc']['open'] += torch.sum(
                                                                        torch.masked_select(
-                                                                           (preds==UNSEEN_CLASS_INDEX),
+                                                                           (preds==UNDISCOVERED_CLASS_INDEX),
                                                                            seen_closed_indices
                                                                        )
                                                                    ).float()
@@ -542,7 +542,7 @@ class Network(TrainerMachine):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
             
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -779,7 +779,7 @@ class ClusterNetwork(Network):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += maxs.tolist()
 
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 preds)
             return preds
         return open_set_prediction
@@ -888,7 +888,7 @@ class SigmoidNetwork(Network):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
             
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -972,7 +972,7 @@ class BinarySoftmaxNetwork(Network):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
             
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -1034,7 +1034,7 @@ class OSDNNetwork(Network):
         self.weibull_distributions = None # The dictionary that contains all weibull related information
         # self.training_features = None # A dictionary holding the features of all examples
 
-    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_seen_classes):
+    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
         ''' Meta learning on self.curr_full_train_set and self.pseudo_open_set_classes
             Pick and update the best openmax hyper including:
                 self.weibull_tail_size
@@ -1045,7 +1045,7 @@ class OSDNNetwork(Network):
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
         training_features = self._gather_correct_features(pseudo_open_model,
                                                           self.dataloaders['train'], # from super._train()
-                                                          seen_classes=pseudo_seen_classes,
+                                                          discovered_classes=pseudo_discovered_classes,
                                                           mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
         
         from global_setting import OPENMAX_META_LEARN
@@ -1075,7 +1075,7 @@ class OSDNNetwork(Network):
                     eval_result = self._eval(
                                       pseudo_open_model,
                                       curr_train_set,
-                                      pseudo_seen_classes,
+                                      pseudo_discovered_classes,
                                       # verbose=False,
                                       verbose=True,
                                       training_features=training_features # If not None, can save time by not recomputing it
@@ -1104,14 +1104,14 @@ class OSDNNetwork(Network):
         self.osdn_eval_threshold = best_res['threshold']
         print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
 
-    def _gather_correct_features(self, model, train_loader, seen_classes=set(), mav_features_selection='correct'):
-        assert len(seen_classes) > 0
+    def _gather_correct_features(self, model, train_loader, discovered_classes=set(), mav_features_selection='correct'):
+        assert len(discovered_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
         mapping_func = get_target_mapping_func(self.train_instance.classes,
-                                               seen_classes,
+                                               discovered_classes,
                                                self.train_instance.open_classes)
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
-        seen_class_softmax_indices = [mapping_func(i) for i in seen_classes]
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        seen_class_softmax_indices = [mapping_func(i) for i in discovered_classes]
 
         if mav_features_selection == 'correct':
             print("Gather feature vectors for each class that are predicted correctly")
@@ -1242,14 +1242,14 @@ class OSDNNetwork(Network):
         openmax_outputs = F.softmax(torch.cat((outputs, open_scores.unsqueeze(1)), dim=1), dim=1)
         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
-        closed_preds = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
                                    openmax_preds2[:, 1],
                                    openmax_preds)
-        closed_maxs = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_maxs = torch.where(openmax_preds == self.num_discovered_classes, 
                                   openmax_top2[:, 1],
                                   openmax_max)
-        openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
-                                              torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+        openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
+                                              torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         if log_thresholds:
             # First update the open set stats
@@ -1257,15 +1257,15 @@ class OSDNNetwork(Network):
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_discovered_classes]).tolist()
             self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         # Return the prediction
-        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
-                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
+                            torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
 
@@ -1286,22 +1286,22 @@ class OSDNNetwork(Network):
         """
         return lambda outputs, inputs : self.compute_open_max(outputs)[0]
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=False, training_features=None):
+    def _eval(self, model, test_dataset, discovered_classes, verbose=False, training_features=None):
         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
         if training_features == None:
             training_features = self._gather_correct_features(model,
                                                               self.dataloaders['train'], # from super._train()
-                                                              seen_classes=seen_classes,
+                                                              discovered_classes=discovered_classes,
                                                               mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
 
         self.weibull_distributions = self._gather_weibull_distribution(training_features,
                                                                        distance_metric=self.distance_metric,
                                                                        weibull_tail_size=self.weibull_tail_size) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
 
-        assert len(self.weibull_distributions.keys()) == len(seen_classes)
-        self.num_seen_classes = len(seen_classes)
+        assert len(self.weibull_distributions.keys()) == len(discovered_classes)
+        self.num_discovered_classes = len(discovered_classes)
         self._reset_open_set_stats() # Open set status is the summary of 1/ Number of threshold reject 2/ Number of Open Class reject
-        eval_result = super(OSDNNetwork, self)._eval(model, test_dataset, seen_classes, verbose=verbose)
+        eval_result = super(OSDNNetwork, self)._eval(model, test_dataset, discovered_classes, verbose=verbose)
         if verbose:
             print(f"Rejection details: Total rejects {self.open_set_stats['total_reject']}. "
                   f"By threshold ({self.osdn_eval_threshold}) {self.open_set_stats['threshold_reject']}. "
@@ -1311,10 +1311,10 @@ class OSDNNetwork(Network):
 
     def _update_open_set_stats(self, openmax_max, openmax_preds):
         # For each batch
-        self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes) ))
+        self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes) ))
         assert self.open_set_stats['threshold_reject'] + self.open_set_stats['open_class_reject'] + self.open_set_stats['both_reject'] == self.open_set_stats['total_reject']
 
     def _reset_open_set_stats(self):
@@ -1355,14 +1355,14 @@ class OSDNNetworkModified(OSDNNetwork):
         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
 
-        closed_preds = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
                                    openmax_preds2[:, 1],
                                    openmax_preds)
-        closed_maxs = torch.where(openmax_preds == self.num_seen_classes, 
+        closed_maxs = torch.where(openmax_preds == self.num_discovered_classes, 
                                   openmax_top2[:, 1],
                                   openmax_max)
-        openmax_predicted_label = torch.where(openmax_preds == self.num_seen_classes, 
-                                              torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+        openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
+                                              torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         
         if log_thresholds:
@@ -1371,15 +1371,15 @@ class OSDNNetworkModified(OSDNNetwork):
 
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_seen_classes]).tolist()
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_discovered_classes]).tolist()
             self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
 
         
-        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes), 
-                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+        preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
+                            torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
 

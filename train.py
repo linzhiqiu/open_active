@@ -8,15 +8,13 @@ import copy
 from tqdm import tqdm
 from config import get_config
 
-from dataset_factory import get_dataset_factory
+from dataset_factory import DatasetFactory
 
 from tensorboardX import SummaryWriter
 from trainer import get_trainer # Contains different ways to train model
 from logger import get_logger
 import utils
 import json
-# from tools_training import get_device, get_criterion, get_optimizer, get_scheduler, get_tensorboard_logger
-
 import random
 
 
@@ -30,19 +28,19 @@ def main():
         torch.manual_seed(30)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-
-    if config.graphite:
-        raise NotImplementedError()
-    #  config = utils.enable_graphite(config)
-    dataset_factory = get_dataset_factory(config.data, config.data_path, config.init_mode)
+    
+    dataset_factory = DatasetFactory(config.data, config.data_path, config.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()
-    train_samples, train_labels, classes = dataset_factory.get_train_set_info()
+    train_samples, train_labels = dataset_factory.get_train_set_info()
+    classes, open_classes = dataset_factory.get_class_info()
     
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
     if not config.resume:
         # Begin from scratch
         start_round = 0
-        s_train, open_samples, seen_classes, open_classes = dataset_factory.get_init_train_set() # Get initial training set, seen classes
+        discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, seen classes
+        open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
+
         # trainer contains train() eval() load_checkpoint() functions
         trainer = get_trainer(config,
                               train_dataset, 
@@ -72,9 +70,9 @@ def main():
                             ckpt_dir=ckpt_dir,
                             writer=writer)
         
-        logger.init_round(s_train, open_samples, seen_classes, open_classes)
+        logger.init_round(discovered_samples, open_samples, discovered_classes, open_classes)
 
-        checkpoint = utils.get_checkpoint(start_round, s_train, open_samples, seen_classes, open_classes, trainer, logger)
+        checkpoint = utils.get_checkpoint(start_round, discovered_samples, open_samples, discovered_classes, open_classes, trainer, logger)
                     
         if config.save_ckpt: utils.save_checkpoint(ckpt_dir, checkpoint)
     else:
@@ -86,7 +84,7 @@ def main():
         checkpoint = torch.load(config.resume)
 
         start_round = checkpoint['round']
-        s_train, open_samples, seen_classes, open_classes = checkpoint['s_train'], checkpoint['open_samples'], checkpoint['seen_classes'], checkpoint['open_classes']
+        discovered_samples, open_samples, discovered_classes, open_classes = checkpoint['discovered_samples'], checkpoint['open_samples'], checkpoint['discovered_classes'], checkpoint['open_classes']
         # trainer contains train() eval() load_checkpoint() functions
         trainer = get_trainer(config,
                               train_dataset,
@@ -137,7 +135,7 @@ def main():
             print("Didn't train. Load model.")
             assert config.epochs == 0
 
-        train_loss, train_acc, eval_results = trainer.train_then_eval(s_train, seen_classes, test_dataset, eval_verbose=True)
+        train_loss, train_acc, eval_results = trainer.train_then_eval(discovered_samples, discovered_classes, test_dataset, eval_verbose=True)
         
         if config.log_everything:
             if round_i == 0:
@@ -153,15 +151,15 @@ def main():
                 log_filename = os.path.join(save_dir, time_stamp+'.json')
 
             results[round_i] = {
-                'seen_samples' : s_train,
+                'discovered_samples' : discovered_samples,
                 'exemplar_set' : trainer.get_exemplar_set(),
                 'train_labels' : train_labels,
-                'num_seen_samples' : len(s_train),
-                'num_seen_classes' : len(seen_classes),
-                'num_unseen_classes' : len(classes.difference(seen_classes))-len(open_classes),
+                'num_discovered_samples' : len(discovered_samples),
+                'num_discovered_classes' : len(discovered_classes),
+                'num_undiscovered_classes' : len(classes.difference(discovered_classes))-len(open_classes),
                 'num_open_classes' : len(open_classes),
-                'seen_classes' : list(seen_classes),
-                'unseen_classes' : list(classes.difference(seen_classes)),
+                'discovered_classes' : list(discovered_classes),
+                'undiscovered_classes' : list(classes.difference(discovered_classes)),
                 'open_classes' : list(open_classes),
                 'eval_results' : eval_results,
                 'thresholds' : trainer.get_thresholds_checkpoints()[round_i+1],
@@ -231,7 +229,7 @@ def main():
                     os.makedirs(save_dir)
                 active_learning_filename = os.path.join(save_dir, time_stamp+'.json')
 
-            test_accs[len(s_train)] = eval_results['seen_closed_acc']
+            test_accs[len(discovered_samples)] = eval_results['seen_closed_acc']
             
             if round_i == config.max_rounds - 1:
                 json_dict = json.dumps(test_accs)
@@ -241,32 +239,32 @@ def main():
                 f.close()
     
 
-        t_train, t_classes = trainer.select_new_data(s_train, seen_classes)
+        t_train, t_classes = trainer.select_new_data(discovered_samples, discovered_classes)
 
-        new_seen_classes = seen_classes.union(t_classes)
-        classes_diff = new_seen_classes.difference(seen_classes)
-        seen_classes = new_seen_classes
+        new_discovered_classes = discovered_classes.union(t_classes)
+        classes_diff = new_discovered_classes.difference(discovered_classes)
+        discovered_classes = new_discovered_classes
 
-        print(f"Recognized class from {len(seen_classes)-len(classes_diff)} to {len(seen_classes)}")
+        print(f"Recognized class from {len(discovered_classes)-len(classes_diff)} to {len(discovered_classes)}")
 
         if config.writer: 
             writer.add_scalar("/train_acc", train_acc, round_i)
             for acc_key in eval_results.keys():
                 if isinstance(eval_results[acc_key], float):
                     writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
-            writer.add_scalar("/seen_classes", len(seen_classes), round_i)
+            writer.add_scalar("/discovered_classes", len(discovered_classes), round_i)
         
 
-        assert len(set(s_train)) == len(s_train)
+        assert len(set(discovered_samples)) == len(discovered_samples)
         assert len(set(t_train)) == len(t_train)
-        s_train = list(set(s_train).union(set(t_train)))
+        discovered_samples = list(set(discovered_samples).union(set(t_train)))
 
-        logger.log_round(round_i, s_train, seen_classes, eval_results)
+        logger.log_round(round_i, discovered_samples, discovered_classes, eval_results)
         
 
         if round_i % 20 == 0 and config.save_ckpt:
             # Save every 20 rounds
-            checkpoint = utils.get_checkpoint(round_i, s_train, open_samples, seen_classes, open_classes, trainer, logger)
+            checkpoint = utils.get_checkpoint(round_i, discovered_samples, open_samples, discovered_classes, open_classes, trainer, logger)
             utils.save_checkpoint(ckpt_dir, checkpoint)
 
     logger.finish()

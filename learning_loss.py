@@ -231,24 +231,24 @@ class NetworkLearningLoss(Network):
         self.info_collector_class = LearningLossInfoCollector
 
 
-    def _train(self, model, s_train, seen_classes, start_epoch=0):
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
         self._train_mode()
-        target_mapping_func = self._get_target_mapp_func(seen_classes)
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
         self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                  list(s_train),
+                                                  list(discovered_samples),
                                                   [], # TODO: Make a validation set
                                                   # target_mapping_func,
                                                   None,
                                                   batch_size=self.config.batch,
                                                   workers=self.config.workers)
         
-        self._update_last_layer(model, len(seen_classes), device=self.device)
+        self._update_last_layer(model, len(discovered_classes), device=self.device)
         optimizer = self._get_network_optimizer(model)
         scheduler = self._get_network_scheduler(optimizer)
 
         self.criterion = self._get_criterion(self.dataloaders['train'],
                                              target_mapping_func,
-                                             seen_classes=seen_classes,
+                                             discovered_classes=discovered_classes,
                                              criterion_class=self.criterion_class)
 
         with SetPrintMode(hidden=not self.config.verbose):
@@ -379,24 +379,24 @@ def get_learning_loss_class(base_class):
             self.info_collector_class = LearningLossInfoCollector
 
 
-        def _train(self, model, s_train, seen_classes, start_epoch=0):
+        def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
             self._train_mode()
-            target_mapping_func = self._get_target_mapp_func(seen_classes)
+            target_mapping_func = self._get_target_mapp_func(discovered_classes)
             self.dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                      list(s_train),
+                                                      list(discovered_samples),
                                                       [], # TODO: Make a validation set
                                                       # target_mapping_func,
                                                       None,
                                                       batch_size=self.config.batch,
                                                       workers=self.config.workers)
             
-            self._update_last_layer(model, len(seen_classes), device=self.device)
+            self._update_last_layer(model, len(discovered_classes), device=self.device)
             optimizer = self._get_network_optimizer(model)
             scheduler = self._get_network_scheduler(optimizer)
 
             self.criterion = self._get_criterion(self.dataloaders['train'],
                                                  target_mapping_func,
-                                                 seen_classes=seen_classes,
+                                                 discovered_classes=discovered_classes,
                                                  criterion_class=self.criterion_class)
 
             with SetPrintMode(hidden=not self.config.verbose):
@@ -427,7 +427,7 @@ def get_learning_loss_class(base_class):
                 if self.icalr_strategy == 'naive':
                     if self.icalr_naive_strategy == 'fixed':
                         # Store current representation
-                        self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, s_train)
+                        self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, discovered_samples)
             return train_loss, train_acc
 
         def _get_open_set_pred_func(self):

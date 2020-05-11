@@ -238,15 +238,15 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
         # g: float - closed set accuracy (not considering open set) on discovered classes (doesn't really need the threshold)
     assert picked_threshold != None
     parsed_round_results = {}
-    # if 'seen_classes' in round_results.keys() and 'open_classes' in round_results.keys():
-    #     discovered_indices = round_results['seen_classes']
+    # if 'discovered_classes' in round_results.keys() and 'open_classes' in round_results.keys():
+    #     discovered_indices = round_results['discovered_classes']
     #     open_indices = round_results['open_classes']
-    #     unseen_indices = round_results['unseen_classes']
+    #     unseen_indices = round_results['undiscovered_classes']
     # else:
-    #     num_total_classes = round_results['num_seen_classes'] + round_results['num_open_classes'] + round_results['num_unseen_classes']
+    #     num_total_classes = round_results['num_discovered_classes'] + round_results['num_open_classes'] + round_results['num_undiscovered_classes']
     #     open_indices = range(num_total_classes)[-round_results['num_open_classes']:]
-    #     discovered_indices = range(num_total_classes)[:round_results['num_seen_classes']]
-    #     unseen_indices = range(num_total_classes)[round_results['num_seen_classes']:-round_results['num_open_classes']]
+    #     discovered_indices = range(num_total_classes)[:round_results['num_discovered_classes']]
+    #     unseen_indices = range(num_total_classes)[round_results['num_discovered_classes']:-round_results['num_open_classes']]
     #     assert len(open_indices) + len(discovered_indices) + len(unseen_indices) == num_total_classes
 
     ground_truth = np.array(round_results['thresholds']['ground_truth'])
@@ -320,7 +320,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     parsed_round_results['discovered_open_acc'] = (discovered_open_corrects).sum() / float(len(discovered_open_corrects))
     parsed_round_results['roc_auroc'] = roc_results['auc_score']
     parsed_round_results['our_auroc'] = our_results['auc_score']
-    parsed_round_results['num_seen_classes'] = round_results['num_seen_classes']
+    parsed_round_results['num_discovered_classes'] = round_results['num_discovered_classes']
     parsed_round_results['picked_threshold'] = picked_threshold
 
 
@@ -333,7 +333,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     train_labels = np.array(round_results['train_labels'])[seen_samples]
 
     discovered_real_labels = real_labels[discovered_class_samples]
-    assert len(set(discovered_real_labels)) == round_results['num_seen_classes']
+    assert len(set(discovered_real_labels)) == round_results['num_discovered_classes']
     discovered_info_dict = {} # Key is real label, value is {'pred_as_open' : number, 'pred_correct' : number}
     for discovered_label in set(discovered_real_labels):
         discovered_info_dict[discovered_label] = {'pred_open' : 0., 'pred_correct' : 0., 'total' : 0., 'train' : 0.}
@@ -345,7 +345,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
         discovered_info_dict[discovered_label]['pred_correct'] = (closed_predicted_real[class_mask] == discovered_label).sum()
 
     # For each class log the accuracy.
-    x_class = np.zeros((int(round_results['num_seen_classes']) + int(round_results['num_unseen_classes']))) - 1 # -1 is nondiscovered class
+    x_class = np.zeros((int(round_results['num_discovered_classes']) + int(round_results['num_undiscovered_classes']))) - 1 # -1 is nondiscovered class
     y_class = np.zeros_like(x_class).astype('float')
     for discovered_label in discovered_info_dict.keys():
         acc = discovered_info_dict[discovered_label]['pred_correct'] / float(discovered_info_dict[discovered_label]['total'] )
@@ -574,7 +574,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     # parsed_round_results['discovered_open_acc'] = (discovered_open_corrects).sum() / len(discovered_open_corrects)
     # parsed_round_results['roc_auroc'] = roc_results['auc_score']
     # parsed_round_results['our_auroc'] = our_results['auc_score']
-    # parsed_round_results['num_seen_classes'] = our_results['num_seen_classes']
+    # parsed_round_results['num_discovered_classes'] = our_results['num_discovered_classes']
     # parsed_round_results['threshold'] = picked_threshold
     # Plus the class accuracy tuple (x_class, y_class) each is of size number_total_classes_to_discover
     if max_round:

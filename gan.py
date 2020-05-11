@@ -131,23 +131,23 @@ class GAN(Network):
 
         self.setting = GAN_SETUP_DICT[self.gan_player][self.gan_mode][self.gan_setup]
 
-    def _train(self, model, s_train, seen_classes, start_epoch=0):
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
         # Save these variable for self._get_open_set_pred_func(self)
-        self.s_train = s_train
-        self.seen_classes = seen_classes
-        return super(GAN, self)._train(model, s_train, seen_classes, start_epoch=start_epoch)
+        self.discovered_samples = discovered_samples
+        self.discovered_classes = discovered_classes
+        return super(GAN, self)._train(model, discovered_samples, discovered_classes, start_epoch=start_epoch)
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=False, training_features=None):
+    def _eval(self, model, test_dataset, discovered_classes, verbose=False, training_features=None):
         # assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
-        # self.num_seen_classes = len(seen_classes)
+        # self.num_discovered_classes = len(discovered_classes)
         self._reset_open_set_stats() # Open set status is the summary of 1/ Number of threshold reject 2/ Number of Open Class reject
-        eval_result = super(GAN, self)._eval(model, test_dataset, seen_classes, verbose=verbose)
+        eval_result = super(GAN, self)._eval(model, test_dataset, discovered_classes, verbose=verbose)
         if verbose:
             self._print_open_set_stats()
         return eval_result
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
         raise NotImplementedError()
 
     def _print_open_set_stats(self):
@@ -159,10 +159,10 @@ class GAN(Network):
 
     def _update_open_set_stats(self, gan_max, gan_preds):
         # For each batch
-        # self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_seen_classes) ))
-        # self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        # self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_seen_classes) ))
-        # self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_seen_classes) ))
+        # self.open_set_stats['threshold_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & ~(openmax_preds == self.num_discovered_classes) ))
+        # self.open_set_stats['open_class_reject'] += float(torch.sum(~(openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        # self.open_set_stats['both_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) & (openmax_preds == self.num_discovered_classes) ))
+        # self.open_set_stats['total_reject'] += float(torch.sum((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes) ))
         # assert self.open_set_stats['threshold_reject'] + self.open_set_stats['open_class_reject'] + self.open_set_stats['both_reject'] == self.open_set_stats['total_reject']
         raise NotImplementedError()
 
@@ -190,8 +190,8 @@ class FeatureGAN(GAN):
             print("Using random initialized model")
         return model.to(self.device)
 
-    def _eval(self, model, test_dataset, seen_classes, verbose=False, training_features=None):
-        eval_result = super(FeatureGAN, self)._eval(model, test_dataset, seen_classes, verbose=verbose)
+    def _eval(self, model, test_dataset, discovered_classes, verbose=False, training_features=None):
+        eval_result = super(FeatureGAN, self)._eval(model, test_dataset, discovered_classes, verbose=verbose)
         if not hasattr(self.model, 'forward_hook_handle'):
             raise NotImplementedError()
         else:
@@ -229,12 +229,12 @@ class SingleImageLevelGAN(GAN):
         super(SingleImageLevelGAN, self).__init__(*args, **kwargs)
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
         # ## Change transformation of dataset for gan training
         # old_transform = self.train_instance.train_dataset.transform
         # self.train_instance.train_dataset.transform = get_dcgan_transform()
         gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                 list(self.s_train),
+                                                 list(self.discovered_samples),
                                                  [], # TODO: Make a validation set
                                                  None, # Single ImageLevel Gan doesn't require class label
                                                  batch_size=self.config.batch,
@@ -272,12 +272,12 @@ class SingleImageLevelGAN(GAN):
         super(SingleImageLevelGAN, self).__init__(*args, **kwargs)
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
         # ## Change transformation of dataset for gan training
         # old_transform = self.train_instance.train_dataset.transform
         # self.train_instance.train_dataset.transform = get_dcgan_transform()
         gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                 list(self.s_train),
+                                                 list(self.discovered_samples),
                                                  [], # TODO: Make a validation set
                                                  None, # Single ImageLevel Gan doesn't require class label
                                                  batch_size=self.config.batch,
@@ -316,7 +316,7 @@ class SingleFeatureLevelGAN(FeatureGAN):
         super(SingleFeatureLevelGAN, self).__init__(*args, **kwargs)
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
 
         self.model.feature_vectors = []
         def hook_input(module, input, output):
@@ -325,7 +325,7 @@ class SingleFeatureLevelGAN(FeatureGAN):
         self.model.forward_hook_handle = self.model.fc.register_forward_hook(hook_input)
 
         gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                 list(self.s_train),
+                                                 list(self.discovered_samples),
                                                  [], # TODO: Make a validation set
                                                  None, # Single ImageLevel Gan doesn't require class label
                                                  batch_size=self.config.batch,
@@ -364,20 +364,20 @@ class MultipleImageLevelGAN(GAN):
         self.gan_multi = self.config.gan_multi
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
-        gan_list = {seen_class_index : {'netG': None, 
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
+        gan_list = {discovered_class_index : {'netG': None, 
                                         'netD' : None,
-                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == seen_class_index, self.s_train))} 
-                    for seen_class_index in self.seen_classes}
-        for seen_class_index in gan_list.keys():  
+                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == discovered_class_index, self.discovered_samples))} 
+                    for discovered_class_index in self.discovered_classes}
+        for discovered_class_index in gan_list.keys():  
             gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                     list(gan_list[seen_class_index]['samples']),
+                                                     list(gan_list[discovered_class_index]['samples']),
                                                      [], # TODO: Make a validation set
                                                      None, # Multiple ImageLevel Gan doesn't require class label
                                                      batch_size=self.config.batch,
                                                      workers=self.config.workers)
             if self.save_gan_output:
-                save_gan_output_class_dir = self.save_gan_output+os.sep+"class_"+str(seen_class_index)
+                save_gan_output_class_dir = self.save_gan_output+os.sep+"class_"+str(discovered_class_index)
                 if not os.path.exists(save_gan_output_class_dir):
                     os.makedirs(save_gan_output_class_dir)
             else:
@@ -386,10 +386,10 @@ class MultipleImageLevelGAN(GAN):
                                      self.setting,
                                      device=self.config.device,
                                      save_gan_output=save_gan_output_class_dir)
-            gan_list[seen_class_index]['netD'] = netD
-            gan_list[seen_class_index]['netG'] = netG
+            gan_list[discovered_class_index]['netD'] = netD
+            gan_list[discovered_class_index]['netG'] = netG
 
-        target_mapping_func = self._get_target_mapp_func(self.seen_classes)
+        target_mapping_func = self._get_target_mapp_func(self.discovered_classes)
 
         def open_set_prediction(outputs, inputs=None):
             d_preds = torch.ones(outputs.shape[0]).byte().to(inputs.device)
@@ -432,27 +432,27 @@ class BackgroundImageGAN(GAN):
         self.use_noise = self.gan_player == 'background_noise'
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
-        gan_list = {seen_class_index : {'netG': None, 
-                                        'netD' : None,
-                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == seen_class_index, self.s_train)),
-                                        'backgrounds' : list(filter(lambda x: self.train_instance.train_labels[x] != seen_class_index, self.s_train))} 
-                    for seen_class_index in self.seen_classes}
-        for seen_class_index in gan_list.keys():  
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
+        gan_list = {discovered_class_index : {'netG': None, 
+                                              'netD' : None,
+                                              'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == discovered_class_index, self.discovered_samples)),
+                                              'backgrounds' : list(filter(lambda x: self.train_instance.train_labels[x] != discovered_class_index, self.discovered_samples))} 
+                    for discovered_class_index in self.discovered_classes}
+        for discovered_class_index in gan_list.keys():  
             gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                     list(gan_list[seen_class_index]['samples']),
+                                                     list(gan_list[discovered_class_index]['samples']),
                                                      [], # TODO: Make a validation set
                                                      None, # Multiple ImageLevel Gan doesn't require class label
                                                      batch_size=self.config.batch,
                                                      workers=self.config.workers)
             background_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                            list(gan_list[seen_class_index]['backgrounds']),
+                                                            list(gan_list[discovered_class_index]['backgrounds']),
                                                             [], # TODO: Make a validation set
                                                             None, # Multiple ImageLevel Gan doesn't require class label
                                                             batch_size=self.config.batch,
                                                             workers=self.config.workers)
             if self.save_gan_output:
-                save_gan_output_class_dir = self.save_gan_output+os.sep+"class_"+str(seen_class_index)
+                save_gan_output_class_dir = self.save_gan_output+os.sep+"class_"+str(discovered_class_index)
                 if not os.path.exists(save_gan_output_class_dir):
                     os.makedirs(save_gan_output_class_dir)
             else:
@@ -463,10 +463,10 @@ class BackgroundImageGAN(GAN):
                                                      device=self.config.device,
                                                      use_noise=self.use_noise,
                                                      save_gan_output=save_gan_output_class_dir)
-            gan_list[seen_class_index]['netD'] = netD
-            gan_list[seen_class_index]['netG'] = netG
+            gan_list[discovered_class_index]['netD'] = netD
+            gan_list[discovered_class_index]['netG'] = netG
 
-        target_mapping_func = self._get_target_mapp_func(self.seen_classes)
+        target_mapping_func = self._get_target_mapp_func(self.discovered_classes)
 
         def open_set_prediction(outputs, inputs=None):
             d_preds = torch.ones(outputs.shape[0]).byte().to(inputs.device)
@@ -509,7 +509,7 @@ class MultipleFeatureLevelGAN(GAN):
         self.gan_multi = self.config.gan_multi
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
 
         self.model.feature_vectors = []
         def hook_input(module, input, output):
@@ -517,13 +517,13 @@ class MultipleFeatureLevelGAN(GAN):
 
         self.model.forward_hook_handle = self.model.fc.register_forward_hook(hook_input)
 
-        gan_list = {seen_class_index : {'netG': None, 
+        gan_list = {discovered_class_index : {'netG': None, 
                                         'netD' : None,
-                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == seen_class_index, self.s_train))} 
-                    for seen_class_index in self.seen_classes}
-        for seen_class_index in gan_list.keys():  
+                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == discovered_class_index, self.discovered_samples))} 
+                    for discovered_class_index in self.discovered_classes}
+        for discovered_class_index in gan_list.keys():  
             gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                     list(gan_list[seen_class_index]['samples']),
+                                                     list(gan_list[discovered_class_index]['samples']),
                                                      [], # TODO: Make a validation set
                                                      None, # Multiple ImageLevel Gan doesn't require class label
                                                      batch_size=self.config.batch,
@@ -533,10 +533,10 @@ class MultipleFeatureLevelGAN(GAN):
                                                    self.setting,
                                                    model=self.model,
                                                    device=self.config.device)
-            gan_list[seen_class_index]['netD'] = netD
-            gan_list[seen_class_index]['netG'] = netG
+            gan_list[discovered_class_index]['netD'] = netD
+            gan_list[discovered_class_index]['netG'] = netG
 
-        target_mapping_func = self._get_target_mapp_func(self.seen_classes)
+        target_mapping_func = self._get_target_mapp_func(self.discovered_classes)
 
         def open_set_prediction(outputs, inputs=None):
             d_preds = torch.ones(outputs.shape[0]).byte().to(inputs.device)
@@ -582,7 +582,7 @@ class BackgroundFeatureGAN(GAN):
         self.use_noise = self.gan_player == 'background_noise'
 
     def _get_open_set_pred_func(self):
-        assert hasattr(self, 's_train') and hasattr(self, 'seen_classes')
+        assert hasattr(self, 'discovered_samples') and hasattr(self, 'discovered_classes')
 
         self.model.feature_vectors = []
         def hook_input(module, input, output):
@@ -590,20 +590,20 @@ class BackgroundFeatureGAN(GAN):
 
         self.model.forward_hook_handle = self.model.fc.register_forward_hook(hook_input)
 
-        gan_list = {seen_class_index : {'netG': None, 
+        gan_list = {discovered_class_index : {'netG': None, 
                                         'netD' : None,
-                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == seen_class_index, self.s_train)),
-                                        'backgrounds' : list(filter(lambda x: self.train_instance.train_labels[x] != seen_class_index, self.s_train))} 
-                    for seen_class_index in self.seen_classes}
-        for seen_class_index in gan_list.keys():  
+                                        'samples' : list(filter(lambda x: self.train_instance.train_labels[x] == discovered_class_index, self.discovered_samples)),
+                                        'backgrounds' : list(filter(lambda x: self.train_instance.train_labels[x] != discovered_class_index, self.discovered_samples))} 
+                    for discovered_class_index in self.discovered_classes}
+        for discovered_class_index in gan_list.keys():  
             gan_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                     list(gan_list[seen_class_index]['samples']),
+                                                     list(gan_list[discovered_class_index]['samples']),
                                                      [], # TODO: Make a validation set
                                                      None, # Multiple ImageLevel Gan doesn't require class label
                                                      batch_size=self.config.batch,
                                                      workers=self.config.workers)
             background_dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
-                                                            list(gan_list[seen_class_index]['backgrounds']),
+                                                            list(gan_list[discovered_class_index]['backgrounds']),
                                                             [], # TODO: Make a validation set
                                                             None, # Multiple ImageLevel Gan doesn't require class label
                                                             batch_size=self.config.batch,
@@ -614,10 +614,10 @@ class BackgroundFeatureGAN(GAN):
                                                                    model=self.model,
                                                                    use_noise=self.use_noise,
                                                                    device=self.config.device)
-            gan_list[seen_class_index]['netD'] = netD
-            gan_list[seen_class_index]['netG'] = netG
+            gan_list[discovered_class_index]['netD'] = netD
+            gan_list[discovered_class_index]['netG'] = netG
 
-        target_mapping_func = self._get_target_mapp_func(self.seen_classes)
+        target_mapping_func = self._get_target_mapp_func(self.discovered_classes)
 
         def open_set_prediction(outputs, inputs=None):
             d_preds = torch.ones(outputs.shape[0]).byte().to(inputs.device)
