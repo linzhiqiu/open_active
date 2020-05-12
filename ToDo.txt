@@ -1,0 +1,9 @@
+# TODO
+    # Refactoring
+        # In train.py
+            # Before the actual loop/code, write pseudo-code for the loop
+    # Features
+        # Save models at last checkpoint
+        # Actually, let each subtype of trainer machine have their own save and load functions
+            # Need to figure out when we want to call these save and load functions
+            # e.g. number of discovered classes how to save and load

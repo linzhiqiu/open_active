@@ -36,14 +36,13 @@ def makedirs(dir_name):
     else:
         print(f"{dir_name} already exists.")
 
-def get_checkpoint(round, discovered_samples, open_examples, discovered_classes, open_classes, trainer, logger):
+def get_checkpoint(round, discovered_samples, open_examples, discovered_classes, open_classes, trainer):
     return {'round' : round,
             'trainer_checkpoint' : trainer.get_checkpoint(),
             'discovered_samples' : discovered_samples,
             'open_examples' : open_examples,
             'discovered_classes' : discovered_classes,
-            'open_classes' : open_classes,
-            'logger_checkpoint' : logger.get_checkpoint()}
+            'open_classes' : open_classes}
 
 def save_checkpoint(ckpt_dir, checkpoint, epoch=0):
     torch.save(checkpoint,
@@ -171,10 +170,6 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
     def unmapp_func(lst):
         return list(map(lambda x: unmapping_dict[x], lst))
     return unmapp_func
-
-def enable_graphite(config):
-    import os
-    config.data_path = os.path.join("/scratch/datasets", config.data_path)
 
 def get_data_param(config):
     # For first round thresholds values logging

@@ -12,7 +12,6 @@ from dataset_factory import DatasetFactory
 
 from tensorboardX import SummaryWriter
 from trainer import get_trainer # Contains different ways to train model
-from logger import get_logger
 import utils
 import json
 import random
@@ -30,82 +29,41 @@ def main():
         torch.backends.cudnn.benchmark = False
     
     dataset_factory = DatasetFactory(config.data, config.data_path, config.init_mode)
-    train_dataset, test_dataset = dataset_factory.get_dataset()
-    train_samples, train_labels = dataset_factory.get_train_set_info()
-    classes, open_classes = dataset_factory.get_class_info()
+    train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
+    train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
+    classes, open_classes = dataset_factory.get_class_info() # Set of indices
     
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
-    if not config.resume:
-        # Begin from scratch
-        start_round = 0
-        discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, seen classes
-        open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
 
-        # trainer contains train() eval() load_checkpoint() functions
-        trainer = get_trainer(config,
-                              train_dataset, 
-                              train_samples,
-                              open_samples,
-                              train_labels,
-                              classes,
-                              open_classes)
+    # Begin from scratch
+    start_round = 0
+    discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
+    open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
 
-        log_name = "{}{}{}".format(utils.get_experiment_name(config),
-                                   os.sep,
-                                   time_stamp)
-        ckpt_dir = os.path.join(config.ckpt_dir, log_name)
-        if config.save_ckpt:
-            utils.makedirs(ckpt_dir)
-            print(ckpt_dir)
-        else:
-            print("Warning: Not saving.")
+    # trainer contains train() eval() load_checkpoint() functions
+    trainer = get_trainer(config,
+                          train_dataset, 
+                          train_samples,
+                          open_samples,
+                          train_labels,
+                          classes,
+                          open_classes)
 
-        if config.writer:
-            writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
-        else:
-            writer = None
-            print("Not writing to tensorboard")
-        # logger save all performance data, and write to tensorboard every epoch/round
-        logger = get_logger(log_name=log_name,
-                            ckpt_dir=ckpt_dir,
-                            writer=writer)
-        
-        logger.init_round(discovered_samples, open_samples, discovered_classes, open_classes)
-
-        checkpoint = utils.get_checkpoint(start_round, discovered_samples, open_samples, discovered_classes, open_classes, trainer, logger)
-                    
-        if config.save_ckpt: utils.save_checkpoint(ckpt_dir, checkpoint)
+    
+    log_name = "{}{}{}".format(utils.get_experiment_name(config),
+                               os.sep,
+                               time_stamp)
+    ckpt_dir = os.path.join(config.ckpt_dir, log_name)
+    if config.save_ckpt:
+        utils.makedirs(ckpt_dir)
+        print(ckpt_dir)
     else:
-        # Begin from the checkpoint
-        if not os.path.isfile(config.resume):
-            raise FileNotFoundError(f"No checkpoint file found at {config.resume}")
-        
-        print("=> loading checkpoint '{}'".format(config.resume))
-        checkpoint = torch.load(config.resume)
+        print("Warning: Not saving the intermediate models.")
 
-        start_round = checkpoint['round']
-        discovered_samples, open_samples, discovered_classes, open_classes = checkpoint['discovered_samples'], checkpoint['open_samples'], checkpoint['discovered_classes'], checkpoint['open_classes']
-        # trainer contains train() eval() load_checkpoint() functions
-        trainer = get_trainer(config,
-                              train_dataset,
-                              train_samples,
-                              open_samples,
-                              train_labels,
-                              classes,
-                              open_classes)
-
-        trainer.load_checkpoint(checkpoint['trainer_checkpoint'])
-
-        log_name = checkpoint['logger_checkpoint']['log_name']
-        ckpt_dir = checkpoint['logger_checkpoint']['ckpt_dir']
-
-        writer = SummaryWriter(log_dir=os.path.join(".", "runs", ckpt_dir))
-        logger = get_logger(log_name=log_name,
-                            ckpt_dir=ckpt_dir,
-                            writer=writer)
-        logger.load_checkpoint(checkpoint['logger_checkpoint'])
-
-        
+    checkpoint = utils.get_checkpoint(start_round, discovered_samples, open_samples, discovered_classes, open_classes, trainer)
+                
+    if config.save_ckpt: utils.save_checkpoint(ckpt_dir, checkpoint)
+    
     # The main loop
     for round_i in range(start_round, config.max_rounds):
         print(f"Round [{round_i}]")
@@ -237,37 +195,24 @@ def main():
                 f = open(active_learning_filename, "w+")
                 f.write(json_dict)
                 f.close()
-    
 
-        t_train, t_classes = trainer.select_new_data(discovered_samples, discovered_classes)
+        # newly labeled samples, classes in these newly labeled samples
+        new_samples, new_classes = trainer.select_new_data(discovered_samples, discovered_classes)
 
-        new_discovered_classes = discovered_classes.union(t_classes)
+        new_discovered_classes = discovered_classes.union(new_classes)
         classes_diff = new_discovered_classes.difference(discovered_classes)
         discovered_classes = new_discovered_classes
 
         print(f"Recognized class from {len(discovered_classes)-len(classes_diff)} to {len(discovered_classes)}")
 
-        if config.writer: 
-            writer.add_scalar("/train_acc", train_acc, round_i)
-            for acc_key in eval_results.keys():
-                if isinstance(eval_results[acc_key], float):
-                    writer.add_scalar("/"+acc_key, eval_results[acc_key], round_i)
-            writer.add_scalar("/discovered_classes", len(discovered_classes), round_i)
-        
-
         assert len(set(discovered_samples)) == len(discovered_samples)
-        assert len(set(t_train)) == len(t_train)
-        discovered_samples = list(set(discovered_samples).union(set(t_train)))
-
-        logger.log_round(round_i, discovered_samples, discovered_classes, eval_results)
-        
+        assert len(set(new_samples)) == len(new_samples)
+        discovered_samples = list(set(discovered_samples).union(set(new_samples)))
 
         if round_i % 20 == 0 and config.save_ckpt:
             # Save every 20 rounds
-            checkpoint = utils.get_checkpoint(round_i, discovered_samples, open_samples, discovered_classes, open_classes, trainer, logger)
+            checkpoint = utils.get_checkpoint(round_i, discovered_samples, open_samples, discovered_classes, open_classes, trainer)
             utils.save_checkpoint(ckpt_dir, checkpoint)
-
-    logger.finish()
 
 if __name__ == '__main__':
     main()

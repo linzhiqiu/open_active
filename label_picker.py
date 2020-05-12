@@ -199,14 +199,14 @@ class UncertaintyMeasure(LabelPicker):
         sorted_scores, rankings = torch.sort(scores, descending=False)
         rankings = list(rankings[:self.config.budget])
 
-        t_train = set() # New labeled samples
-        t_classes = set() # New classes (may include seen classes)
+        new_samples = set() # New labeled samples
+        new_classes = set() # New classes (may include seen classes)
         for idx in rankings:
             new_sample = unlabeled_pool[idx]
             self.trainer_machine.log.append(info[idx])
-            t_train.add(new_sample)
-            t_classes.add(self.train_instance.train_labels[new_sample])
-        return t_train, t_classes
+            new_samples.add(new_sample)
+            new_classes.add(self.train_instance.train_labels[new_sample])
+        return new_samples, new_classes
 
 class CoresetMeasure(LabelPicker):
     def __init__(self, *args, **kwargs):
@@ -333,13 +333,13 @@ class CoresetMeasure(LabelPicker):
         else:
             score_ranking_pair = [(int(r), float(sorted_dist[i]), 0) for i, r in enumerate(rankings)]
         
-        t_train = set() # New labeled samples
-        t_classes = set() # New classes (may include seen classes)
-        while len(t_train) < self.config.budget:
+        new_samples = set() # New labeled samples
+        new_classes = set() # New classes (may include seen classes)
+        while len(new_samples) < self.config.budget:
             real_idx = score_ranking_pair[0][0]
             new_sample = unlabeled_pool[real_idx]
-            t_train.add(new_sample)
-            t_classes.add(self.train_instance.train_labels[new_sample])
+            new_samples.add(new_sample)
+            new_classes.add(self.train_instance.train_labels[new_sample])
 
             score_ranking_pair = score_ranking_pair[1:]
             score_ranking_pair_new = []
@@ -355,7 +355,7 @@ class CoresetMeasure(LabelPicker):
             else:
                 pass # Keep it random shuffled
             score_ranking_pair = score_ranking_pair_new
-        return t_train, t_classes
+        return new_samples, new_classes
 
 def distance_matrix(A, B):
     # A is m x d pytorch matrix, B is n x d pytorch matrix.
