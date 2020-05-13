@@ -14,8 +14,8 @@ from trainer_machine import TrainerMachine, Network, train_epochs, get_dynamic_t
 from instance_info import BasicInfoCollector
 
 import models
-from utils import get_dataloaders, get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list, FixedRepresentationDataset
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
+from utils import get_dataloaders, get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_func_for_list, FixedRepresentationDataset
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
 import libmr
 import math
@@ -296,7 +296,7 @@ class ICALR(Network):
         # Update self.thresholds_checkpoints
         # assert self.round not in self.thresholds_checkpoints.keys()
         # Caveat: Currently, the open_set_score is updated in the open_set_prediction function. Yet the grouth_truth is updated in self._eval()
-        self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+        self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
                                                    'real_labels' : [], # The real labels for CIFAR100 or other datasets.
                                                    'open_set_score' : [], # Higher the score, more likely to be open set
                                                    'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?
@@ -351,7 +351,7 @@ class ICALR(Network):
                     labels = target_mapping_func(real_labels.to(self.device))
                     labels_for_openset_pred = torch.where(
                                                   labels == OPEN_CLASS_INDEX,
-                                                  torch.LongTensor([UNSEEN_CLASS_INDEX]).to(labels.device),
+                                                  torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(labels.device),
                                                   labels
                                               ) # This change hold out open set examples' indices to unseen open set examples indices
                     label_for_learnloss = labels.clone()
@@ -359,14 +359,14 @@ class ICALR(Network):
                     
                     outputs = model(inputs)
                     if self.icalr_strategy == 'proto':
-                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0], label_for_learnloss=label_for_learnloss) # Open set index == UNSEEN_CLASS_INDEX
+                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0], label_for_learnloss=label_for_learnloss) # Open set index == UNDISCOVERED_CLASS_INDEX
                         cur_features = []
                     elif self.icalr_strategy in ['naive', 'smooth']:
-                        preds = open_set_prediction(outputs, inputs=inputs, features=None, label_for_learnloss=label_for_learnloss) # Open set index == UNSEEN_CLASS_INDEX
+                        preds = open_set_prediction(outputs, inputs=inputs, features=None, label_for_learnloss=label_for_learnloss) # Open set index == UNDISCOVERED_CLASS_INDEX
                     # loss = open_set_criterion(outputs, labels)
 
                     # labels_for_ground_truth = torch.where(
-                    #                               (labels != OPEN_CLASS_INDEX) & (labels != UNSEEN_CLASS_INDEX),
+                    #                               (labels != OPEN_CLASS_INDEX) & (labels != UNDISCOVERED_CLASS_INDEX),
                     #                               torch.LongTensor([0]).to(labels.device),
                     #                               labels
                     #                           ) # This change hold out open set examples' indices to unseen open set examples indices
@@ -378,7 +378,7 @@ class ICALR(Network):
                     performance_dict['overall_acc']['count'] += inputs.size(0)
                     performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
                     
-                    unseen_open_indices = labels == UNSEEN_CLASS_INDEX
+                    unseen_open_indices = labels == UNDISCOVERED_CLASS_INDEX
                     seen_closed_indices = labels >= 0
                     hold_out_open_indices = labels == OPEN_CLASS_INDEX
                     train_class_indices = unseen_open_indices | seen_closed_indices
@@ -420,7 +420,7 @@ class ICALR(Network):
                                                                        ).float()
                     performance_dict['seen_closed_acc']['open'] += torch.sum(
                                                                        torch.masked_select(
-                                                                           (preds==UNSEEN_CLASS_INDEX),
+                                                                           (preds==UNDISCOVERED_CLASS_INDEX),
                                                                            seen_closed_indices
                                                                        )
                                                                    ).float()
@@ -532,7 +532,7 @@ class ICALR(Network):
 
 
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -948,7 +948,7 @@ class ICALROSDNNetwork(ICALR):
                                   openmax_top2[:, 1],
                                   openmax_max)
         openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
-                                              torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+                                              torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         
         if log_thresholds:
@@ -969,7 +969,7 @@ class ICALROSDNNetwork(ICALR):
 
         # Return the prediction
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
-                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+                            torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
 
@@ -1081,7 +1081,7 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
                                   openmax_top2[:, 1],
                                   openmax_max)
         openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
-                                              torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+                                              torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                                               openmax_preds)
         
         if log_thresholds:
@@ -1101,7 +1101,7 @@ class ICALROSDNNetworkModified(ICALROSDNNetwork):
             self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
         
         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
-                            torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device),
+                            torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
                             openmax_preds)
         return openmax_outputs, preds
 
@@ -1220,7 +1220,7 @@ class ICALRBinarySoftmaxNetwork(ICALR):
             self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
 
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction

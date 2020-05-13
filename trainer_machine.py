@@ -159,12 +159,6 @@ class TrainerMachine(object):
     def get_thresholds_checkpoints(self):
         return self.thresholds_checkpoints
 
-    def get_checkpoint(self):
-        raise NotImplementedError()
-
-    def load_checkpoint(self, checkpoint):
-        raise NotImplementedError()
-
     def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True):
         raise NotImplementedError()
 
@@ -216,26 +210,6 @@ class Network(TrainerMachine):
             self.pseudo_open_set = self.config.pseudo_open_set
             self.pseudo_open_set_rounds = 0
             self.pseudo_open_set_classes = set() # No pseudo open set classes
-
-    def get_checkpoint(self):
-        return {
-            'round' : self.round,
-            'epoch' : self.epoch,
-            'arch'  : self.config.arch,
-            'model' : self.model.state_dict(),
-            # 'optimizer' : self.optimizer.state_dict(),
-            # 'scheduler' : self.scheduler.state_dict()
-        }
-
-    def load_checkpoint(self, checkpoint):
-        self.epoch = checkpoint['epoch']
-        new_model_checkpoint = copy.deepcopy(checkpoint['model'])
-        for layer_name in checkpoint['model']:
-            if "fc.weight" in layer_name or "fc.bias" in layer_name:
-                del new_model_checkpoint[layer_name]
-        self.model.load_state_dict(new_model_checkpoint, strict=False)
-        # self.optimizer.load_state_dict(checkpoint['optimizer'])
-        # self.scheduler.load_state_dict(checkpoint['scheduler'])
 
     def _get_criterion(self, dataloader, target_mapping_func, discovered_classes=set(), criterion_class=nn.CrossEntropyLoss):
         assert discovered_classes.__len__() > 0

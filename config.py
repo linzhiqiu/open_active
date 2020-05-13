@@ -414,11 +414,7 @@ misc_arg.add_argument('--verbose', action='store_true', default=False,
 misc_arg.add_argument('--save_gan_output', action='store_true', default=False, 
                       help='If true, save to gan_output/')
 misc_arg.add_argument('--use_random_seed', action='store_true', default=False,
-                      help='If true, use a random random seed')
-misc_arg.add_argument('--save_first_round_model', action='store_true', default=False,
-                      help='If true, we save the model at first round.')
-misc_arg.add_argument('--log_first_round_model', action='store_true', default=False,
-                      help='If true, we use the model saved at first round.')
+                      help='If true, use a random random seed. Otherwise, use 30 as the seed.')
 
 def get_config():
     config, unparsed = parser.parse_known_args()

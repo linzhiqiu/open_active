@@ -5,23 +5,20 @@ from learning_loss import NetworkLearningLoss, get_learning_loss_class
 from icalr import ICALR, ICALROSDNNetwork, ICALROSDNNetworkModified, ICALRBinarySoftmaxNetwork
 from label_picker import UncertaintyMeasure, CoresetMeasure
 
-def get_trainer(config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
-    return Trainer(config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes)
-
 
 class TrainingInstance(object):
     """ A data class holding all resources for training
     """
     def __init__(self, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
         super(TrainingInstance, self).__init__()
-        self.train_dataset = train_dataset
-        self.train_samples = train_samples
-        self.open_samples = open_samples
-        self.query_samples = train_samples.difference(open_samples)
-        self.train_labels = train_labels
-        self.classes = classes
-        self.open_classes = open_classes
-        self.query_classes = classes.difference(open_classes)
+        self.train_dataset = train_dataset # PyTorch train dataset
+        self.train_samples = train_samples # List of indices in train set
+        self.open_samples = open_samples # List of indices representing training samples belonging to open class
+        self.query_samples = train_samples.difference(open_samples) # List of indices representing the unlabeled pool
+        self.train_labels = train_labels # List of labels of all train samples
+        self.classes = classes # Set of all classes
+        self.open_classes = open_classes # Set of all hold out open classes
+        self.query_classes = classes.difference(open_classes) # Set of all classes in unlabeled pool
 
 
 class Trainer(object):
@@ -35,12 +32,17 @@ class Trainer(object):
                                                classes,
                                                open_classes)
 
-        self.trainer_machine = self._init_trainer_machine()
-        self.label_picker = self._init_label_picker()
+        self.trainer_machine = self._init_trainer_machine() # TrainerMachine implements the actual algorithm
+        self.label_picker = self._init_label_picker() # LabelPicker implements the active learning query algorithm
     
     def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=False):
-        # Start a new round. Train the model using discovered_samples from discovered_classes. Then eval on test_dataset.
-        return self.trainer_machine.train_then_eval(discovered_samples, discovered_classes, test_dataset, eval_verbose=eval_verbose)
+        # Start a new round. Each round has 2 steps:
+        # (1) Train the model using discovered_samples from discovered_classes.
+        # (2) Then eval on test_dataset.
+        return self.trainer_machine.train_then_eval(discovered_samples,
+                                                    discovered_classes,
+                                                    test_dataset,
+                                                    eval_verbose=eval_verbose)
 
     def get_thresholds_checkpoints(self):
         return self.trainer_machine.get_thresholds_checkpoints()
@@ -56,20 +58,6 @@ class Trainer(object):
 
     # def eval(self, test_dataset, verbose=False):
     #     return self.trainer_machine.eval(test_dataset, verbose=verbose)
-
-    def get_checkpoint(self):
-        """ Return a dictionary of all necessary gadgets in order to resume training
-        """
-        return {
-            'trainer_machine' : self.trainer_machine.get_checkpoint(),
-            'label_picker' : self.label_picker.get_checkpoint(),
-        }
-
-    def load_checkpoint(self, trainer_checkpoint):
-        """ Load from a dictionary
-        """
-        self.trainer_machine.load_checkpoint(trainer_checkpoint['trainer_machine'])
-        self.label_picker.load_checkpoint(trainer_checkpoint['label_picker'])
 
     def _init_trainer_machine(self):
         """ Initialize all necessary models/optimizer/learning rate scheduler 

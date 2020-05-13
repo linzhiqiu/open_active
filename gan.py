@@ -20,7 +20,7 @@ import models
 from utils import get_subset_dataloaders
 from global_setting import GAN_SETUP_DICT
 from transform import get_dcgan_transform
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 
 ############
 # Below are helper functions and classes for GAN training
@@ -252,7 +252,7 @@ class SingleImageLevelGAN(GAN):
             softmax_outputs = F.softmax(outputs, dim=1)
             _, softmax_preds = torch.max(softmax_outputs, 1)
             preds = torch.where(d_outputs < 0.5,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -295,7 +295,7 @@ class SingleImageLevelGAN(GAN):
             softmax_outputs = F.softmax(outputs, dim=1)
             _, softmax_preds = torch.max(softmax_outputs, 1)
             preds = torch.where(d_outputs < 0.5,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -343,7 +343,7 @@ class SingleFeatureLevelGAN(FeatureGAN):
             softmax_outputs = F.softmax(outputs, dim=1)
             _, softmax_preds = torch.max(softmax_outputs, 1)
             preds = torch.where(d_outputs < 0.5,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -410,7 +410,7 @@ class MultipleImageLevelGAN(GAN):
                                           d_preds)
             
             preds = torch.where(d_preds,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -487,7 +487,7 @@ class BackgroundImageGAN(GAN):
                                           d_preds)
             
             preds = torch.where(d_preds,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -560,7 +560,7 @@ class MultipleFeatureLevelGAN(GAN):
                                           d_preds)
             
             preds = torch.where(d_preds,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction
@@ -641,7 +641,7 @@ class BackgroundFeatureGAN(GAN):
                                           d_preds)
             
             preds = torch.where(d_preds,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction

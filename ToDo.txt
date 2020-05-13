@@ -2,7 +2,11 @@
     # Refactoring
         # In train.py
             # Before the actual loop/code, write pseudo-code for the loop
+            # Before running the model, first check if the log dir can be made
+        # In trainer.py + trainer_machine.py
+            # Split train and eval functions. Let eval() return the threshold_checkpoints
     # Features
+        # I removed log/save_first_round_model. We wanna provide a separate eval.py maybe.
         # Save models at last checkpoint
         # Actually, let each subtype of trainer machine have their own save and load functions
             # Need to figure out when we want to call these save and load functions

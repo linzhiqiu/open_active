@@ -25,12 +25,6 @@ class LabelPicker(object):
         # New: After reading active learning papers
         self.active_random_sampling = self.config.active_random_sampling
 
-    def get_checkpoint(self):
-        raise NotImplementedError()
-
-    def load_checkpoint(self, checkpoint):
-        raise NotImplementedError()
-
     def select_new_data(self, discovered_samples, discovered_classes):
         # Require: Update the self.trainer_machine.log in each call
         raise NotImplementedError()
@@ -116,13 +110,6 @@ class UncertaintyMeasure(LabelPicker):
             self.measure_func = network_measure_func
         else:
             raise NotImplementedError()
-
-    def get_checkpoint(self):
-        # TODO: Add something meaningful
-        return None
-
-    def load_checkpoint(self, checkpoint):
-        pass
 
     def select_new_data(self, discovered_samples, discovered_classes):
         self.model = self.trainer_machine.model
@@ -228,13 +215,6 @@ class CoresetMeasure(LabelPicker):
             print("Using Network's coreset_measure")
         else:
             raise NotImplementedError()
-
-    def get_checkpoint(self):
-        # TODO: Add something meaningful
-        return None
-
-    def load_checkpoint(self, checkpoint):
-        pass
 
     def get_features(self, samples):
         self.model.eval()

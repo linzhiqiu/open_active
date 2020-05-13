@@ -11,8 +11,9 @@ from config import get_config
 from dataset_factory import DatasetFactory
 
 from tensorboardX import SummaryWriter
-from trainer import get_trainer # Contains different ways to train model
-import utils
+from trainer import Trainer # Contains different methods to train model
+from utils import makedirs
+import logging_helper
 import json
 import random
 
@@ -36,72 +37,62 @@ def main():
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
     # Begin from scratch
-    start_round = 0
     discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
     open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
 
-    # trainer contains train() eval() load_checkpoint() functions
-    trainer = get_trainer(config,
-                          train_dataset, 
-                          train_samples,
-                          open_samples,
-                          train_labels,
-                          classes,
-                          open_classes)
+    # Trainer is the main class for training and evaluating a model
+    # It contains train() eval() functions
+    trainer = Trainer(config,
+                      train_dataset, 
+                      train_samples,
+                      open_samples,
+                      train_labels,
+                      classes,
+                      open_classes)
 
     
-    log_name = "{}{}{}".format(utils.get_experiment_name(config),
+    log_name = "{}{}{}".format(logging_helper.get_experiment_name(config),
                                os.sep,
                                time_stamp)
     ckpt_dir = os.path.join(config.ckpt_dir, log_name)
     if config.save_ckpt:
-        utils.makedirs(ckpt_dir)
+        makedirs(ckpt_dir)
         print(ckpt_dir)
     else:
         print("Warning: Not saving the intermediate models.")
 
-    checkpoint = utils.get_checkpoint(start_round, discovered_samples, open_samples, discovered_classes, open_classes, trainer)
-                
-    if config.save_ckpt: utils.save_checkpoint(ckpt_dir, checkpoint)
-    
     # The main loop
-    for round_i in range(start_round, config.max_rounds):
+    for round_i in range(0, config.max_rounds):
         print(f"Round [{round_i}]")
 
         # Test if log dir is short enough
-        # log_strs = utils.get_experiment_name(config).split(os.sep)
-        # dataset_str = utils.get_data_param(config)
-        # method_str = utils.get_method_param(config)
+        # log_strs = logging_helper.get_experiment_name(config).split(os.sep)
+        # dataset_str = logging_helper.get_data_param(config)
+        # method_str = logging_helper.get_method_param(config)
         # training_str = '_'.join(log_strs[2:])
         # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
         # if not os.path.exists(save_dir):
         #     os.makedirs(save_dir)
-        assert not (config.log_first_round_model and config.save_first_round_model)
 
         if config.log_everything:
-            log_strs = utils.get_experiment_name(config).split(os.sep)
-            dataset_str = utils.get_data_active_param(config)
-            method_str = utils.get_method_param(config)
-            active_str = utils.get_active_param(config)
+            log_strs = logging_helper.get_experiment_name(config).split(os.sep)
+            dataset_str = logging_helper.get_owar_param(config)
+            method_str = logging_helper.get_method_param(config)
+            active_str = logging_helper.get_active_param(config)
             training_str = '_'.join(log_strs[2:])
             save_dir = os.path.join('open_active_results_new', dataset_str, "_".join([method_str, active_str]), training_str)
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir)
-
-        if config.log_first_round_model:
-            trainer.trainer_machine.model = torch.load(f"{config.init_mode}.pt")
-            print("Didn't train. Load model.")
-            assert config.epochs == 0
 
         train_loss, train_acc, eval_results = trainer.train_then_eval(discovered_samples, discovered_classes, test_dataset, eval_verbose=True)
         
         if config.log_everything:
             if round_i == 0:
                 results = {} # A dictionary, key is round number
-                # log_strs = utils.get_experiment_name(config).split(os.sep)
-                # dataset_str = utils.get_data_active_param(config)
-                # method_str = utils.get_method_param(config)
-                # active_str = utils.get_active_param(config)
+                # log_strs = logging_helper.get_experiment_name(config).split(os.sep)
+                # dataset_str = logging_helper.get_owar_param(config)
+                # method_str = logging_helper.get_method_param(config)
+                # active_str = logging_helper.get_active_param(config)
                 # training_str = '_'.join(log_strs[2:])
                 # save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
                 # if not os.path.exists(save_dir):
@@ -139,9 +130,9 @@ def main():
                 torch.save(trainer.trainer_machine.model, f"{config.init_mode}.pt")
 
             if config.log_first_round_thresholds:
-                log_strs = utils.get_experiment_name(config).split(os.sep)
-                dataset_str = utils.get_data_param(config)
-                method_str = utils.get_method_param(config)
+                log_strs = logging_helper.get_experiment_name(config).split(os.sep)
+                dataset_str = logging_helper.get_data_param(config)
+                method_str = logging_helper.get_method_param(config)
                 training_str = '_'.join(log_strs[2:])
                 save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
                 first_round_thresholds = trainer.get_thresholds_checkpoints()[1]
@@ -156,7 +147,7 @@ def main():
                 exit(0)
 
             if config.log_first_round:
-                log_strs = utils.get_experiment_name(config).split(os.sep)
+                log_strs = logging_helper.get_experiment_name(config).split(os.sep)
                 setting_str = log_strs[0]
                 training_str = '_'.join(log_strs[2:])
                 save_path = os.path.join('first_round', setting_str+".txt")
@@ -177,10 +168,10 @@ def main():
             if round_i == 0:
                 test_accs = {}
 
-                log_strs = utils.get_experiment_name(config).split(os.sep)
-                dataset_str = utils.get_data_active_param(config)
-                method_str = utils.get_method_param(config)
-                active_str = utils.get_active_param(config)
+                log_strs = logging_helper.get_experiment_name(config).split(os.sep)
+                dataset_str = logging_helper.get_owar_param(config)
+                method_str = logging_helper.get_method_param(config)
+                active_str = logging_helper.get_active_param(config)
                 training_str = '_'.join(log_strs[2:])
                 save_dir = os.path.join('learning_loss', dataset_str, "_".join([method_str, active_str]), training_str)
                 if not os.path.exists(save_dir):
@@ -206,13 +197,8 @@ def main():
         print(f"Recognized class from {len(discovered_classes)-len(classes_diff)} to {len(discovered_classes)}")
 
         assert len(set(discovered_samples)) == len(discovered_samples)
-        assert len(set(new_samples)) == len(new_samples)
+        assert len(set(new_samples)) ==  len(new_samples)
         discovered_samples = list(set(discovered_samples).union(set(new_samples)))
-
-        if round_i % 20 == 0 and config.save_ckpt:
-            # Save every 20 rounds
-            checkpoint = utils.get_checkpoint(round_i, discovered_samples, open_samples, discovered_classes, open_classes, trainer)
-            utils.save_checkpoint(ckpt_dir, checkpoint)
 
 if __name__ == '__main__':
     main()

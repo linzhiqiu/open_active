@@ -2,7 +2,7 @@
 import json, argparse, os
 import numpy as np
 from glob import glob
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 from sklearn.metrics import roc_curve, roc_auc_score
 # import pandas as pd
 # from imutil import show
@@ -149,14 +149,14 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
         gt[gt >= 0] = 0
         if open_set == 'all':
             gt[gt == OPEN_CLASS_INDEX] = 1
-            gt[gt == UNSEEN_CLASS_INDEX] = 1
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = 1
         elif open_set == 'hold_out':
             gt[gt == OPEN_CLASS_INDEX] = 1
-            selected_indices = gt != UNSEEN_CLASS_INDEX
+            selected_indices = gt != UNDISCOVERED_CLASS_INDEX
             open_scores = open_scores[selected_indices]
             gt = gt[selected_indices]
         else:
-            gt[gt == UNSEEN_CLASS_INDEX] = 1
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = 1
             selected_indices = gt != OPEN_CLASS_INDEX
             open_scores = open_scores[selected_indices]
             gt = gt[selected_indices]
@@ -176,9 +176,9 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
         closed_predicted = np.array(dictionary['closed_predicted'])
         closed_argmax_prob = np.array(dictionary['closed_argmax_prob'])
         if open_set == 'all':
-            gt[gt == UNSEEN_CLASS_INDEX] = OPEN_CLASS_INDEX
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = OPEN_CLASS_INDEX
         elif open_set == 'hold_out':
-            selected_indices = gt != UNSEEN_CLASS_INDEX
+            selected_indices = gt != UNDISCOVERED_CLASS_INDEX
             gt = gt[selected_indices]
             closed_predicted = closed_predicted[selected_indices]
             closed_argmax_prob = closed_argmax_prob[selected_indices]
@@ -187,7 +187,7 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
             gt = gt[selected_indices]
             closed_predicted = closed_predicted[selected_indices]
             closed_argmax_prob = closed_argmax_prob[selected_indices]
-            gt[gt == UNSEEN_CLASS_INDEX] = OPEN_CLASS_INDEX
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = OPEN_CLASS_INDEX
         # At this point, gt's open example have label OPEN_CLASS_INDEX.
 
         sorted_indices = np.argsort(closed_argmax_prob)[::-1] # Sort from largest to smallest
@@ -225,9 +225,9 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
         open_predicted = np.array(dictionary['open_predicted'])
         open_scores = np.array(dictionary['open_set_score'])
         if open_set == 'all':
-            gt[gt == UNSEEN_CLASS_INDEX] = OPEN_CLASS_INDEX
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = OPEN_CLASS_INDEX
         elif open_set == 'hold_out':
-            selected_indices = gt != UNSEEN_CLASS_INDEX
+            selected_indices = gt != UNDISCOVERED_CLASS_INDEX
             gt = gt[selected_indices]
             open_predicted = open_predicted[selected_indices]
             open_scores = open_scores[selected_indices]
@@ -236,7 +236,7 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
             gt = gt[selected_indices]
             open_predicted = open_predicted[selected_indices]
             open_scores = open_scores[selected_indices]
-            gt[gt == UNSEEN_CLASS_INDEX] = OPEN_CLASS_INDEX
+            gt[gt == UNDISCOVERED_CLASS_INDEX] = OPEN_CLASS_INDEX
         # At this point, gt's open example have label OPEN_CLASS_INDEX.
 
         sorted_indices = np.argsort(open_scores) # Sort from smallest to largest
@@ -277,14 +277,14 @@ def parse_json(json_file, mode='roc', open_set='hold_out'):
     gt[gt >= 0] = 0
     if open_set == 'all':
         gt[gt == OPEN_CLASS_INDEX] = 1
-        gt[gt == UNSEEN_CLASS_INDEX] = 1
+        gt[gt == UNDISCOVERED_CLASS_INDEX] = 1
     elif open_set == 'hold_out':
         gt[gt == OPEN_CLASS_INDEX] = 1
-        selected_indices = gt != UNSEEN_CLASS_INDEX
+        selected_indices = gt != UNDISCOVERED_CLASS_INDEX
         open_scores = open_scores[selected_indices]
         gt = gt[selected_indices]
     else:
-        gt[gt == UNSEEN_CLASS_INDEX] = 1
+        gt[gt == UNDISCOVERED_CLASS_INDEX] = 1
         selected_indices = gt != OPEN_CLASS_INDEX
         open_scores = open_scores[selected_indices]
         gt = gt[selected_indices]

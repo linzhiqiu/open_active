@@ -4,7 +4,7 @@
 import json, argparse, os
 import numpy as np
 from glob import glob
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib
 matplotlib.use('Agg')
@@ -35,11 +35,11 @@ def best_fit_slope_and_intercept(xs,ys):
 
 def plot_roc(round_results, output_folder=None, round_idx=0, printed=True):
     # Discovered v.s. Hold-out open
-    gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+    gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
     open_scores = np.array(round_results['thresholds']['open_set_score'])
     gt[gt >= 0] = 0
     gt[gt == OPEN_CLASS_INDEX] = 1
-    selected_indices = gt != UNSEEN_CLASS_INDEX
+    selected_indices = gt != UNDISCOVERED_CLASS_INDEX
     open_scores = open_scores[selected_indices]
     gt = gt[selected_indices]
 
@@ -83,7 +83,7 @@ def plot_our(round_results, output_folder=None, round_idx=0, printed=True):
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_predicted = np.array(round_results['thresholds']['open_predicted'])
     open_scores = np.array(round_results['thresholds']['open_set_score'])
-    selected_indices = gt != UNSEEN_CLASS_INDEX
+    selected_indices = gt != UNDISCOVERED_CLASS_INDEX
     gt = gt[selected_indices]
     open_predicted = open_predicted[selected_indices]
     open_scores = open_scores[selected_indices]
@@ -187,7 +187,7 @@ def plot_histo(round_results, output_folder=None, threshold='default', round_idx
     open_scores = np.array(round_results['thresholds']['open_set_score'])
     gt[gt >= 0] = 0
     gt[gt == OPEN_CLASS_INDEX] = 1
-    selected_indices = gt != UNSEEN_CLASS_INDEX
+    selected_indices = gt != UNDISCOVERED_CLASS_INDEX
     open_scores = open_scores[selected_indices]
     if np.any(np.isnan(open_scores)):
         try:
@@ -304,7 +304,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     overall_corrects = (open_set_pred == (ground_truth < 0)) & (real_labels == closed_predicted_real | (ground_truth < 0)) # 1: Open set correct 2: closed set correct on discovered examples
     
     holdout_class_samples = ground_truth == OPEN_CLASS_INDEX
-    unseen_class_samples = ground_truth == UNSEEN_CLASS_INDEX
+    unseen_class_samples = ground_truth == UNDISCOVERED_CLASS_INDEX
     discovered_class_samples = ground_truth >= 0
 
     holdout_corrects = open_set_pred[holdout_class_samples]
@@ -411,7 +411,7 @@ def parse_round_results(round_results, roc_results=None, our_results=None, picke
     parsed_round_results['slope_closed_set_accuracy_vs_num_example'] = m_correct
 
     return parsed_round_results
-    # self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+    # self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
     #                                            'real_labels' : [], # The real labels for CIFAR100 or other datasets.
     #                                            'open_set_score' : [], # Higher the score, more likely to be open set
     #                                            'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?

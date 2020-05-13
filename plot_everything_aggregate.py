@@ -6,7 +6,7 @@
 import json, argparse, os
 import numpy as np
 from glob import glob
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib
 matplotlib.use('Agg')
@@ -79,11 +79,11 @@ def paper_version(name):
 
 def plot_roc(round_results, output_folder=None, round_idx=0, printed=True):
     # Discovered v.s. Hold-out open
-    gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNSEEN_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+    gt = np.array(round_results['thresholds']['ground_truth']) # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
     open_scores = np.array(round_results['thresholds']['open_set_score'])
     gt[gt >= 0] = 0
     gt[gt == OPEN_CLASS_INDEX] = 1
-    selected_indices = gt != UNSEEN_CLASS_INDEX
+    selected_indices = gt != UNDISCOVERED_CLASS_INDEX
     open_scores = open_scores[selected_indices]
     gt = gt[selected_indices]
 
@@ -127,7 +127,7 @@ def plot_our(round_results, output_folder=None, round_idx=0, printed=True):
     gt = np.array(round_results['thresholds']['ground_truth'])
     open_predicted = np.array(round_results['thresholds']['open_predicted'])
     open_scores = np.array(round_results['thresholds']['open_set_score'])
-    selected_indices = gt != UNSEEN_CLASS_INDEX
+    selected_indices = gt != UNDISCOVERED_CLASS_INDEX
     gt = gt[selected_indices]
     open_predicted = open_predicted[selected_indices]
     open_scores = open_scores[selected_indices]
