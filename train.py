@@ -68,7 +68,7 @@ def main():
         # Test if log dir is short enough
         # log_strs = logging_helper.get_experiment_name(config).split(os.sep)
         # dataset_str = logging_helper.get_data_param(config)
-        # method_str = logging_helper.get_method_param(config)
+        # method_str = trainer.get_trainer_machine_logging_str(config)
         # training_str = '_'.join(log_strs[2:])
         # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
         # if not os.path.exists(save_dir):
@@ -77,8 +77,8 @@ def main():
         if config.log_everything:
             log_strs = logging_helper.get_experiment_name(config).split(os.sep)
             dataset_str = logging_helper.get_owar_param(config)
-            method_str = logging_helper.get_method_param(config)
-            active_str = logging_helper.get_active_param(config)
+            method_str = trainer.get_trainer_machine_logging_str(config)
+            active_str = trainer.get_label_picker_logging_str(verbose=True)
             training_str = '_'.join(log_strs[2:])
             save_dir = os.path.join('open_active_results_new', dataset_str, "_".join([method_str, active_str]), training_str)
             if not os.path.exists(save_dir):
@@ -91,8 +91,8 @@ def main():
                 results = {} # A dictionary, key is round number
                 # log_strs = logging_helper.get_experiment_name(config).split(os.sep)
                 # dataset_str = logging_helper.get_owar_param(config)
-                # method_str = logging_helper.get_method_param(config)
-                # active_str = logging_helper.get_active_param(config)
+                # method_str = trainer.get_trainer_machine_logging_str(config)
+                # active_str = trainer.get_label_picker_logging_str(verbose=True)
                 # training_str = '_'.join(log_strs[2:])
                 # save_dir = os.path.join('open_active_results', dataset_str, "_".join([method_str, active_str]), training_str)
                 # if not os.path.exists(save_dir):
@@ -132,7 +132,7 @@ def main():
             if config.log_first_round_thresholds:
                 log_strs = logging_helper.get_experiment_name(config).split(os.sep)
                 dataset_str = logging_helper.get_data_param(config)
-                method_str = logging_helper.get_method_param(config)
+                method_str = trainer.get_trainer_machine_logging_str(config)
                 training_str = '_'.join(log_strs[2:])
                 save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
                 first_round_thresholds = trainer.get_thresholds_checkpoints()[1]
@@ -170,8 +170,8 @@ def main():
 
                 log_strs = logging_helper.get_experiment_name(config).split(os.sep)
                 dataset_str = logging_helper.get_owar_param(config)
-                method_str = logging_helper.get_method_param(config)
-                active_str = logging_helper.get_active_param(config)
+                method_str = trainer.get_trainer_machine_logging_str(config)
+                active_str = trainer.get_label_picker_logging_str(verbose=True)
                 training_str = '_'.join(log_strs[2:])
                 save_dir = os.path.join('learning_loss', dataset_str, "_".join([method_str, active_str]), training_str)
                 if not os.path.exists(save_dir):

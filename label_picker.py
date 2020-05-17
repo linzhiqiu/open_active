@@ -32,6 +32,11 @@ class LabelPicker(object):
     def _generate_new_log(self):
         # Generate new log in self.trainer_machine
         self.trainer_machine.log = []
+    
+    def get_logging_str(self, verbose=True):
+        # Return the str for logging purpose
+        # Should have both 'verbose'(longer) and 'simple'(shorter) version
+        raise NotImplementedError()
 
 def highest_loss(outputs):
     _, losses = outputs
@@ -110,6 +115,19 @@ class UncertaintyMeasure(LabelPicker):
             self.measure_func = network_measure_func
         else:
             raise NotImplementedError()
+
+    def get_logging_str(self, verbose=verbose):
+        logging_strs = []
+        if verbose:
+            logging_strs += ["uncertain"]
+            logging_strs += [config.uncertainty_measure, config.active_random_sampling]
+            logging_strs += ['oa', config.open_active_setup]
+        else:
+            # TODO: make it shorter
+            raise NotImplementedError()
+            logging_strs += ['uncert', config.uncertainty_measure, config.active_random_sampling]
+            logging_strs += ['oa', config.open_active_setup]
+        return "_".join(logging_strs)
 
     def select_new_data(self, discovered_samples, discovered_classes):
         self.model = self.trainer_machine.model
@@ -336,6 +354,16 @@ class CoresetMeasure(LabelPicker):
                 pass # Keep it random shuffled
             score_ranking_pair = score_ranking_pair_new
         return new_samples, new_classes
+    
+    def get_logging_str(self, verbose=verbose):
+        logging_strs = []
+        if verbose:
+            logging_strs += ["coreset"]
+            logging_strs += [config.coreset_measure, config.active_random_sampling, config.coreset_feature]
+            logging_strs += ['oa', config.open_active_setup]
+        else:
+            raise NotImplementedError()
+        return "_".join(logging_strs)
 
 def distance_matrix(A, B):
     # A is m x d pytorch matrix, B is n x d pytorch matrix.

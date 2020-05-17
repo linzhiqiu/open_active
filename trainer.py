@@ -50,14 +50,8 @@ class Trainer(object):
     def get_exemplar_set(self):
         return self.trainer_machine.exemplar_set
         
-    # def train_new_round(self, discovered_samples, discovered_classes):
-    #     return self.trainer_machine.train_new_round(discovered_samples, discovered_classes)
-
     def select_new_data(self, discovered_samples, discovered_classes):
         return self.label_picker.select_new_data(discovered_samples, discovered_classes)
-
-    # def eval(self, test_dataset, verbose=False):
-    #     return self.trainer_machine.eval(test_dataset, verbose=verbose)
 
     def _init_trainer_machine(self):
         """ Initialize all necessary models/optimizer/learning rate scheduler 
@@ -110,3 +104,9 @@ class Trainer(object):
         return label_picker_class(self.config,
                                   self.train_instance,
                                   self.trainer_machine)
+
+    def get_trainer_machine_logging_str(self, verbose=True):
+        return self.trainer_machine.get_logging_str(verbose=verbose)
+    
+    def get_label_picker_logging_str(self, verbose=True):
+        return self.label_picker.get_logging_str(verbose=verbose)

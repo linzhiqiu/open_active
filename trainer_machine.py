@@ -166,6 +166,9 @@ class TrainerMachine(object):
         # Currently only used in openCollector
         if type(self.handle) != type(None):
             self.handle.remove()
+    
+    def get_logging_str(self, verbose=True):
+        raise NotImplementedError()
 
     # Below are some helper functions shared by all subclasses
     def _get_target_mapp_func(self, discovered_classes):
@@ -190,7 +193,7 @@ class Network(TrainerMachine):
         # self.optimizer = self._get_network_optimizer(self.model)
         # self.scheduler = self._get_network_scheduler(self.optimizer)
 
-        # Current training state. Update in train_new_round(). Used in other functions.
+        # Current training state. Update in train_and_eval(). Used in other functions.
         self.discovered_classes = set()
 
         if self.config.pseudo_open_set != None:

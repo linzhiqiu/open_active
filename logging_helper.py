@@ -6,7 +6,6 @@
 #       get_active_param : Active query criterion
 #       get_experiment_name : Detailed experiment info
 
-
 def get_data_param(config):
     """Returns dataset (class split) information as str
     """
@@ -56,54 +55,68 @@ def get_method_param(config):
         raise NotImplementedError()
     return "_".join([config.trainer, setting_str])
 
-def get_active_param(config):
-    """Returns active learning criterion as str.
-    """
-    # For active learning acc logging    
-    name = [config.label_picker]
-    if config.label_picker == "uncertainty_measure":
-        name += [config.uncertainty_measure, "s", config.active_random_sampling]
-    elif config.label_picker == "coreset_measure":
-        name += [config.coreset_measure, "s", config.active_random_sampling, config.coreset_feature]
-    else:
-        raise NotImplementedError()
-    name += ['oa', config.open_active_setup]
-    return "_".join(name)
-
 def get_experiment_name(config):
     """Returns all detailed information of this experiment as str.
     """
     name_str = ''
+    name_str += get_owar_param(config) + os.sep
+    name_str += get_active_param(config) + os.sep
 
-    name = []
-    name += [config.data]
-    name += ['rounds', str(config.max_rounds), 'budget', str(config.budget), 'init', config.init_mode]
-    name += ['retrain', str(config.icalr_mode), str(config.icalr_retrain_threshold), str(config.icalr_retrain_criterion)]
-    name += ['exemplar', str(config.icalr_exemplar_size)]
-    name_str += "_".join(name) + os.sep
-
-    name = []
-    name += ['icalr', str(config.icalr_strategy)]
-    if config.icalr_strategy == 'naive':
-        name += ['mode', str(config.icalr_naive_strategy)]
-    elif config.icalr_strategy == 'proto':
-        name += ['mode', str(config.icalr_proto_strategy)]
-    elif config.icalr_strategy == 'smooth':
-        name += ['smooth_eps', str(config.smooth_epochs)]
-    name_str += "_".join(name) + os.sep
-    
-    name = []
-
-    if config.label_picker == "uncertainty_measure":
-        name += ["uncertain"]
-        name += [config.uncertainty_measure, config.active_random_sampling]
-    elif config.label_picker == "coreset_measure":
-        name += ["coreset"]
-        name += [config.coreset_measure, config.active_random_sampling, config.coreset_feature]
+    # For first round thresholds values logging
+    if config.trainer in ['network','icalr','binary_softmax']:
+        setting_str = config.threshold_metric
+    elif config.trainer == 'sigmoid':
+        setting_str = config.sigmoid_train_mode
+    elif config.trainer == "icalr_binary_softmax":
+        setting_str = config.icalr_binary_softmax_train_mode
+    elif config.trainer == 'c2ae':
+        setting_str = config.c2ae_train_mode
+    elif config.trainer in ['osdn_modified', 'osdn', 'icalr_osdn_modified', 'icalr_osdn', 'icalr_osdn_modified_neg', 'icalr_osdn_neg']:
+        setting_str = config.distance_metric
+    elif config.trainer in ['cluster']:
+        setting_str = "_".join([config.clustering, "dist", config.distance_metric, "metric", config.threshold_metric])
+    elif config.trainer in ['network_learning_loss', 'icalr_learning_loss']:
+        setting_str = "_".join([config.threshold_metric, 'mode', config.learning_loss_train_mode, 'lmb', str(config.learning_loss_lambda),
+                                'margin', str(config.learning_loss_margin),
+                                'start_ep', str(config.learning_loss_start_epoch),
+                                'stop_ep', str(config.learning_loss_stop_epoch)])
     else:
         raise NotImplementedError()
-    name += ['oa', config.open_active_setup]
-    name_str += "_".join(name) + os.sep
+    return "_".join([config.trainer, setting_str])
+
+    if self.config.trainer == 'network':
+            trainer_machine_class = Network
+        elif self.config.trainer in ['osdn']:
+            trainer_machine_class = OSDNNetwork
+        elif self.config.trainer in ['osdn_modified']:
+            trainer_machine_class = OSDNNetworkModified
+        elif self.config.trainer in ['icalr_osdn', 'icalr_osdn_neg']:
+            trainer_machine_class = ICALROSDNNetwork
+        elif self.config.trainer in ['icalr_osdn_modified', 'icalr_osdn_modified_neg']:
+            trainer_machine_class = ICALROSDNNetworkModified
+        elif self.config.trainer == 'c2ae':
+            trainer_machine_class = C2AE
+        elif self.config.trainer == 'cluster':
+            trainer_machine_class = ClusterNetwork
+        elif self.config.trainer == 'sigmoid':
+            trainer_machine_class = SigmoidNetwork
+        elif self.config.trainer == 'binary_softmax':
+            trainer_machine_class = BinarySoftmaxNetwork
+        elif self.config.trainer == 'icalr_binary_softmax':
+            trainer_machine_class = ICALRBinarySoftmaxNetwork
+        elif self.config.trainer == 'gan':
+            gan_factory = GANFactory(self.config)
+            trainer_machine_class = gan_factory.gan_class()
+        elif self.config.trainer == 'network_learning_loss':
+            trainer_machine_class = NetworkLearningLoss
+        elif self.config.trainer == 'icalr':
+            trainer_machine_class = ICALR
+        elif self.config.trainer == 'icalr_learning_loss':
+            trainer_machine_class = get_learning_loss_class(ICALR)
+        else:
+            raise NotImplementedError()
+        return trainer_machine_class(self.config,
+                                     self.train_instance)
 
     name = []
     if config.trainer == 'gan':

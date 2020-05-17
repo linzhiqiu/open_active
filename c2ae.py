@@ -20,8 +20,8 @@ import copy
 from trainer_machine import Network, train_epochs
 from instance_info import C2AEInfoCollector
 import models
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 # from vector import clamp_to_unit_sphere
 SAVE_FIG_EVERY_EPOCH = 500
 def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32', train_in_eval_mode=False):
@@ -713,7 +713,7 @@ class C2AE(Network):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
             
             preds = torch.where(scores >= threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction

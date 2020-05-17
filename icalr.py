@@ -34,7 +34,7 @@ class ICALR(Network):
         # self.optimizer = self._get_network_optimizer(self.model)
         # self.scheduler = self._get_network_scheduler(self.optimizer)
 
-        # Current training state. Update in train_new_round(). Used in other functions.
+        # Current training state. Update in train_then_eval(). Used in other functions.
         self.discovered_classes = set()
 
         # Below are ICALR parameters.

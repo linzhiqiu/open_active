@@ -5,9 +5,33 @@
             # Before running the model, first check if the log dir can be made
         # In trainer.py + trainer_machine.py
             # Split train and eval functions. Let eval() return the threshold_checkpoints
+        # Let each dataset class/ label picker/ trainer machine class write their own logging function
+            # Maybe verbose version + simple version?
+        # Combine ICALR and TrainerMachine file.
     # Features
         # I removed log/save_first_round_model. We wanna provide a separate eval.py maybe.
+        # Split train and eval? Like open set active learning
+            # First train, then do active learning, then finetune and see the 
+            # e.g. Rounds represent active learning round? Before every active learning round
+            #      training will happen.
         # Save models at last checkpoint
         # Actually, let each subtype of trainer machine have their own save and load functions
             # Need to figure out when we want to call these save and load functions
             # e.g. number of discovered classes how to save and load
+    # Bugs
+        # Debug Openmax: The roc curve should be flipped after all the open set scores are negated.
+                        We should in fact check this for all the algorithms.
+
+# Open set active learning (Deep metric learning + ULDR unlabeled to labeled density)
+    # NN:
+        # Algorithm for fast approx NN?
+        # Size of neighers?
+        # Periodic async update is how many epochs?
+    # Distance
+        # Euclidean distance only?
+    # Assumption
+        # After training the network, novel class examples are indeed far away from known classes?
+    # Implementation
+        # Network VGG16, feature embedding of FC7 and size 4096
+        # How is the shared guassian picked
+        # Is it SGD?
