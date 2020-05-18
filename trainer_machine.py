@@ -20,6 +20,25 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINE
 import libmr
 import math
 
+# How to add a new method?
+# Step 1: Add the new method to the below dictionary
+# Step 2: Implement the TrainerMachine (ideally inheriting the Network class so that all logging details will be handled already)
+
+#METHOD DICT
+    # METHOD_DICT[training_method] = SCOREFUNC_DICT[training_method]
+METHOD_DICT = {
+    'softmax' : {'open_score'   : ['entropy', 'argmax', 'osdn', 'osdn_modified'],
+                 'info_score'   : ['entropy', 'argmax', 'coreset']},
+    'softmax_learnloss' : {'open_score'   : ['entropy', 'argmax', 'osdn', 'osdn_modified'],
+                           'info_score'   : ['entropy', 'argmax', 'learnloss']},
+    'sigmoid' : {'open_score'   : ['argmax'],
+                 'info_score'   : ['entropy', 'argmax']},
+    'c2ae' : {'open_score'   : ['c2ae'],
+              'info_score'   : ['entropy', 'argmax', 'coreset']},
+    'deepmetric' : {'open_score'   : ['entropy', 'argmax', 'nearestnb'],
+                    'info_score'   : ['entropy', 'argmax', 'coreset']},
+}
+
 class NoSeenClassException(Exception):
     def __init__(self, message):
         self.message = message
@@ -150,7 +169,7 @@ class TrainerMachine(object):
         self.config = config
         self.train_instance = train_instance
         self.log = None # This should be maintained by the corresponding label picker. It will be updated after each call to label_picker.select_new_data() 
-        self.exemplar_set = None # Only works for ICALR based modules
+        self.exemplar_set = None # Only works for NearestMean based modules
         # For ROC/other open set evaluation metric. self.thresholds_checkpoints[epoch] is a dictionary of all the information for a given epoch
         # This metric should be updated in the open_set_prediction function returned by self._get_open_set_pred()
         self.thresholds_checkpoints = {}
@@ -180,6 +199,549 @@ class TrainerMachine(object):
         return get_target_unmapping_func_for_list(self.train_instance.classes,
                                                   discovered_classes)
 
+class NearestMean(Network):
+    def __init__(self, *args, **kwargs):
+        super(NearestMean, self).__init__(*args, **kwargs)
+
+        # Below are NearestMean parameters.
+        self.icalr_exemplar_size = self.config.icalr_exemplar_size
+        
+        self.icalr_retrain_criterion = self.config.icalr_retrain_criterion
+        self.cur_retrain_threshold = 0 # Retrain once (self.cur_retrain_threshold - self.past_retrain_threshold) / self.icalr_retrain_threshold >= 1
+        self.past_retrain_threshold = self.cur_retrain_threshold
+        self.icalr_retrain_threshold = self.config.icalr_retrain_threshold
+
+        self.icalr_strategy = self.config.icalr_strategy
+        assert self.icalr_strategy in ['proto', 'naive', 'smooth']
+        self.smooth_epochs = self.config.smooth_epochs
+        # if self.icalr_strategy == 'naive':
+        #     raise NotImplementedError()
+        self.icalr_naive_strategy = self.config.icalr_naive_strategy
+        self.icalr_proto_strategy = self.config.icalr_proto_strategy
+
+        self.proto = torch.Tensor().to(self.device) # Size is (num_discovered_classes, feature_size)
+        self.exemplar_set = {} # class indices mapping to list of example indices
+
+        if self.config.pseudo_open_set != None:
+            # Disable pseudo open set training
+            # raise NotImplementedError()
+            pass # TODO: make sure not buggy
+    
+
+    def _update_exemplar_set(self, new_round_samples, old_exemplar_set):
+        if self.icalr_exemplar_size == None:
+            # Add all new round samples
+            for idx in new_round_samples:
+                class_idx = self.train_instance.train_labels[idx]
+                if not class_idx in old_exemplar_set:
+                    old_exemplar_set[class_idx] = []
+                old_exemplar_set[class_idx].append(idx)
+            return old_exemplar_set
+        else:
+            raise NotImplementedError()
+
+    def _train_new_samples(self, model, new_round_samples, discovered_classes, start_epoch=0):
+        if self.icalr_strategy == 'proto':
+            return 0.0, 0.0
+        elif self.icalr_strategy in ['naive', 'smooth']:
+            # raise NotImplementedError()
+            if self.icalr_naive_strategy == 'fixed':
+                self.fixed_rep_dataset = self._update_fixed_representation_dataset(self.fixed_rep_dataset, model, new_round_samples)
+                target_mapping_func = self._get_target_mapp_func(discovered_classes)
+                dataloaders = get_dataloaders(self.fixed_rep_dataset,
+                                              batch_size=self.config.batch,
+                                              workers=self.config.workers,
+                                              shuffle=True)
+                
+                self._update_last_layer(model, len(discovered_classes), device=self.device)
+                fc_optimizer = self._get_network_optimizer(model.fc)
+                fc_scheduler = self._get_network_scheduler(fc_optimizer)
+
+                self.criterion = self._get_criterion(self.dataloaders['train'],
+                                                     target_mapping_func,
+                                                     discovered_classes=discovered_classes,
+                                                     criterion_class=self.criterion_class)
+                fc_model = model.fc
+                with SetPrintMode(hidden=not self.config.verbose):
+                    train_loss, train_acc = train_epochs(
+                                                fc_model,
+                                                dataloaders,
+                                                fc_optimizer,
+                                                fc_scheduler,
+                                                self.criterion,
+                                                target_mapping_func,
+                                                device=self.device,
+                                                start_epoch=start_epoch,
+                                                # max_epochs=self.max_epochs,
+                                                max_epochs=5,
+                                                verbose=self.config.verbose,
+                                            )
+                print(f"Train => {self.round} round => "
+                      f"Loss {train_loss}, Accuracy {train_acc}")
+                return train_loss, train_acc
+            else:
+                raise NotImplementedError()
+        else: raise NotImplementedError()
+
+    # def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
+    #     assert self.round <= self.pseudo_open_set_rounds
+    #     unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_discovered_classes)
+    #     info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_discovered_classes)
+    #     dataloader = get_subset_loader(self.train_instance.train_dataset,
+    #                                    list(full_train_set),
+    #                                    None, # No target transform is needed! 
+    #                                    # self._get_target_mapp_func(pseudo_discovered_classes), # it should map the pseudo open classes to OPEN_INDEX
+    #                                    shuffle=False,
+    #                                    batch_size=self.config.batch,
+    #                                    workers=self.config.workers)
+    #     _, info = info_collector.gather_instance_info(dataloader, pseudo_open_model, device=self.device)
+    
+    #     assert len(info) > 0
+    #     self.pseuopen_threshold = get_dynamic_threshold(info, metric=self.config.threshold_metric, mode=self.pseudo_open_set_metric)
+    #     print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
+
+    def _get_new_round_samples(self, discovered_samples):
+        # Return the new samples this round
+        old_discovered_samples = []
+        for class_idx in self.exemplar_set:
+            old_discovered_samples += self.exemplar_set[class_idx]
+        old_discovered_samples = set(old_discovered_samples)
+        diff_discovered_samples = set(discovered_samples).difference(old_discovered_samples)
+        return list(diff_discovered_samples)
+
+    def _get_fixed_representation_dataset(self, model, discovered_samples):
+        model.eval()
+        # discovered_classes = list(exemplar_set.keys())
+        if self.config.arch == 'ResNet50':
+            feature_size = 2048
+        else:
+            feature_size = 512
+        # fixed_rep = torch.zeros((len(discovered_samples), feature_size)).cpu()
+        fixed_rep = torch.Tensor().cpu()
+        fixed_label = torch.LongTensor().cpu()        
+
+        cur_features = []
+        def forward_hook_func(module, inputs, outputs):
+            cur_features.append(inputs[0])
+        handle = self.model.fc.register_forward_hook(forward_hook_func)
+
+        dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                             list(discovered_samples),
+                                             [], # TODO: Make a validation set
+                                             None,
+                                             batch_size=self.config.batch,
+                                             workers=self.config.workers)
+
+        for batch, data in enumerate(dataloaders['train']):
+            inputs, real_labels = data
+            inputs = inputs.to(self.device)
+            _ = self.model(inputs)
+
+            fixed_rep = torch.cat((fixed_rep, cur_features[0].detach().cpu()), dim=0)
+            fixed_label = torch.cat((fixed_label, real_labels.cpu()))
+            cur_features = []
+
+        handle.remove()
+
+        return FixedRepresentationDataset(fixed_rep, fixed_label)
+
+    def _update_fixed_representation_dataset(self, fixed_rep_dataset, model, new_round_samples):
+        new_rep_dataset = self._get_fixed_representation_dataset(model, new_round_samples)
+        data_new, label_new = new_rep_dataset.data_tensor, new_rep_dataset.target_tensor
+        data, label = fixed_rep_dataset.data_tensor, fixed_rep_dataset.target_tensor
+        return FixedRepresentationDataset(torch.cat((data, data_new),dim=0), torch.cat((label, label_new)))
+
+    def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
+        results = super(NearestMean, self)._train(model, discovered_samples, discovered_classes, start_epoch=start_epoch)
+        if self.icalr_strategy in ['naive','smooth']:
+            if self.icalr_naive_strategy == 'fixed':
+                # Store current representation
+                self.fixed_rep_dataset = self._get_fixed_representation_dataset(model, discovered_samples)
+        return results
+
+    def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True, start_epoch=0):
+        if self.round == 0:
+            # Initialize retrain threshold and exemplar set
+            if self.icalr_retrain_criterion == 'round':
+                self.cur_retrain_threshold = 0
+            else: raise NotImplementedError()
+        else:
+            if self.icalr_retrain_criterion == 'round':
+                self.cur_retrain_threshold += 1
+            else: raise NotImplementedError()
+
+        if self.icalr_strategy == 'smooth' and self.round > 0:
+            self.max_epochs = self.smooth_epochs
+
+        # Retrain on first round or if criterion meets
+        to_retrain_all_exemplar = self.round == 0 or (self.cur_retrain_threshold - self.past_retrain_threshold) / self.icalr_retrain_threshold >= 1. or self.icalr_strategy == 'smooth'
+
+        self.round += 1
+        if self.round <= self.pseudo_open_set_rounds and to_retrain_all_exemplar:
+            pseudo_discovered_samples, pseudo_discovered_classes = self._filter_pseudo_open_set(discovered_samples, discovered_classes)
+            self._train(self.pseudo_open_model, pseudo_discovered_samples, pseudo_discovered_classes, start_epoch=0)
+            pseudo_exemplar_set = self._update_exemplar_set(pseudo_discovered_samples, {})
+            self._update_proto_vector(pseudo_exemplar_set, model=self.pseudo_open_model)
+            self._meta_learning(self.pseudo_open_model, discovered_samples, pseudo_discovered_classes)
+
+        new_round_samples = self._get_new_round_samples(discovered_samples)
+
+        if to_retrain_all_exemplar:
+            self.past_retrain_threshold = self.cur_retrain_threshold
+            # in self._train(), train set will be augmented with new round samples. Further, proto_vectors will be updated.
+            train_loss, train_acc = self._train(self.model, discovered_samples, discovered_classes, start_epoch=0)
+
+        else:
+            train_loss, train_acc = self._train_new_samples(self.model, new_round_samples, discovered_classes, start_epoch=0)  
+        
+        # Will update self.exemplar_set
+        self.exemplar_set = self._update_exemplar_set(new_round_samples, self.exemplar_set)
+        # Most importantly, recompute the class mean vector (normalized) using the train example following the ICaLR paper
+        self._update_proto_vector(self.exemplar_set)
+
+        eval_results = self._eval(self.model, test_dataset, discovered_classes, verbose=eval_verbose)
+        return train_loss, train_acc, eval_results
+
+    def _update_proto_vector(self, exemplar_set, model=None):
+        if self.icalr_strategy in ['naive', 'smooth']:
+            pass
+        elif self.icalr_strategy == 'proto':
+            if type(model) == type(None):
+                self._eval_mode()
+                model = self.model
+            else:
+                model.eval()
+
+            discovered_classes = list(exemplar_set.keys())
+            if self.config.arch == 'ResNet50':
+                feature_size = 2048
+            else:
+                feature_size = 512
+            self.proto = torch.zeros((len(discovered_classes), feature_size)).to(self.device)
+            target_mapping_func = get_target_mapping_func(self.train_instance.classes,
+                                                          discovered_classes,
+                                                          self.train_instance.open_classes)
+            
+
+            cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                cur_features.append(inputs[0])
+            handle = model.fc.register_forward_hook(forward_hook_func)
+
+            for class_idx in discovered_classes:
+                num_class_i_samples = float(len(exemplar_set[class_idx]))
+                class_sample_indices = exemplar_set[class_idx]
+                target_class_idx = target_mapping_func(class_idx)
+                dataloaders = get_subset_dataloaders(self.train_instance.train_dataset,
+                                                     class_sample_indices,
+                                                     [], # TODO: Make a validation set
+                                                     # target_mapping_func,
+                                                     None,
+                                                     batch_size=self.config.batch,
+                                                     workers=self.config.workers)
+                
+                with torch.set_grad_enabled(False):
+                    for batch, data in enumerate(dataloaders['train']):
+                        inputs, _ = data
+                        
+                        inputs = inputs.to(self.device)
+                        _ = model(inputs)
+
+                        self.proto[target_class_idx,:] += (cur_features[0] / num_class_i_samples).sum(dim=0).detach()
+                        cur_features = []
+
+            handle.remove()
+            # Normalize the feature vectors
+            self.proto = self.proto/((self.proto*self.proto).sum(1) ** 0.5).unsqueeze(1)
+
+
+    def _eval(self, model, test_dataset, discovered_classes, verbose=True):
+        self._eval_mode()
+
+        # Update self.thresholds_checkpoints
+        # assert self.round not in self.thresholds_checkpoints.keys()
+        # Caveat: Currently, the open_set_score is updated in the open_set_prediction function. Yet the grouth_truth is updated in self._eval()
+        self.thresholds_checkpoints[self.round] = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+                                                   'real_labels' : [], # The real labels for CIFAR100 or other datasets.
+                                                   'open_set_score' : [], # Higher the score, more likely to be open set
+                                                   'closed_predicted' : [], # If fail the open set detection, then what's the predicted closed set label (network output)?
+                                                   'closed_predicted_real' : [], # If fail the open set detection, then what's the predicted closed set label (real labels)?
+                                                   'closed_argmax_prob' : [], # If fail the open set detection, then what's the probability for predicted closed set class (real labels)?
+                                                   'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
+                                                   'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
+                                                   'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
+                                                   'learningloss_pred_loss' : [], # Loss predicted by learning loss
+                                                   'actual_loss' : [], # actual losses
+                                                  } # A list of dictionary
+
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
+        dataloader = get_loader(test_dataset,
+                                # self._get_target_mapp_func(discovered_classes),
+                                None,
+                                shuffle=False,
+                                batch_size=self.config.batch,
+                                workers=self.config.workers)
+        
+        open_set_prediction = self._get_open_set_pred_func()
+
+        if self.icalr_strategy == 'proto':
+            cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                cur_features.append(inputs[0])
+            handle = model.fc.register_forward_hook(forward_hook_func)
+
+        with SetPrintMode(hidden=not verbose):
+            if verbose:
+                pbar = tqdm(dataloader, ncols=80)
+            else:
+                pbar = dataloader
+
+            performance_dict = {'train_class_acc' : {'corrects' : 0., 'not_seen' : 0., 'count' : 0.}, # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
+                                'unseen_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all unseen open class examples.
+                                'overall_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all examples. Counting accuracy of unseen open examples.
+                                'holdout_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of hold out open class examples
+                                'seen_closed_acc' : {'open' : 0., 'corrects' : 0., 'count' : 0.}, # Accuracy of seen class examples
+                                'all_open_acc' : {'corrects' : 0., 'count' : 0.}, # Accuracy of all open class examples (unseen open + hold-out open)
+                                }
+
+            if self.config.debug:
+                import pdb; pdb.set_trace()  # breakpoint a8dffc68 //
+                
+            with torch.no_grad():
+                for batch, data in enumerate(pbar):
+                    inputs, real_labels = data
+                    
+                    inputs = inputs.to(self.device)
+                    labels = target_mapping_func(real_labels.to(self.device))
+                    labels_for_openset_pred = torch.where(
+                                                  labels == OPEN_CLASS_INDEX,
+                                                  torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(labels.device),
+                                                  labels
+                                              ) # This change hold out open set examples' indices to unseen open set examples indices
+                    label_for_learnloss = labels.clone()
+                    label_for_learnloss[label_for_learnloss<0] = 0
+                    
+                    outputs = model(inputs)
+                    if self.icalr_strategy == 'proto':
+                        preds = open_set_prediction(outputs, inputs=inputs, features=cur_features[0], label_for_learnloss=label_for_learnloss) # Open set index == UNDISCOVERED_CLASS_INDEX
+                        cur_features = []
+                    elif self.icalr_strategy in ['naive', 'smooth']:
+                        preds = open_set_prediction(outputs, inputs=inputs, features=None, label_for_learnloss=label_for_learnloss) # Open set index == UNDISCOVERED_CLASS_INDEX
+                    # loss = open_set_criterion(outputs, labels)
+
+                    # labels_for_ground_truth = torch.where(
+                    #                               (labels != OPEN_CLASS_INDEX) & (labels != UNDISCOVERED_CLASS_INDEX),
+                    #                               torch.LongTensor([0]).to(labels.device),
+                    #                               labels
+                    #                           ) # This change hold out open set examples' indices to unseen open set examples indices
+
+                    self.thresholds_checkpoints[self.round]['ground_truth'] += labels.tolist()
+                    self.thresholds_checkpoints[self.round]['real_labels'] += real_labels.tolist()
+                    # statistics
+                    # running_loss += loss.item() * inputs.size(0)
+                    performance_dict['overall_acc']['count'] += inputs.size(0)
+                    performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
+                    
+                    unseen_open_indices = labels == UNDISCOVERED_CLASS_INDEX
+                    seen_closed_indices = labels >= 0
+                    hold_out_open_indices = labels == OPEN_CLASS_INDEX
+                    train_class_indices = unseen_open_indices | seen_closed_indices
+                    all_open_indices = unseen_open_indices | hold_out_open_indices
+                    assert torch.sum(unseen_open_indices & seen_closed_indices & hold_out_open_indices) == 0
+                    
+                    performance_dict['train_class_acc']['count'] += float(torch.sum(train_class_indices))
+                    performance_dict['unseen_open_acc']['count'] += float(torch.sum(unseen_open_indices))
+                    performance_dict['holdout_open_acc']['count'] += float(torch.sum(hold_out_open_indices))
+                    performance_dict['seen_closed_acc']['count'] += float(torch.sum(seen_closed_indices))
+                    performance_dict['all_open_acc']['count'] += float(torch.sum(all_open_indices))
+
+                    performance_dict['train_class_acc']['not_seen'] += torch.sum(
+                                                                           unseen_open_indices
+                                                                       ).float()
+                    performance_dict['train_class_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               seen_closed_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['unseen_open_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               unseen_open_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['holdout_open_acc']['corrects'] += torch.sum(
+                                                                            torch.masked_select(
+                                                                                (preds==labels_for_openset_pred.data),
+                                                                                hold_out_open_indices
+                                                                            )
+                                                                        ).float()
+                    performance_dict['seen_closed_acc']['corrects'] += torch.sum(
+                                                                           torch.masked_select(
+                                                                               (preds==labels.data),
+                                                                               seen_closed_indices
+                                                                           )
+                                                                       ).float()
+                    performance_dict['seen_closed_acc']['open'] += torch.sum(
+                                                                       torch.masked_select(
+                                                                           (preds==UNDISCOVERED_CLASS_INDEX),
+                                                                           seen_closed_indices
+                                                                       )
+                                                                   ).float()
+                    performance_dict['all_open_acc']['corrects'] += torch.sum(
+                                                                        torch.masked_select(
+                                                                            (preds==labels_for_openset_pred.data),
+                                                                            all_open_indices
+                                                                        )
+                                                                    ).float()
+
+                    batch_result = get_acc_from_performance_dict(performance_dict)
+                    if verbose:
+                        pbar.set_postfix(batch_result)
+
+                epoch_result = get_acc_from_performance_dict(performance_dict)
+                train_class_acc = epoch_result['train_class_acc']
+                unseen_open_acc = epoch_result['unseen_open_acc']
+                overall_acc = epoch_result['overall_acc']
+                holdout_open_acc = epoch_result['holdout_open_acc']
+                seen_closed_acc = epoch_result['seen_closed_acc']
+                all_open_acc = epoch_result['all_open_acc']
+
+                overall_count = performance_dict['overall_acc']['count']
+                train_class_count = performance_dict['train_class_acc']['count']
+                unseen_open_count = performance_dict['unseen_open_acc']['count']
+                holdout_open_count = performance_dict['holdout_open_acc']['count']
+                seen_closed_count = performance_dict['seen_closed_acc']['count']
+                all_open_count = performance_dict['all_open_acc']['count']
+
+                train_class_corrects = performance_dict['train_class_acc']['corrects']
+                unseen_open_corrects = performance_dict['unseen_open_acc']['corrects']
+                seen_closed_corrects = performance_dict['seen_closed_acc']['corrects']
+
+                train_class_notseen = performance_dict['train_class_acc']['not_seen']
+                seen_closed_open = performance_dict['seen_closed_acc']['open']
+
+            self.thresholds_checkpoints[self.round]['closed_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['closed_predicted'])
+            self.thresholds_checkpoints[self.round]['open_predicted_real'] = target_unmapping_func_for_list(self.thresholds_checkpoints[self.round]['open_predicted'])
+            
+            print(f"Test => "
+                  f"Training Class Acc {train_class_acc}, "
+                  f"Hold-out Open-Set Acc {holdout_open_acc}")
+            print(f"Details => "
+                  f"Overall Acc {overall_acc}, "
+                  f"Overall Open-Set Acc {all_open_acc}, Overall Seen-Class Acc {seen_closed_acc}")
+            print(f"Training Classes Accuracy Details => "
+                  f"[{train_class_notseen}/{train_class_count}] not in seen classes, "
+                  f"and for seen class samples [{seen_closed_corrects}/{seen_closed_count} corrects | [{seen_closed_open}/{seen_closed_count}] wrongly as open set]")
+        
+        if self.icalr_strategy == 'proto': handle.remove()
+        return epoch_result
+
+
+    def _get_open_set_pred_func(self):
+        assert self.config.network_eval_mode in ['threshold', 'dynamic_threshold', 'pseuopen_threshold']
+        if self.config.network_eval_mode == 'threshold':
+            # assert self.config.threshold_metric == "softmax"
+            threshold = self.config.network_eval_threshold
+        elif self.config.network_eval_mode == 'dynamic_threshold':
+            # raise NotImplementedError()
+            assert type(self.log) == list
+            if len(self.log) == 0:
+                # First round, use default threshold
+                threshold = self.config.network_eval_threshold
+                print(f"First round. Use default threshold {threshold}")
+            else:
+                try:
+                    threshold = trainer_machine.get_dynamic_threshold(self.log, metric=self.config.threshold_metric, mode='weighted')
+                except trainer_machine.NoSeenClassException:
+                    # Error when no new instances from seen class
+                    threshold = self.config.network_eval_threshold
+                    print(f"No seen class instances. Threshold set to {threshold}")
+                except trainer_machine.NoUnseenClassException:
+                    threshold = self.config.network_eval_threshold
+                    print(f"No unseen class instances. Threshold set to {threshold}")
+                else:
+                    print(f"Threshold set to {threshold} based on all existing instances.")
+        elif self.config.network_eval_mode in ['pseuopen_threshold']:
+            # assert hasattr(self, 'pseuopen_threshold')
+            # print(f"Using pseudo open set threshold of {self.pseuopen_threshold}")
+            # threshold = self.pseuopen_threshold
+            raise NotImplementedError()
+
+        def open_set_prediction(outputs, inputs=None, features=None, label_for_learnloss=None):
+            if self.icalr_strategy == 'proto':
+                # First step is to normalize the features
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+                outputs = -distances
+
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            if self.config.threshold_metric == 'softmax':
+                scores = softmax_max
+            elif self.config.threshold_metric == 'entropy':
+                neg_entropy = softmax_outputs*softmax_outputs.log()
+                neg_entropy[softmax_outputs < 1e-5] = 0
+                scores = neg_entropy.sum(dim=1) # negative entropy!
+
+            assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
+            self.thresholds_checkpoints[self.round]['open_set_score'] += (-scores).tolist()
+            self.thresholds_checkpoints[self.round]['closed_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += softmax_max.tolist()
+            self.thresholds_checkpoints[self.round]['open_predicted'] += softmax_preds.tolist()
+            self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
+            self.thresholds_checkpoints[self.round]['actual_loss'] += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
+
+
+            preds = torch.where(scores < threshold,
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
+                                softmax_preds)
+            return preds
+        return open_set_prediction
+
+    def get_open_score_func(self):
+        if self.icalr_strategy == 'proto':
+            self.cur_features = []
+            def forward_hook_func(module, inputs, outputs):
+                self.cur_features.append(inputs[0])
+            self.handle = self.model.fc.register_forward_hook(forward_hook_func)
+            def open_score_func(inputs):
+                _ = self.model(inputs)
+                features = self.cur_features[0]
+                features = features / ((features*features).sum(1) ** 0.5).unsqueeze(1)
+
+                difference = (features.unsqueeze(1) - self.proto.unsqueeze(0)).abs()
+                distances = (difference*difference).sum(2)**0.5
+
+                softmax_outputs = F.softmax(-distances, dim=1)
+                softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+                if self.config.threshold_metric == 'softmax':
+                    scores = softmax_max
+                elif self.config.threshold_metric == 'entropy':
+                    neg_entropy = softmax_outputs*softmax_outputs.log()
+                    neg_entropy[softmax_outputs < 1e-5] = 0
+                    scores = neg_entropy.sum(dim=1) # negative entropy!
+                self.cur_features = []
+                return -scores
+            return open_score_func
+        else:
+            def open_score_func(inputs):
+                outputs = self.model(inputs)
+                softmax_outputs = F.softmax(outputs, dim=1)
+                softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+                if self.config.threshold_metric == 'softmax':
+                    scores = softmax_max
+                elif self.config.threshold_metric == 'entropy':
+                    neg_entropy = softmax_outputs*softmax_outputs.log()
+                    neg_entropy[softmax_outputs < 1e-5] = 0
+                    scores = neg_entropy.sum(dim=1) # negative entropy!
+                self.cur_features = []
+                return -scores
+            return open_score_func
+
 class Network(TrainerMachine):
     def __init__(self, *args, **kwargs):
         super(Network, self).__init__(*args, **kwargs)
@@ -190,29 +752,14 @@ class Network(TrainerMachine):
         self.model = self._get_network_model()
         self.info_collector_class = BasicInfoCollector
         self.criterion_class = nn.CrossEntropyLoss
-        # self.optimizer = self._get_network_optimizer(self.model)
-        # self.scheduler = self._get_network_scheduler(self.optimizer)
 
         # Current training state. Update in train_and_eval(). Used in other functions.
         self.discovered_classes = set()
 
-        if self.config.pseudo_open_set != None:
-            if self.config.pseudo_same_network:
-                print("Warning using same network for pseudo open training.")
-                self.pseudo_open_model = self.model
-            else:
-                self.pseudo_open_model = self._get_network_model()
-            # self.pseudo_open_optimizer = self._get_network_optimizer(self.pseudo_open_model)
-            # self.pseudo_open_scheduler = self._get_network_scheduler(self.pseudo_open_optimizer)
-            self.pseudo_open_set_metric = self.config.pseudo_open_set_metric # weighted or average
-            self.pseudo_open_set = self.config.pseudo_open_set
-            self.pseudo_open_set_rounds = self.config.pseudo_open_set_rounds
-            print(f"Using the first {self.pseudo_open_set} as pseudo classes for {self.pseudo_open_set_rounds} rounds.")
-            self.pseudo_open_set_classes = set([i for i in range(self.pseudo_open_set)])
+    def get_logging_str(self, verbose=True):
+        if verbose:
         else:
-            self.pseudo_open_set = self.config.pseudo_open_set
-            self.pseudo_open_set_rounds = 0
-            self.pseudo_open_set_classes = set() # No pseudo open set classes
+            setting_str = config.threshold_metric
 
     def _get_criterion(self, dataloader, target_mapping_func, discovered_classes=set(), criterion_class=nn.CrossEntropyLoss):
         assert discovered_classes.__len__() > 0
@@ -238,17 +785,6 @@ class Network(TrainerMachine):
                 class_weight_info[unmap_dict[i]] = float(w_i)
             print(f'Using class weight: {class_weight_info}')
         return criterion_class(weight=weight)
-
-    def _filter_pseudo_open_set(self, samples : list, all_seen_class : set):
-        assert len(self.pseudo_open_set_classes) > 0
-        for pseudo_open_class in self.pseudo_open_set_classes:
-            assert pseudo_open_class in all_seen_class
-
-        # Remove pseudo open class examples from training
-        remaining_discovered_classes = all_seen_class.difference(self.pseudo_open_set_classes)
-        # pseudo_open_samples = list(filter(lambda x : self.train_instance.train_labels[x] in self.pseudo_open_set_classes, samples))
-        remaining_samples = list(filter(lambda x : self.train_instance.train_labels[x] in remaining_discovered_classes, samples))
-        return remaining_samples, remaining_discovered_classes
 
     def _train(self, model, discovered_samples, discovered_classes, start_epoch=0):
         self._train_mode()
@@ -286,32 +822,8 @@ class Network(TrainerMachine):
               f"Loss {train_loss}, Accuracy {train_acc}")
         return train_loss, train_acc
 
-    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
-        assert self.round <= self.pseudo_open_set_rounds
-        unmap_dict = get_target_unmapping_dict(self.train_instance.classes, pseudo_discovered_classes)
-        info_collector = self.info_collector_class(self.round, unmap_dict, pseudo_discovered_classes)
-        dataloader = get_subset_loader(self.train_instance.train_dataset,
-                                       list(full_train_set),
-                                       None, # No target transform is needed! 
-                                       shuffle=False,
-                                       batch_size=self.config.batch,
-                                       workers=self.config.workers)
-        _, info = info_collector.gather_instance_info(dataloader, pseudo_open_model, device=self.device)
-    
-        assert len(info) > 0
-        self.pseuopen_threshold = get_dynamic_threshold(info, metric=self.config.threshold_metric, mode=self.pseudo_open_set_metric)
-        print(f"Update pseudo open set threshold to {self.pseuopen_threshold}")
-
     def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=True, start_epoch=0):
         self.round += 1
-        if self.round <= self.pseudo_open_set_rounds:
-            # self.curr_full_train_set = discovered_samples.copy() # Save for self._get_open_pred_func()
-            # full_train_set = discovered_samples.copy()
-            # full_discovered_classes = discovered_classes.copy()
-            pseudo_discovered_samples, pseudo_discovered_classes = self._filter_pseudo_open_set(discovered_samples, discovered_classes)
-            self._train(self.pseudo_open_model, pseudo_discovered_samples, pseudo_discovered_classes, start_epoch=0)
-            self._meta_learning(self.pseudo_open_model, discovered_samples, pseudo_discovered_classes)
-        
         train_loss, train_acc = self._train(self.model, discovered_samples, discovered_classes, start_epoch=0)  
         eval_results = self._eval(self.model, test_dataset, discovered_classes, verbose=eval_verbose)
         return train_loss, train_acc, eval_results

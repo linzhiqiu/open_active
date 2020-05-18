@@ -53,12 +53,13 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--trainer',
                           default='network',
                           choices=['network',
-                                   'binary_softmax', # Softmax network train but use sigmoid function
-                                   'icalr',
-                                   'icalr_learning_loss',
-                                   'icalr_binary_softmax',
+                                   'network_learning_loss',
+                                   'nearestmean',
+                                   'nearestmean_learning_loss',
                                    'sigmoid', # Use 1 v.s. rest sigmoid network instead of softmax.
+                                   'sigmoid_learning_loss', # Use 1 v.s. rest sigmoid network instead of softmax.
                                    'c2ae',
+                                   'c2ae_learning_loss',
                                    'gan',
                                    'cluster', # Will be using the distance_metric
                                    'osdn', # Open Set Deep Network
@@ -67,7 +68,7 @@ trainer_args.add_argument('--trainer',
                                    'icalr_osdn_modified_neg', # Open Set Deep Network. Without modifying the seen class score. Negative score
                                    'icalr_osdn',
                                    'icalr_osdn_modified',
-                                   'network_learning_loss'
+                                   
                           ],
                           )
 
@@ -226,29 +227,22 @@ cluster_args.add_argument('--cluster_level',
                           default='after_fc', choices=['after_fc', 'before_fc'],
                           help='Where to take the feature')
 
-icalr_args = add_argument_group('ICaLR Network Trainer Machine Param.')
-icalr_args.add_argument('--icalr_mode',
-                          default='default',
-                          choices=['default'],
-                          help='The ICALR training mode.')
-icalr_args.add_argument('--icalr_exemplar_size',
-                          default=None, type=int,
-                          help='Size of exemplar set for each class. None then no limit.')
-icalr_args.add_argument('--icalr_retrain_criterion',
-                          default='round', choices=['round', 'sample', 'class'],
-                          help='Retrain network criterion.')
-icalr_args.add_argument('--icalr_strategy',
-                          default=None, choices=['naive', 'proto', 'smooth'],
-                          help='Naive just simply trains new weight vector. Proto use prototype as activation score.')
-icalr_args.add_argument('--icalr_naive_strategy',
-                          default='fixed', choices=['fixed', 'finetune'],
-                          help='For naive strategy: Fixed is fixing weight of network representation. Finetune just try the entire network.')
-icalr_args.add_argument('--icalr_proto_strategy',
-                          default=None, choices=['default'],
-                          help='For proto strategy: Only default mode available. Strictly follows the ICALR paper if there is budget limit.')
-icalr_args.add_argument('--icalr_retrain_threshold',
+nearestmean_args = add_argument_group('Nearest Mean of examplar Trainer Machine Param.')
+nearestmean_args.add_argument('--icalr_exemplar_size',
+                              default=None, type=int,
+                              help='Size of exemplar set for each class. None then no limit.')
+nearestmean_args.add_argument('--icalr_strategy',
+                              default=None, choices=['naive', 'proto', 'smooth'],
+                              help='Naive just simply trains new weight vector. Proto use prototype as activation score.')
+nearestmean_args.add_argument('--icalr_naive_strategy',
+                              default='fixed', choices=['fixed', 'finetune'],
+                              help='For naive strategy: Fixed is fixing weight of network representation. Finetune just try the entire network.')
+nearestmean_args.add_argument('--icalr_proto_strategy',
+                              default=None, choices=['default'],
+                              help='For proto strategy: Only default mode available. Strictly follows the ICALR paper if there is budget limit.')
+nearestmean_args.add_argument('--icalr_retrain_threshold',
                           default=10, type=int,
-                          help='Retrain network threshold (e.g. 10 classes, 10 rounds, 200 samples.)')
+                              help='Retrain network threshold (e.g. 10 classes, 10 rounds, 200 samples.)')
 
 training_arg = add_argument_group('Network Training Param.')
 training_arg.add_argument('--arch', '-a', type=str, metavar='ARCH',
