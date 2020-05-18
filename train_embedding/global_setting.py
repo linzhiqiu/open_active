@@ -1,0 +1,1 @@
+../global_setting.py

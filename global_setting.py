@@ -240,6 +240,35 @@ INIT_TRAIN_SET_CONFIG = {
             'num_open_classes' : 80,
             'use_random_classes' : False,
             'use_random_samples' : False,
+        },
+        'regular': { 
+        # this is the regular setup, assume 40 initial discovered classes, 
+        # 20 open classes and 250 sample per class
+            'num_init_classes' : 40,
+            'sample_per_class' : 250,
+            'num_open_classes' : 20,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'less_data_less_class_more_examples': {
+        # this is one of the  less data setup, 
+        # assume 8 initial discovered classes, 
+        # 20 open classes and 250 sample per class
+            'num_init_classes' : 8,
+            'sample_per_class' : 250,
+            'num_open_classes' : 20,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
+        },
+        'less_data_same_class_less_examples': {
+        # this is one of the  less data setup, 
+        # assume 40 initial discovered classes, 
+        # 20 open classes and 50 sample per class
+            'num_init_classes' : 40,
+            'sample_per_class' : 50,
+            'num_open_classes' : 20,
+            'use_random_classes' : False,
+            'use_random_samples' : False,
         }
     },
 'CIFAR10' : {

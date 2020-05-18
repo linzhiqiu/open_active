@@ -146,7 +146,9 @@ def generate_dataset_info(data, dataset, mode=None):
     if data in ['CIFAR10', 'CIFAR100']:
         assert mode in ['train', 'test']
         samples = set(range(len(dataset)))
-        labels = getattr(dataset, f"{mode}_labels")
+        # modified by Cheng
+        # labels = getattr(dataset, f"{mode}_labels")
+        labels = getattr(dataset, "targets")
         classes = set(labels)
         return samples, labels, classes
     else:
