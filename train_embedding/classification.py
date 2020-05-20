@@ -75,7 +75,7 @@ def main(args):
     ###########################
     # Create DataLoader
     ###########################
-    dataset_factory = DatasetFactory(args.data, args.data_path, args.init_mode)
+    dataset_factory = DatasetFactory(args.data, args.download_path, args.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
     # List of indices/labels
     train_samples, train_labels = dataset_factory.get_train_set_info()
@@ -348,7 +348,7 @@ if __name__ == '__main__':
         description='Script to Training a Image Classification Model')
     parser.add_argument('--dir', type=str, default='.',
                         help='directory to save the checkpoints')
-    parser.add_argument('--data_path',
+    parser.add_argument('--download_path',
                         default="./data", metavar='PATH',
                         help='path to datasets location default :%(default)')
     parser.add_argument('--data',
