@@ -51,20 +51,20 @@ class DatasetFactory(object):
             input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
             os.makedirs(dataset_info_dir)
         
-        dataset_info_path = os.path.join(dataset_info_dir, f"seed_{self.dataset_rand_seed}.pickle")
+        dataset_info_path = os.path.join(dataset_info_dir, f"seed_{self.dataset_rand_seed}.pt")
         
         if os.path.exists(dataset_info_path):
             print(f"Dataset file already generated at {dataset_info_path}.")
-            self.dataset_info_dict = pickle.load(open(dataset_info_path, 'rb'))
+            self.dataset_info_dict = torch.load(dataset_info_path)
         else:
-            input(f"Dataset file does not exist. Will be created at {dataset_info_path}? >> ")
+            input(f"Dataset file does not exist. Will be created at {dataset_info_path} (press to continue) >> ")
             # Split the training set using the config
             self.dataset_info_dict = self._split_train_set(self.data,
                                                            self.init_mode,
                                                            self.classes,
                                                            self.train_labels,
                                                            self.dataset_rand_seed)
-            pickle.dump(self.dataset_info_dict, open(dataset_info_path, 'wb+'))
+            torch.save(self.dataset_info_dict, dataset_info_path)
 
     def get_dataset(self):
         """Returns training set and test set

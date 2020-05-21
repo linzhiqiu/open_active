@@ -50,10 +50,10 @@ class Trainer(object):
                 print(f"Make a new folder at: {folder}")
                 os.makedirs(folder)
        
-        self.trained_ckpt_path   = os.path.join(trainer_save_dir,'ckpt.pickle')
-        self.query_result_path   = os.path.join(self.query_dir,'query_result.pickle')
-        self.finetuned_ckpt_path = os.path.join(self.finetuned_dir,'ckpt.pickle')
-        self.test_result_path    = os.path.join(self.test_dir,'test_result.pickle')
+        self.trained_ckpt_path   = os.path.join(trainer_save_dir,'ckpt.pt')
+        self.query_result_path   = os.path.join(self.query_dir,'query_result.pt')
+        self.finetuned_ckpt_path = os.path.join(self.finetuned_dir,'ckpt.pt')
+        self.test_result_path    = os.path.join(self.test_dir,'test_result.pt')
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    trainset_info,

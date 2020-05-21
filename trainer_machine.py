@@ -10,7 +10,7 @@ from collections import OrderedDict
 from tqdm import tqdm
 import copy
 
-import os, pickle
+import os
 
 import models
 from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
@@ -58,28 +58,28 @@ class TrainerMachine(object):
         """
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
-            self.ckpt_dict = pickle.load(open(ckpt_path, 'rb'))
+            self.ckpt_dict = torch.load(open(ckpt_path, 'rb'))
         else:
             print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
             self.ckpt_dict = self._train_helper(self.train_config,
                                                 discovered_samples,
                                                 discovered_classes,
                                                 verbose=verbose)
-            pickle.dump(self.ckpt_dict, open(ckpt_path, 'wb+'))
+            torch.save(self.ckpt_dict, ckpt_path)
 
     def finetune(self, discovered_samples, discovered_classes, ckpt_path=None, verbose=False):
         """Perform the finetuning step
         """
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No finetuning will be performed.")
-            self.ckpt_dict = pickle.load(ckpt_path)
+            self.ckpt_dict = torch.load(ckpt_path)
         else:
             print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
             self.ckpt_dict = self._train_helper(self.finetune_config,
                                                 discovered_samples,
                                                 discovered_classes,
                                                 verbose=verbose)
-            pickle.dump(self.ckpt_dict, ckpt_path)
+            torch.save(self.ckpt_dict, ckpt_path)
 
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
         """ The subclasses only need to overwrite this function
