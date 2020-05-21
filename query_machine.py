@@ -9,6 +9,9 @@ from instance_info import BasicInfoCollector, ClusterInfoCollector, LearningLoss
 from open_info import OpenCollector
 from utils import get_subset_loader, get_target_unmapping_dict
 
+def get_query_machine(*args):
+    return None
+
 class LabelPicker(object):
     """Abstract class"""
     def __init__(self, config, train_instance, trainer_machine):
@@ -46,7 +49,8 @@ def lowest_loss(outputs):
     _, losses = outputs
     return -losses.view(losses.size(0))
 
-from global_setting import uncertainty_type_dict
+# from global_setting import uncertainty_type_dict
+uncertainty_type_dict = {}
 class UncertaintyMeasure(LabelPicker):
     def __init__(self, *args, **kwargs):
         super(UncertaintyMeasure, self).__init__(*args, **kwargs)
@@ -116,17 +120,17 @@ class UncertaintyMeasure(LabelPicker):
         else:
             raise NotImplementedError()
 
-    def get_logging_str(self, verbose=verbose):
+    def get_logging_str(self, verbose=True):
         logging_strs = []
         if verbose:
             logging_strs += ["uncertain"]
-            logging_strs += [config.uncertainty_measure, config.active_random_sampling]
-            logging_strs += ['oa', config.open_active_setup]
+            logging_strs += [self.config.uncertainty_measure, self.config.active_random_sampling]
+            logging_strs += ['oa', self.config.open_active_setup]
         else:
             # TODO: make it shorter
             raise NotImplementedError()
-            logging_strs += ['uncert', config.uncertainty_measure, config.active_random_sampling]
-            logging_strs += ['oa', config.open_active_setup]
+            logging_strs += ['uncert', self.config.uncertainty_measure, self.config.active_random_sampling]
+            logging_strs += ['oa', self.config.open_active_setup]
         return "_".join(logging_strs)
 
     def select_new_data(self, discovered_samples, discovered_classes):
@@ -355,12 +359,14 @@ class CoresetMeasure(LabelPicker):
             score_ranking_pair = score_ranking_pair_new
         return new_samples, new_classes
     
-    def get_logging_str(self, verbose=verbose):
+    def get_logging_str(self, verbose=False):
         logging_strs = []
         if verbose:
             logging_strs += ["coreset"]
-            logging_strs += [config.coreset_measure, config.active_random_sampling, config.coreset_feature]
-            logging_strs += ['oa', config.open_active_setup]
+            logging_strs += [self.config.coreset_measure,
+                             self.config.active_random_sampling,
+                             self.config.coreset_feature]
+            logging_strs += ['oa', self.config.open_active_setup]
         else:
             raise NotImplementedError()
         return "_".join(logging_strs)

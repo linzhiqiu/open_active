@@ -84,39 +84,39 @@ def get_experiment_name(config):
         raise NotImplementedError()
     return "_".join([config.trainer, setting_str])
 
-    if self.config.trainer == 'network':
-            trainer_machine_class = Network
-        elif self.config.trainer in ['osdn']:
-            trainer_machine_class = OSDNNetwork
-        elif self.config.trainer in ['osdn_modified']:
-            trainer_machine_class = OSDNNetworkModified
-        elif self.config.trainer in ['icalr_osdn', 'icalr_osdn_neg']:
-            trainer_machine_class = ICALROSDNNetwork
-        elif self.config.trainer in ['icalr_osdn_modified', 'icalr_osdn_modified_neg']:
-            trainer_machine_class = ICALROSDNNetworkModified
-        elif self.config.trainer == 'c2ae':
-            trainer_machine_class = C2AE
-        elif self.config.trainer == 'cluster':
-            trainer_machine_class = ClusterNetwork
-        elif self.config.trainer == 'sigmoid':
-            trainer_machine_class = SigmoidNetwork
-        elif self.config.trainer == 'binary_softmax':
-            trainer_machine_class = BinarySoftmaxNetwork
-        elif self.config.trainer == 'icalr_binary_softmax':
-            trainer_machine_class = ICALRBinarySoftmaxNetwork
-        elif self.config.trainer == 'gan':
-            gan_factory = GANFactory(self.config)
-            trainer_machine_class = gan_factory.gan_class()
-        elif self.config.trainer == 'network_learning_loss':
-            trainer_machine_class = NetworkLearningLoss
-        elif self.config.trainer == 'icalr':
-            trainer_machine_class = ICALR
-        elif self.config.trainer == 'icalr_learning_loss':
-            trainer_machine_class = get_learning_loss_class(ICALR)
-        else:
-            raise NotImplementedError()
-        return trainer_machine_class(self.config,
-                                     self.train_instance)
+    # if self.config.trainer == 'network':
+    #     trainer_machine_class = Network
+    # elif self.config.trainer in ['osdn']:
+    #     trainer_machine_class = OSDNNetwork
+    # elif self.config.trainer in ['osdn_modified']:
+    #     trainer_machine_class = OSDNNetworkModified
+    # elif self.config.trainer in ['icalr_osdn', 'icalr_osdn_neg']:
+    #     trainer_machine_class = ICALROSDNNetwork
+    # elif self.config.trainer in ['icalr_osdn_modified', 'icalr_osdn_modified_neg']:
+    #     trainer_machine_class = ICALROSDNNetworkModified
+    # elif self.config.trainer == 'c2ae':
+    #     trainer_machine_class = C2AE
+    # elif self.config.trainer == 'cluster':
+    #     trainer_machine_class = ClusterNetwork
+    # elif self.config.trainer == 'sigmoid':
+    #     trainer_machine_class = SigmoidNetwork
+    # elif self.config.trainer == 'binary_softmax':
+    #     trainer_machine_class = BinarySoftmaxNetwork
+    # elif self.config.trainer == 'icalr_binary_softmax':
+    #     trainer_machine_class = ICALRBinarySoftmaxNetwork
+    # elif self.config.trainer == 'gan':
+    #     gan_factory = GANFactory(self.config)
+    #     trainer_machine_class = gan_factory.gan_class()
+    # elif self.config.trainer == 'network_learning_loss':
+    #     trainer_machine_class = NetworkLearningLoss
+    # elif self.config.trainer == 'icalr':
+    #     trainer_machine_class = ICALR
+    # elif self.config.trainer == 'icalr_learning_loss':
+    #     trainer_machine_class = get_learning_loss_class(ICALR)
+    # else:
+    #     raise NotImplementedError()
+    # return trainer_machine_class(self.config,
+    #                                 self.train_instance)
 
     name = []
     if config.trainer == 'gan':

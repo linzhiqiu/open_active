@@ -1,5 +1,7 @@
 {
     "remote.SSH.defaultExtensions": [
         "Python"
-    ]
+    ],
+    "python.pythonPath": "/usr/bin/python3",
+    "python.formatting.provider": "black"
 }

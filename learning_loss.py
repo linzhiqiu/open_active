@@ -14,9 +14,9 @@ from trainer_machine import Network
 from instance_info import LearningLossInfoCollector
 
 import models
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func, get_target_unmapping_dict
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func
 
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX, PRETRAINED_MODEL_PATH
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
 import libmr
 import math
@@ -323,7 +323,7 @@ class NetworkLearningLoss(Network):
             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += softmax_max.tolist()
             
             preds = torch.where(scores < threshold,
-                                torch.LongTensor([UNSEEN_CLASS_INDEX]).to(outputs.device), 
+                                torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device), 
                                 softmax_preds)
             return preds
         return open_set_prediction

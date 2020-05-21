@@ -8,6 +8,10 @@
         # Let each dataset class/ label picker/ trainer machine class write their own logging function
             # Maybe verbose version + simple version?
         # Combine ICALR and TrainerMachine file.
+            # 1 - Read ICALR closely
+                # Where it calls Network? expand those function
+                # Split naive, proto, smooth to different class or remove their existence at all
+                # Check the logging difference. See if Network class is most update to date.
     # Features
         # I removed log/save_first_round_model. We wanna provide a separate eval.py maybe.
         # Split train and eval? Like open set active learning
@@ -35,3 +39,45 @@
         # Network VGG16, feature embedding of FC7 and size 4096
         # How is the shared guassian picked
         # Is it SGD?
+
+
+# Metric
+    # Precision v.s. Recall and ROC curve
+        # This tutorial says that when data is imbalanced, we should use PR instead of ROC?
+        #https://machinelearningmastery.com/roc-curves-and-precision-recall-curves-for-classification-in-python/
+    # The open set active learning paper present F-1 and acc results. How are their threshold be picked?
+
+
+# Implementation
+    # Remove forward handle, use output of network
+    # Save softmax network + cos network (by today)
+    # Save c2AE, learning loss (later)
+
+
+# New setup
+    # train.py
+        # Initialize the dataset. （Or load from an existing dataset)
+            # Dataset should be able to be splitted into (discovered_classes, undiscovered_classes, open_classes)
+            # This class split should be able to make arbitrarily. (Two options: Order or random)
+            # We should have fix number of samples per class. The samples should be fixed. (One options: Random.)
+            # Should be able to save and load the dataset split. Including class split, the initial samples per class.
+        # Initialize a Trainer. The trainer must have these functions:
+            # train(). Args: discovered_samples, discovered_classes.
+                # Can also load from a pre-existing state_dict.
+                # 3 versions: Softmax Network. Cosine network. Metric learning. (Maybe plus sigmoid network and learning loss)
+            # active_query() Args: unlabeled_samples, budget. Returns: new queries and labels.
+                # 5 algorithms:
+                    # ULDR, Coreset, Entropy/Softmax, Learning Loss, 
+            # finetune() Args: discovered_samples, discovered_classes.
+                # different ways to finetune the model?
+            # Each of the above 3 steps should save the checkpoint/state_dict for later use.
+            # Then for evaluation:
+            # eval_closed_set()
+                # Report the overall accuracy on all closed set classes
+            # eval_open_set()
+                # should support different versions of open set algorithm:
+                    # Softmax/Entropy, OpenMax, C2AE (need retrain), Nearest Neighbor, ULDR
+                # Log the open set score/label for each test samples.
+        
+
+        # Finetune - should it be different from train?

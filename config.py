@@ -63,6 +63,11 @@ trainer_args.add_argument('--query_method',
                           ],
                           help='The active learning method determines how to query from unlabeled pool.'
                           )
+trainer_args.add_argument('--budget',
+                          default=10,
+                          type=int,
+                          help='The budget to query from unlabeled pool.'
+                          )
 
 trainer_args.add_argument('--open_set_method',
                           default='entropy',

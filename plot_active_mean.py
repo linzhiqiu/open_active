@@ -4,7 +4,7 @@
 import json, argparse, os
 import numpy as np
 from glob import glob
-from global_setting import OPEN_CLASS_INDEX, UNSEEN_CLASS_INDEX
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib
 matplotlib.use('Agg')

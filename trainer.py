@@ -1,16 +1,11 @@
-from trainer_machine import BinarySoftmaxNetwork, Network, OSDNNetwork, OSDNNetworkModified, ClusterNetwork, SigmoidNetwork
-from gan import GANFactory
-from c2ae import C2AE
-from learning_loss import NetworkLearningLoss, get_learning_loss_class
-from icalr import ICALR, ICALROSDNNetwork, ICALROSDNNetworkModified, ICALRBinarySoftmaxNetwork
-from label_picker import UncertaintyMeasure, CoresetMeasure
+import trainer_machine, query_machine
+import os
 
-
-class TrainingInstance(object):
+class TrainsetInfo(object):
     """ A data class holding all resources for training
     """
     def __init__(self, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
-        super(TrainingInstance, self).__init__()
+        super(TrainsetInfo, self).__init__()
         self.train_dataset = train_dataset # PyTorch train dataset
         self.train_samples = train_samples # List of indices in train set
         self.open_samples = open_samples # List of indices representing training samples belonging to open class
@@ -22,91 +17,69 @@ class TrainingInstance(object):
 
 
 class Trainer(object):
-    def __init__(self, config, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
-        super(Trainer, self).__init__()
-        self.config = config
-        self.train_instance = TrainingInstance(train_dataset,
-                                               train_samples,
-                                               open_samples,
-                                               train_labels,
-                                               classes,
-                                               open_classes)
-
-        self.trainer_machine = self._init_trainer_machine() # TrainerMachine implements the actual algorithm
-        self.label_picker = self._init_label_picker() # LabelPicker implements the active learning query algorithm
-    
-    def train_then_eval(self, discovered_samples, discovered_classes, test_dataset, eval_verbose=False):
-        # Start a new round. Each round has 2 steps:
-        # (1) Train the model using discovered_samples from discovered_classes.
-        # (2) Then eval on test_dataset.
-        return self.trainer_machine.train_then_eval(discovered_samples,
-                                                    discovered_classes,
-                                                    test_dataset,
-                                                    eval_verbose=eval_verbose)
-
-    def get_thresholds_checkpoints(self):
-        return self.trainer_machine.get_thresholds_checkpoints()
-
-    def get_exemplar_set(self):
-        return self.trainer_machine.exemplar_set
-        
-    def select_new_data(self, discovered_samples, discovered_classes):
-        return self.label_picker.select_new_data(discovered_samples, discovered_classes)
-
-    def _init_trainer_machine(self):
-        """ Initialize all necessary models/optimizer/learning rate scheduler 
+    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_method, save_dir=None):
+        """The main class for training/querying/finetuning
+            Args:
+                training_method (str) : The method for training the network
+                train_mode (str) : Specify the training details, such as lr, batchsize...
+                trainer_config (dict) : Dictionary that includes all training hyperparameters
+                trainset_info (TrainsetInfo) : The details about the training set
+                query_method (str) : The method for querying from the unlabeled pool
+                budget (int/float) : The querying budget
+                open_set_method (str) : The method for open_set recognition
+                save_dir (str) : The directory to save/load the checkpoints.
         """
-        if self.config.trainer == 'network':
-            trainer_machine_class = Network
-        elif self.config.trainer in ['osdn']:
-            trainer_machine_class = OSDNNetwork
-        elif self.config.trainer in ['osdn_modified']:
-            trainer_machine_class = OSDNNetworkModified
-        elif self.config.trainer in ['icalr_osdn', 'icalr_osdn_neg']:
-            trainer_machine_class = ICALROSDNNetwork
-        elif self.config.trainer in ['icalr_osdn_modified', 'icalr_osdn_modified_neg']:
-            trainer_machine_class = ICALROSDNNetworkModified
-        elif self.config.trainer == 'c2ae':
-            trainer_machine_class = C2AE
-        elif self.config.trainer == 'cluster':
-            trainer_machine_class = ClusterNetwork
-        elif self.config.trainer == 'sigmoid':
-            trainer_machine_class = SigmoidNetwork
-        elif self.config.trainer == 'binary_softmax':
-            trainer_machine_class = BinarySoftmaxNetwork
-        elif self.config.trainer == 'icalr_binary_softmax':
-            trainer_machine_class = ICALRBinarySoftmaxNetwork
-        elif self.config.trainer == 'gan':
-            gan_factory = GANFactory(self.config)
-            trainer_machine_class = gan_factory.gan_class()
-        elif self.config.trainer == 'network_learning_loss':
-            trainer_machine_class = NetworkLearningLoss
-        elif self.config.trainer == 'icalr':
-            trainer_machine_class = ICALR
-        elif self.config.trainer == 'icalr_learning_loss':
-            trainer_machine_class = get_learning_loss_class(ICALR)
-        else:
-            raise NotImplementedError()
-        return trainer_machine_class(self.config,
-                                     self.train_instance)
+        super(Trainer, self).__init__()
+        self.training_method = training_method
+        self.train_mode = train_mode
+        self.trainset_info = trainset_info
+        self.trainer_config = trainer_config
+        self.query_method = query_method
+        self.budget = budget
+        self.open_set_method = open_set_method
 
-    def _init_label_picker(self):
-        if self.config.trainer in ['network', 'osdn', 'osdn_modified', 'cluster', 'gan', 'sigmoid', 'binary_softmax', 'c2ae', 'network_learning_loss', 'icalr_osdn_neg', 'icalr_osdn_modified_neg',
-                                   'icalr', 'icalr_learning_loss', 'icalr_osdn', 'icalr_osdn_modified', 'icalr_binary_softmax']:
-            if self.config.label_picker == 'uncertainty_measure':
-                label_picker_class = UncertaintyMeasure
-            elif self.config.label_picker == 'coreset_measure':
-                label_picker_class = CoresetMeasure
-            else:
-                raise NotImplementedError()
-        else:
-            raise NotImplementedError()
-        return label_picker_class(self.config,
-                                  self.train_instance,
-                                  self.trainer_machine)
+        trainer_save_dir = os.path.join(save_dir,
+                                        "_".join([training_method,train_mode]))
+        
+        self.query_dir     = os.path.join(trainer_save_dir, "active_"+self.query_method)
+        self.finetuned_dir = os.path.join(self.query_dir, "budget_"+str(budget))
+        self.test_dir      = os.path.join(self.finetuned_dir, "openset_"+self.open_set_method)
 
-    def get_trainer_machine_logging_str(self, verbose=True):
-        return self.trainer_machine.get_logging_str(verbose=verbose)
+        for folder in [trainer_save_dir, self.query_dir, self.finetuned_dir, self.test_dir]:
+            if not os.path.exists(folder):
+                print(f"Make a new folder at: {folder}")
+                os.makedirs(folder)
+       
+        self.trained_ckpt_path   = os.path.join(trainer_save_dir,'ckpt.pickle')
+        self.query_result_path   = os.path.join(self.query_dir,'query_result.pickle')
+        self.finetuned_ckpt_path = os.path.join(self.finetuned_dir,'ckpt.pickle')
+        self.test_result_path    = os.path.join(self.test_dir,'test_result.pickle')
+
+        self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
+                                                                   trainset_info,
+                                                                   trainer_config)
+        self.query_machine = query_machine.get_query_machine(query_method)
+
+    def train(self, discovered_samples, discovered_classes, verbose=False):
+        self.trainer_machine.train(discovered_samples,
+                                   discovered_classes,
+                                   ckpt_path=self.trained_ckpt_path,
+                                   verbose=verbose)
     
-    def get_label_picker_logging_str(self, verbose=True):
-        return self.label_picker.get_logging_str(verbose=verbose)
+    def query(self, discovered_samples, discovered_classes, verbose=False):
+        return self.query_machine.query(self.trainer_machine,
+                                        self.budget,
+                                        discovered_samples,
+                                        discovered_classes,
+                                        query_result_path=self.query_result_path,
+                                        verbose=verbose)
+    
+    def finetune(self, discovered_samples, discovered_classes, verbose=False):
+        self.trainer_machine.finetune(discovered_samples,
+                                      discovered_classes,
+                                      ckpt_path=self.finetuned_ckpt_path,
+                                      verbose=verbose)
+
+    def eval(self, discovered_classes, test_dataset):
+        assert len(discovered_classes) == len(self.trainset_info.query_classes)
+        raise NotImplementedError()

@@ -45,8 +45,8 @@ class DatasetFactory(object):
 
         # Load the dataset split information, or generate a new split and save it
         dataset_info_dir = os.path.join(self.save_path,
-                                              self.data,
-                                              self.init_mode)
+                                        self.data,
+                                        self.init_mode)
         if not os.path.exists(dataset_info_dir):
             input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
             os.makedirs(dataset_info_dir)
@@ -55,7 +55,7 @@ class DatasetFactory(object):
         
         if os.path.exists(dataset_info_path):
             print(f"Dataset file already generated at {dataset_info_path}.")
-            self.dataset_info_dict = pickle.load(dataset_info_path)
+            self.dataset_info_dict = pickle.load(open(dataset_info_path, 'rb'))
         else:
             input(f"Dataset file does not exist. Will be created at {dataset_info_path}? >> ")
             # Split the training set using the config
@@ -64,7 +64,7 @@ class DatasetFactory(object):
                                                            self.classes,
                                                            self.train_labels,
                                                            self.dataset_rand_seed)
-            pickle.dump(self.dataset_info_dict, dataset_info_path)
+            pickle.dump(self.dataset_info_dict, open(dataset_info_path, 'wb+'))
 
     def get_dataset(self):
         """Returns training set and test set

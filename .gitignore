@@ -24,3 +24,4 @@ open_active_results_*/
 paper_plots*/
 temp_*/
 *.pt
+.vscode/
