@@ -75,7 +75,7 @@ def main(args):
     ###########################
     # Create DataLoader
     ###########################
-    dataset_factory = DatasetFactory(args.data, args.download_path, args.init_mode)
+    dataset_factory = DatasetFactory(args.data, args.download_path, args.dir, args.init_mode)
     train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
     # List of indices/labels
     train_samples, train_labels = dataset_factory.get_train_set_info()
@@ -100,7 +100,11 @@ def main(args):
     ###########################
     if args.model == 'resnet18':
         backbone = models.ResNet18(
-            last_relu=(not args.remove_last_relu))
+            last_relu=(not args.remove_last_relu), high_res=False)
+        feature_dim = 512
+    elif args.model == 'resnet18_high_res':
+        backbone = models.ResNet18(
+            last_relu=(not args.remove_last_relu), high_res=True)
         feature_dim = 512
     else:
         raise ValueError('Invalid backbone model')
@@ -354,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument('--data',
                         default="CIFAR100",
                         choices=["CIFAR100", "MNIST", "IMAGENET12",
-                                 "TINY-IMAGENET", "CIFAR10"],
+                                 "TINY-IMAGENET", "CIFAR10", 'CUB200'],
                         help='Choice of dataset')
     parser.add_argument('--init_mode',
                         default='regular',

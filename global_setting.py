@@ -26,7 +26,26 @@ DATASET_CONFIG_DICT = {
         },
      
     },
-    'CIFAR10' : {}
+    'CIFAR10' : {},
+
+    'CUB200': {
+        'regular': {  # The setup in ICRA deep metric learning paper. 80 closed classes, 20 open classes.
+            'num_init_classes': 90,  # Number of initial discovered classes
+            'sample_per_class': 15,  # Number of samples per discovered class
+            'num_open_classes': 20,  # Number of open classes hold out
+        },
+        'fewer_class': {  # Use 1/5 of discovered classes, but same number of samples per discovered class
+            'num_init_classes': 18,  # Number of initial discovered classes
+            'sample_per_class': 15,  # Number of samples per discovered class
+            'num_open_classes': 20,
+        },
+        'fewer_sample': {  # Use 1/5 of samples per discovered class, but keep 40 initial discovered classes
+            'num_init_classes': 90,  # Number of initial discovered classes
+            'sample_per_class': 3,  # Number of samples per discovered class
+            'num_open_classes': 20,
+        },
+
+    },
 }
 
 SUPPORTED_DATASETS = list(DATASET_CONFIG_DICT.keys())
