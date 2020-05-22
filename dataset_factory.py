@@ -2,7 +2,8 @@
 import os
 import torch
 import torchvision
-import torchvision.datasets as datasets
+import torchvision.datasets
+import datasets
 import transform
 
 from torch.utils.data import DataLoader
@@ -130,7 +131,7 @@ class DatasetFactory(object):
         init_conf = DATASET_CONFIG_DICT[data][init_mode]
         # Assert: num of class - num of open class - num of initial discovered classes >= 0
         assert len(classes) - init_conf['num_open_classes'] - init_conf['num_init_classes'] >= 0
-        if data not in ['CIFAR100']:
+        if data not in ['CIFAR100', 'CUB200']:
             raise NotImplementedError()
         else:
             # class_to_indices[class_index] = list of sample indices (list of int)
@@ -173,19 +174,34 @@ def generate_dataset_info(data, dataset):
         samples = set(range(len(dataset)))
         labels = getattr(dataset, "targets")
         classes = set(labels)
-        return samples, labels, classes
+    elif data in ['CUB200']:
+        samples = set(range(len(dataset)))
+        labels = getattr(dataset, "targets")
+        classes = set(range(len(dataset.classes)))
     else:
         raise NotImplementedError()
+    return samples, labels, classes
 
 def generate_dataset(data, download_path):
     transforms_dict = transform.get_transform_dict(data)
-    ds_class = getattr(datasets, data)
-    train_set = ds_class(root=download_path, 
-                         train=True, 
-                         download=True, 
-                         transform=transforms_dict['train'])
-    test_set = ds_class(root=download_path,
-                        train=False,
-                        download=True,
-                        transform=transforms_dict['test'])
+    if data in ['CIFAR10', 'CIFAR100']:
+        ds_class = getattr(torchvision.datasets, data)
+        train_set = ds_class(root=download_path, 
+                            train=True, 
+                            download=True, 
+                            transform=transforms_dict['train'])
+        test_set = ds_class(root=download_path,
+                            train=False,
+                            download=True,
+                            transform=transforms_dict['test'])
+    elif data in ['CUB200']:
+        ds_class = getattr(datasets, data)
+        train_set = ds_class(root=download_path,
+                             train=True,
+                             transform=transforms_dict['train'])
+        test_set = ds_class(root=download_path,
+                            train=False,
+                            transform=transforms_dict['test'])
+    else:
+        raise NotImplementedError()
     return train_set, test_set
