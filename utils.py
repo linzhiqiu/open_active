@@ -19,7 +19,7 @@ import global_setting # include some constant value
 
 class SetPrintMode:
     def __init__(self, hidden=False):
-        self.hidden = hidden
+        hidden = hidden
 
     def __enter__(self):
         if self.hidden:
@@ -205,3 +205,28 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
     def unmapp_func(lst):
         return list(map(lambda x: unmapping_dict[x], lst))
     return unmapp_func
+
+def get_dataset_dir(save_path, data):
+    dataset_dir = os.path.join(save_path, data)
+    if not os.path.exists(dataset_dir):
+        input(f"{dataset_dir} does not exists. Press anything to create it >> ")
+        os.makedirs(dataset_dir)
+    return dataset_dir
+
+def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
+    dataset_info_dir = os.path.join(
+                            get_dataset_dir(save_path, data),
+                            init_mode,
+                        )
+    if not os.path.exists(dataset_info_dir):
+        input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
+        os.makedirs(dataset_info_dir)
+    dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
+    return dataset_info_path
+
+def prepare_save_dir(config):
+    """Return a dictionary of save_paths
+    """
+    paths_dict = {}
+    save_path
+    download_path

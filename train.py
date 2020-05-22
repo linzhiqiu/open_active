@@ -16,6 +16,7 @@ import logging_helper
 import json
 import random
 
+from utils import prepare_save_dir
 
 def main():
     config = get_config()
@@ -28,6 +29,9 @@ def main():
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
+    # It contains all directory/save_paths that will be used
+    ckpt_dir_dict = prepare_save_dir(config)
+
     dataset_factory = DatasetFactory(config.data,
                                      config.download_path, # Where to download the images
                                      config.save_path, # Where to save the dataset information
@@ -50,6 +54,7 @@ def main():
                                  train_labels,
                                  classes,
                                  open_classes)
+    
 
     # The training details including arch, lr, batch size..
     trainer_config = get_trainer_config(config.data,

@@ -80,6 +80,14 @@ trainer_args.add_argument('--open_set_method',
                           help='The open set method determines how evaluate the open set score of a test sample.'
                           )
 
+# Configs for analaysis.py
+analysis_arg = add_argument_group('Analysis.')
+analysis_arg.add_argument('--analysis_save_dir', default="/share/coecis/open_active/analysis",
+                          help='The directory to save all the plots.')
+analysis_arg.add_argument('--analysis_mode', choices=['same_sample', 'same_budget'], default='same_sample',
+                          help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
+analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
+                          help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 
 
 sigmoid_args = add_argument_group('Sigmoid Trainer Machine Param.')

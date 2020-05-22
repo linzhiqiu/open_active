@@ -43,6 +43,7 @@ class DatasetFactory(object):
         self.train_samples, self.train_labels, self.classes = generate_dataset_info(self.data, 
                                                                                     self.train_dataset)
 
+        from utils import get_dataset_info_path, get_dataset_dir
         # Load the dataset split information, or generate a new split and save it
         dataset_info_dir = os.path.join(self.save_path,
                                         self.data,
@@ -51,20 +52,20 @@ class DatasetFactory(object):
             input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
             os.makedirs(dataset_info_dir)
         
-        dataset_info_path = os.path.join(dataset_info_dir, f"seed_{self.dataset_rand_seed}.pt")
+        self.dataset_info_path = os.path.join(dataset_info_dir, f"seed_{self.dataset_rand_seed}.pt")
         
-        if os.path.exists(dataset_info_path):
-            print(f"Dataset file already generated at {dataset_info_path}.")
-            self.dataset_info_dict = torch.load(dataset_info_path)
+        if os.path.exists(self.dataset_info_path):
+            print(f"Dataset file already generated at {self.dataset_info_path}.")
+            self.dataset_info_dict = torch.load(self.dataset_info_path)
         else:
-            input(f"Dataset file does not exist. Will be created at {dataset_info_path} (press to continue) >> ")
+            input(f"Dataset file does not exist. Will be created at {self.dataset_info_path} (press to continue) >> ")
             # Split the training set using the config
             self.dataset_info_dict = self._split_train_set(self.data,
                                                            self.init_mode,
                                                            self.classes,
                                                            self.train_labels,
                                                            self.dataset_rand_seed)
-            torch.save(self.dataset_info_dict, dataset_info_path)
+            torch.save(self.dataset_info_dict, self.dataset_info_path)
 
     def get_dataset(self):
         """Returns training set and test set

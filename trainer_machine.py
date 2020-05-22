@@ -114,6 +114,8 @@ class TrainerMachine(object):
     def _get_backbone_network(self, backbone_name):
         if backbone_name == 'ResNet18':
             backbone = models.ResNet18(last_relu=False) # Always false.
+        elif backbone_name == 'ResNet18HighRes':
+            backbone = models.ResNet18(last_relu=False, high_res=True)
         else:
             raise NotImplementedError()
         return backbone
