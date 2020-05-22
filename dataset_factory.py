@@ -11,7 +11,6 @@ from torch.utils.data import SubsetRandomSampler
 import numpy as np
 import copy
 import random
-import pickle
 
 from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT
 

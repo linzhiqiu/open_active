@@ -41,32 +41,38 @@ class Trainer(object):
         trainer_save_dir = os.path.join(save_dir,
                                         "_".join([training_method,train_mode]))
         
-        self.query_dir     = os.path.join(trainer_save_dir, "active_"+self.query_method)
-        self.finetuned_dir = os.path.join(self.query_dir, "budget_"+str(budget))
+        query_dir     = os.path.join(trainer_save_dir, "active_"+self.query_method)
+        self.finetuned_dir = os.path.join(query_dir, "budget_"+str(budget))
         self.test_dir      = os.path.join(self.finetuned_dir, "openset_"+self.open_set_method)
 
-        for folder in [trainer_save_dir, self.query_dir, self.finetuned_dir, self.test_dir]:
+        for folder in [trainer_save_dir, self.finetuned_dir, self.test_dir]:
             if not os.path.exists(folder):
                 print(f"Make a new folder at: {folder}")
                 os.makedirs(folder)
        
         self.trained_ckpt_path   = os.path.join(trainer_save_dir,'ckpt.pt')
-        self.query_result_path   = os.path.join(self.query_dir,'query_result.pt')
+        self.query_result_path   = os.path.join(self.finetuned_dir,'query_result.pt')
         self.finetuned_ckpt_path = os.path.join(self.finetuned_dir,'ckpt.pt')
         self.test_result_path    = os.path.join(self.test_dir,'test_result.pt')
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    trainset_info,
                                                                    trainer_config)
-        self.query_machine = query_machine.get_query_machine(query_method)
+        self.query_machine = query_machine.get_query_machine(query_method,
+                                                             trainset_info,
+                                                             trainer_config)
 
     def train(self, discovered_samples, discovered_classes, verbose=False):
+        """Performs training using discovered_samples
+        """
         self.trainer_machine.train(discovered_samples,
                                    discovered_classes,
                                    ckpt_path=self.trained_ckpt_path,
                                    verbose=verbose)
     
     def query(self, discovered_samples, discovered_classes, verbose=False):
+        """Performs querying from unlabeled pool. discovered_samples is the already labaled samples
+        """
         return self.query_machine.query(self.trainer_machine,
                                         self.budget,
                                         discovered_samples,

@@ -23,6 +23,12 @@ import libmr
 import math
 
 def get_trainer_machine(training_method, trainset_info, trainer_config):
+    """Return a TrainerMachine object
+        Args:
+            training_method (str) : The training method
+            trainset_info (TrainsetInfo) : The details about training set
+            trainer_config (dict) : The details about hyperparameter and etc.
+    """
     if training_method == "softmax_network":
         trainer_machine_class = SoftmaxNetwork
     elif training_method == "cosine_network":
@@ -58,7 +64,8 @@ class TrainerMachine(object):
         """
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
-            self.ckpt_dict = torch.load(open(ckpt_path, 'rb'))
+            self.ckpt_dict = torch.load(ckpt_path)
+            self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
             self.ckpt_dict = self._train_helper(self.train_config,
@@ -73,6 +80,7 @@ class TrainerMachine(object):
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No finetuning will be performed.")
             self.ckpt_dict = torch.load(ckpt_path)
+            self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
             self.ckpt_dict = self._train_helper(self.finetune_config,
@@ -81,12 +89,28 @@ class TrainerMachine(object):
                                                 verbose=verbose)
             torch.save(self.ckpt_dict, ckpt_path)
 
+    def get_class_scores(self, inputs):
+        """Returns the class scores for each inputs
+            Returns:
+                class_scores (B x NUM_OF_DISCOVERED_CLASSES)
+            Args:
+                inputs (B x 3 x ? x ?)
+        """
+        self.classifier.eval()
+        self.backbone.eval()
+        return self.classifier(self.backbone(inputs))
+
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
         """ The subclasses only need to overwrite this function
         """
         raise NotImplementedError()
 
     # Below are some helper functions shared by all subclasses
+    def _load_ckpt_dict(self, ckpt_dict):
+        self.classifier = self._get_classifier(ckpt_dict['discovered_classes']).to(self.device)
+        self.classifier.load_state_dict(ckpt_dict['classifier'])
+        self.backbone.load_state_dict(ckpt_dict['backbone'])
+
     def _get_backbone_network(self, backbone_name):
         if backbone_name == 'ResNet18':
             backbone = models.ResNet18(last_relu=False) # Always false.
@@ -136,6 +160,8 @@ class Network(TrainerMachine):
 
         criterion = torch.nn.NLLLoss(reduction='mean')
 
+        avg_loss_per_epoch = []
+        avg_acc_per_epoch = []
         with SetPrintMode(hidden=not verbose):
             for epoch in range(0, cfg.epochs):
                 running_loss = 0.0
@@ -178,6 +204,8 @@ class Network(TrainerMachine):
                 
                 avg_loss = float(running_loss)/count
                 avg_acc = float(running_corrects)/count
+                avg_loss_per_epoch.append(avg_loss)
+                avg_acc_per_epoch.append(avg_acc)
                 scheduler.step()
             print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
         ckpt_dict = {
@@ -186,6 +214,8 @@ class Network(TrainerMachine):
             'optimizer' : optimizer.state_dict(),
             'discovered_samples' : discovered_samples,
             'discovered_classes' : discovered_classes,
+            'loss_curve' : avg_loss_per_epoch,
+            'acc_curve' : avg_acc_per_epoch
         }
         return ckpt_dict
    

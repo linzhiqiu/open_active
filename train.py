@@ -74,22 +74,12 @@ def main():
     )
 
     trainer.train(discovered_samples, discovered_classes, verbose=True)
-    import pdb; pdb.set_trace()
-    new_samples, new_classes = trainer.query(discovered_samples, discovered_classes)
 
-    new_discovered_classes = discovered_classes.union(new_classes)
-    classes_diff = new_discovered_classes.difference(discovered_classes)
-    discovered_classes = new_discovered_classes
-
-    print(f"Recognized class from {len(discovered_classes)-len(classes_diff)} to {len(discovered_classes)}")
-
-    assert len(set(discovered_samples)) == len(discovered_samples)
-    assert len(set(new_samples)) ==  len(new_samples)
-    discovered_samples = list(set(discovered_samples).union(set(new_samples)))
-
-    trainer.finetune(discovered_samples, discovered_classes)
+    discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=True)
     
-
+    trainer.finetune(discovered_samples, discovered_classes, verbose=True)
+    
+    import pdb; pdb.set_trace()
     # for round_i in range(0, config.max_rounds):
     #     print(f"Round [{round_i}]")
 
@@ -216,7 +206,7 @@ def main():
     #             f.close()
 
     #     # newly labeled samples, classes in these newly labeled samples
-    #     new_samples, new_classes = trainer.select_new_data(discovered_samples, discovered_classes)
+    #     new_samples, new_discovered_classes = trainer.select_new_data(discovered_samples, discovered_classes)
 
     #     new_discovered_classes = discovered_classes.union(new_classes)
     #     classes_diff = new_discovered_classes.difference(discovered_classes)
