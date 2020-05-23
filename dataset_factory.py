@@ -16,12 +16,12 @@ import random
 from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT
 
 class DatasetFactory(object):
-    def __init__(self, data, download_path, save_path, init_mode, dataset_rand_seed=None):
+    def __init__(self, data, download_path, dataset_info_path, init_mode, dataset_rand_seed=None):
         """Constructor of a facotry of pytorch dataset
             Args:
                 data (str) : Name of datasets
                 download_path (str) : Path where the dataset will be downloaded
-                save_path (str) : Path will the dataset split information will be downloaded
+                dataset_info_path (str) : Path will the dataset split information will be downloaded
                 init_mode (str) : How the dataset will be splitted, including information about
                                       - Number of initial seen classes
                                       - Number of samples per seen classes
@@ -32,7 +32,7 @@ class DatasetFactory(object):
         super(DatasetFactory, self).__init__()
         self.data = data
         self.download_path = download_path
-        self.save_path = save_path
+        self.dataset_info_path = dataset_info_path
         self.init_mode = init_mode
         self.dataset_rand_seed = dataset_rand_seed
 
@@ -43,22 +43,14 @@ class DatasetFactory(object):
         self.train_samples, self.train_labels, self.classes = generate_dataset_info(self.data, 
                                                                                     self.train_dataset)
 
-        from utils import get_dataset_info_path, get_dataset_dir
+        from utils import get_dataset_info_path
+
         # Load the dataset split information, or generate a new split and save it
-        dataset_info_dir = os.path.join(self.save_path,
-                                        self.data,
-                                        self.init_mode)
-        if not os.path.exists(dataset_info_dir):
-            input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
-            os.makedirs(dataset_info_dir)
-        
-        self.dataset_info_path = os.path.join(dataset_info_dir, f"seed_{self.dataset_rand_seed}.pt")
-        
         if os.path.exists(self.dataset_info_path):
             print(f"Dataset file already generated at {self.dataset_info_path}.")
             self.dataset_info_dict = torch.load(self.dataset_info_path)
         else:
-            input(f"Dataset file does not exist. Will be created at {self.dataset_info_path} (press to continue) >> ")
+            print(f"Dataset file does not exist. Will be created at {self.dataset_info_path} (press to continue) >> ")
             # Split the training set using the config
             self.dataset_info_dict = self._split_train_set(self.data,
                                                            self.init_mode,

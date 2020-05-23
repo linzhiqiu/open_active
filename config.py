@@ -9,6 +9,9 @@ def str2bool(v):
 def str2lower(s):
     return s.lower()
 
+def str2NoneInt(s):
+    return None if s == "None" else int(s)
+
 def add_argument_group(name):
     arg = parser.add_argument_group(name)
     arg_lists.append(arg)
@@ -28,7 +31,7 @@ dataset_args.add_argument('--save_path',
                           default='/share/coecis/open_active/datasets',
                           help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
 dataset_args.add_argument('--dataset_rand_seed',
-                          type=int,
+                          type=str2NoneInt,
                           default=None,
                           help='None then use first nth classes nth samples. Otherwise use the rand seed to select random classes and random samples.')
 
@@ -209,7 +212,7 @@ misc_arg.add_argument('--device', type=str, default='cuda',
                       help='Which device to use.')
 misc_arg.add_argument('--debug', action="store_true",
                       help="Whether to use the debug mode")
-misc_arg.add_argument('--verbose', action='store_true', default=False, 
+misc_arg.add_argument('--verbose', type=str2bool, default=True, 
                       help='chatty')
 misc_arg.add_argument('--use_random_seed', action='store_true', default=False,
                       help='If true, use a random random seed. Otherwise, use 30 as the seed.')

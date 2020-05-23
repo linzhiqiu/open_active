@@ -16,7 +16,7 @@ import logging_helper
 import json
 import random
 
-from utils import prepare_save_dir
+from utils import prepare_save_dir_from_config
 
 def main():
     config = get_config()
@@ -30,11 +30,11 @@ def main():
         torch.backends.cudnn.benchmark = False
     
     # It contains all directory/save_paths that will be used
-    ckpt_dir_dict = prepare_save_dir(config)
-
+    paths_dict = prepare_save_dir_from_config(config)
+    
     dataset_factory = DatasetFactory(config.data,
-                                     config.download_path, # Where to download the images
-                                     config.save_path, # Where to save the dataset information
+                                     paths_dict['data_download_path'], # Where to download the images
+                                     paths_dict['dataset_info_path'], # Where to save the dataset information
                                      config.init_mode,
                                      dataset_rand_seed=config.dataset_rand_seed)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
@@ -54,17 +54,14 @@ def main():
                                  train_labels,
                                  classes,
                                  open_classes)
-    
+    if not os.path.exists(paths_dict['trainset_info_path']):
+        torch.save(trainset_info, paths_dict['trainset_info_path'])
 
     # The training details including arch, lr, batch size..
     trainer_config = get_trainer_config(config.data,
                                         config.training_method,
                                         config.train_mode)
 
-    trainer_save_dir = os.path.join(config.trainer_save_dir, config.data, config.init_mode, "seed_"+str(config.dataset_rand_seed))
-    if not os.path.exists(trainer_save_dir):
-        print("Making a new directory to save checkpoints after train/query/finetune step.")
-        os.makedirs(trainer_save_dir)
     # Trainer is the main class for training and querying
     # It contains train() query() finetune() functions
     trainer = Trainer(
@@ -75,15 +72,16 @@ def main():
         config.query_method,
         config.budget,
         config.open_set_method,
-        save_dir=trainer_save_dir,
+        paths_dict=paths_dict,
     )
 
-    trainer.train(discovered_samples, discovered_classes, verbose=True)
+    trainer.train(discovered_samples, discovered_classes, verbose=config.verbose)
 
-    discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=True)
+    discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=config.verbose)
     
-    trainer.finetune(discovered_samples, discovered_classes, verbose=True)
+    trainer.finetune(discovered_samples, discovered_classes, verbose=config.verbose)
     
+    exit(0)
     import pdb; pdb.set_trace()
     # for round_i in range(0, config.max_rounds):
     #     print(f"Round [{round_i}]")

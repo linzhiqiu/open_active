@@ -652,67 +652,181 @@ def plot_closed_set_accuracy(parsed_results, classes=[], output_folder=None):
 class AnalysisMachine(object):
     """Store all the configs we want to compare
     """
-    def __init__(self, analysis_save_dir, analysis_mode, budget_mode, data, trainer_save_dir, dataset_rand_seed, init_mode_list, training_method_list, query_method_list, open_set_method_list):
+    def __init__(self, analysis_save_dir, analysis_mode, budget_mode, data_download_path, dataset_save_path, trainer_save_dir, data, dataset_rand_seed, training_method_list, train_mode, query_method_list, open_set_method_list):
         super().__init__()
         self.analysis_save_dir = analysis_save_dir
         self.analysis_mode = analysis_mode
         self.budget_mode = budget_mode
 
+        self.save_dir = self.get_save_dir()
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        else:
+            input(f"Already exists: {self.save_dir} . Overwrite? >>")
+
+        self.script_dir = self.get_script_dir()
+
         self.data = data
-        self.trainer_save_dir = trainer_save_dir
         self.dataset_rand_seed = dataset_rand_seed
+
+        self.trainer_save_dir = trainer_save_dir
+        self.dataset_save_path = dataset_save_path
+        self.data_download_path = data_download_path
         
-        self.init_mode_list = init_mode_list
         self.training_method_list = training_method_list
+        self.train_mode = train_mode
         self.query_method_list = query_method_list
         self.open_set_method_list = open_set_method_list
 
-    def _get_budget_ratios(self, budget_mode):
-        budget_ratio_str_list = self.budget_mode.split
+    def get_save_dir(self):
+        return os.path.join(self.analysis_save_dir,
+                            self.analysis_mode,
+                            self.budget_mode)
+    
+    def get_script_dir(self):
+        return os.path.join(self.get_save_dir(),
+                            )
 
-    def get_budget_candidates(self, mode='same_sample'):
-        assert mode in ['same_sample', 'same_budget']
-        if self.data == 'CIFAR100':
-            total_sample_per_class = 500
+    def check_ckpts_exist(self):
+        budget_list_regular, budget_list_fewer = self._get_budget_candidates()
+        
+        print("For regular setup, the budgets to query are: " + str(budget_list_regular))
+        print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
+        
+        print(f"Saving all unfinished experiments to {self.script_dir}")
+        undone_exp = []
+        script_file = os.path.join(self.script_dir, "scripts.sh")
+        script_err = os.path.join(self.script_dir, "scripts.err")
+        script_out = os.path.join(self.script_dir, "scripts.out")
+        for init_mode, b_list in [
+                                  ('regular', budget_list_regular),
+                                  ('fewer_class', budget_list_fewer),
+                                  ('fewer_sample',budget_list_fewer)]:
+            print(f"For {init_mode} setting: The experiments to run are:")
+            undone_exp_mode = []
+            for b in b_list:
+                undone_exp_b = []
+                b_dir = os.path.join(self.script_dir, init_mode, f"budget_{b}")
+                if not os.path.exists(b_dir): os.makedirs(b_dir)
+                for training_method in self.training_method_list:
+                    for query_method in self.query_method_list:
+                        for open_set_method in self.open_set_method_list:
+                            paths_dict = prepare_save_dir(self.dataset_save_path,
+                                                          self.data_download_path,
+                                                          self.trainer_save_dir,
+                                                          self.data,
+                                                          init_mode,
+                                                          self.dataset_rand_seed,
+                                                          training_method,
+                                                          self.train_mode,
+                                                          query_method,
+                                                          b,
+                                                          open_set_method,
+                                                          makedir=False)
+                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
+                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
+                                if not os.path.exists(paths_dict[k]):
+                                    python_script = self._get_exp_name(init_mode,
+                                                                         training_method,
+                                                                         query_method,
+                                                                         b,
+                                                                         open_set_method)
+                                    idx = len(undone_exp_b)
+                                    b_err_i = os.path.join(b_dir, f"{idx}.err")
+                                    b_out_i = os.path.join(b_dir, f"{idx}.out")
+                                    script = python_script + f" >> >(tee -a {b_out_i} >> {script_out}) 2>> >(tee -a {b_err_i} >> {script_err}) \n"
+                                    undone_exp_b.append(script)
+                                    break
+                if undone_exp_b.__len__() > 0:
+                    print(f"Budget {b}: {len(undone_exp_b)} experiments to run.")
+                    undone_exp_mode = undone_exp_mode + undone_exp_b   
+            if undone_exp_mode.__len__() > 0:
+                print(f"Mode {init_mode}: {len(undone_exp_mode)} to run.")
+                undone_exp = undone_exp + undone_exp_mode
+        if undone_exp.__len__() > 0:
+            if os.path.exists(script_file):
+                input(f"{script_file} already exists. Overwrite >> ")
+            if not os.path.exists(b_dir):
+                os.makedirs(b_dir)
+                print(f"All error will be saved at {script_err}. Details will be saved at {script_dir}")
+            with open(script_file, "w+") as file:
+                for i, line in enumerate(undone_exp):
+                    file.write(line)
+        print(f"Budget analysis {self.analysis_mode}: {len(undone_exp)} experiments to run at {script_file}.")
+
+    def _get_exp_name(self, init_mode, training_method, query_method, b, open_set_method):
+        script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {self.dataset_rand_seed}"
+                        f" --init_mode {init_mode} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
+                        f" --query_method {query_method} --budget {b} --open_set_method {open_set_method}"
+                        f" --verbose False")
+        return script_prefix
+
+    def _get_budget_candidates(self):
+        """Returns:
+            budget_list_regular : List of budget for regular setting
+            budget_list_fewer : List of budget for fewer class/sample setting
+        """
+        assert self.analysis_mode in ['same_sample', 'same_budget']
+        import torch
+        from utils import get_trainset_info_path
+        trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
+        total_query_sample_size = len(trainset_info.query_samples)
         
         if self.data in ['CIFAR100', 'CUB200']:
-            regular_init_sample_size = DATASET_CONFIG_DICT['regular']['num_init_classes'] * DATASET_CONFIG_DICT['regular']['sample_per_class']
-            fewer_init_sample_size = DATASET_CONFIG_DICT['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT['fewer_class']['sample_per_class']
-            assert fewer_init_sample_size == DATASET_CONFIG_DICT['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT['fewer_sample']['sample_per_class']
-
+            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['regular']['sample_per_class']
+            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_class']['sample_per_class']
+            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_sample']['sample_per_class']
+            
+            regular_unlabeled_pool_size = total_query_sample_size - regular_init_sample_size
+            fewer_unlabeled_pool_size = total_query_sample_size - fewer_init_sample_size
+            sample_diff = regular_init_sample_size - fewer_init_sample_size
+            budget_list = list(map(lambda x : float(x) * 0.01 * regular_unlabeled_pool_size,self.budget_mode.split("_")))
+            for b in budget_list:
+                if not b.is_integer():
+                    print(f"{b} is not an integer.")
+                    exit(0)
+            budget_list = list(map(int, budget_list))
+        else:
+            raise NotImplementedError()
+        
+        if self.analysis_mode == 'same_budget':
+            return budget_list, budget_list
+        elif self.analysis_mode == 'same_sample':
+            return budget_list, list(
+                                    map(
+                                         lambda x: int(min(fewer_unlabeled_pool_size, x + sample_diff)),
+                                         budget_list
+                                    )
+                                )
             
 
 if __name__ == "__main__":
     from config import get_config
     from global_setting import DATASET_CONFIG_DICT
+    from utils import prepare_save_dir
     config = get_config()
 
     # Below are the settings to want to compare
-    INIT_MODES = ['regular', 'fewer_class', 'fewer_sample']
+    # INIT_MODES = ['regular', 'fewer_class', 'fewer_sample']
     TRAINING_METHODS = ['softmax_network', 'cosine_network']
     QUERY_METHODS = ['random', 'entropy', 'softmax']
-    OPEN_SET_METHODS = [] # TODO: Add candidates
-
+    OPEN_SET_METHODS = ['softmax'] # TODO: Add candidates
     analysis_machine = AnalysisMachine(config.analysis_save_dir,
                                        config.analysis_mode,
                                        config.budget_mode,
-                                       config.data,
+                                       config.download_path,
+                                       config.save_path,
                                        config.trainer_save_dir,
+                                       config.data,
                                        config.dataset_rand_seed,
-                                       INIT_MODES,
                                        TRAINING_METHODS,
+                                       config.train_mode,
                                        QUERY_METHODS,
                                        OPEN_SET_METHODS)
     
-    analysis_machine.check_ckpts()
-
-    
-    # Get a list of budgets to run
-    budget_candidates = analysis_machine.get_budget_condidates()
-                                                                           
-    budget_candidates_same_budget = get_budget_condidates(config.data,
-                                                          dataset_init_modes,
-                                                          criterion='same_sample')
+    # Check all checkpoint files exist
+    analysis_machine.check_ckpts_exist()
+    exit(0)
     # Output a folder for each json file
     # Require folder structure:
         # DATASET INFO

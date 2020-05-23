@@ -36,27 +36,27 @@ CIFAR100_DEFAULT_CONFIG = {
 CUB200_DEFAULT_CONFIG = {
     'backbone' : 'ResNet18HighRes',
     'feature_dim' : 512,
-    # 'batch' : 128,
-    # 'workers' : 4,
-    # 'device' : 'cuda',
-    # 'train' : TrainConfig({
-    #     'optim' : 'sgd',
-    #     'weight_decay' : 0.0005,
-    #     'momentum' : 0.9,
-    #     'lr' : 0.1,
-    #     'epochs' : 200,
-    #     'decay_epochs': 60,
-    #     'decay_by' : 0.1,
-    # }),
-    # 'finetune' : TrainConfig({
-    #     'optim' : 'sgd',
-    #     'weight_decay' : 0.0005,
-    #     'momentum' : 0.9,
-    #     'lr' : 0.01,
-    #     'epochs' : 140,
-    #     'decay_epochs': 60,
-    #     'decay_by' : 0.1,
-    # }),
+    'batch' : 128,
+    'workers' : 4,
+    'device' : 'cuda',
+    'train' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        'epochs' : 400,
+        'decay_epochs': 120,
+        'decay_by' : 0.1,
+    }),
+    'finetune' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.01,
+        'epochs' : 280,
+        'decay_epochs': 120,
+        'decay_by' : 0.1,
+    }),
 }
 
 TRAIN_CONFIG_DICT = {

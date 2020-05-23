@@ -100,6 +100,16 @@ class TrainerMachine(object):
         self.backbone.eval()
         return self.classifier(self.backbone(inputs))
 
+    def get_features(self, inputs):
+        """Returns the features for each inputs
+            Returns:
+                class_scores (B x feature_dim)
+            Args:
+                inputs (B x 3 x ? x ?)
+        """
+        self.backbone.eval()
+        return self.backbone(inputs)
+
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
         """ The subclasses only need to overwrite this function
         """

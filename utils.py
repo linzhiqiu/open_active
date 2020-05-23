@@ -19,7 +19,7 @@ import global_setting # include some constant value
 
 class SetPrintMode:
     def __init__(self, hidden=False):
-        hidden = hidden
+        self.hidden = hidden
 
     def __enter__(self):
         if self.hidden:
@@ -206,10 +206,10 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
         return list(map(lambda x: unmapping_dict[x], lst))
     return unmapp_func
 
-def get_dataset_dir(save_path, data):
+def get_dataset_dir(save_path, data, makedir=True):
     dataset_dir = os.path.join(save_path, data)
-    if not os.path.exists(dataset_dir):
-        input(f"{dataset_dir} does not exists. Press anything to create it >> ")
+    if not os.path.exists(dataset_dir) and makedir:
+        print(f"{dataset_dir} does not exists. Press anything to create it >> ")
         os.makedirs(dataset_dir)
     return dataset_dir
 
@@ -219,14 +219,87 @@ def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
                             init_mode,
                         )
     if not os.path.exists(dataset_info_dir):
-        input(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
+        print(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
         os.makedirs(dataset_info_dir)
     dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
     return dataset_info_path
 
-def prepare_save_dir(config):
+def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, training_method, train_mode, makedir=True):
+    save_dir = os.path.join(trainer_save_dir,
+                            data,
+                            init_mode,
+                            "seed_"+str(dataset_rand_seed),
+                            "_".join([training_method, train_mode]))
+    if not os.path.exists(save_dir) and makedir:
+        print("Making a new directory to save checkpoints after train/query/finetune step.")
+        print(f"Location {save_dir}")
+        os.makedirs(save_dir)
+    return save_dir
+
+def get_trainset_info_path(save_path, data):
+    return os.path.join(get_dataset_dir(save_path, data), "trainset_info.pt")
+
+def prepare_save_dir_from_config(config, makedir=True):
+    return prepare_save_dir(config.save_path,
+                            config.download_path,
+                            config.trainer_save_dir,
+                            config.data,
+                            config.init_mode,
+                            config.dataset_rand_seed,
+                            config.training_method,
+                            config.train_mode,
+                            config.query_method,
+                            config.budget,
+                            config.open_set_method,
+                            makedir=makedir)
+
+def prepare_save_dir(save_path,
+                     download_path,
+                     trainer_save_dir,
+                     data,
+                     init_mode,
+                     dataset_rand_seed,
+                     training_method,
+                     train_mode,
+                     query_method,
+                     budget,
+                     open_set_method,
+                     makedir=True):
     """Return a dictionary of save_paths
     """
     paths_dict = {}
-    save_path
-    download_path
+    paths_dict['data_download_path'] = download_path
+    paths_dict['dataset_dir'] = get_dataset_dir(save_path, data, makedir=makedir)
+    paths_dict['dataset_info_path'] = get_dataset_info_path(save_path,
+                                                            data,
+                                                            init_mode,
+                                                            dataset_rand_seed)
+    paths_dict['trainset_info_path'] = get_trainset_info_path(save_path, data)
+    
+    # Where the training/testing results will be saved
+    paths_dict['trainer_save_dir'] = get_trainer_save_dir(trainer_save_dir,
+                                                          data,
+                                                          init_mode,
+                                                          dataset_rand_seed,
+                                                          training_method,
+                                                          train_mode,
+                                                          makedir=makedir)
+    paths_dict['query_dir'] = os.path.join(paths_dict['trainer_save_dir'],
+                                           "_".join(["active", query_method]))
+    paths_dict['finetuned_dir'] = os.path.join(paths_dict['query_dir'],
+                                               "_".join(["budget", str(budget)]))
+    paths_dict['test_dir']      = os.path.join(paths_dict['finetuned_dir'],
+                                               "_".join(["openset", open_set_method]))
+
+    for folder in ["trainer_save_dir", "finetuned_dir", "test_dir"]:
+        folder_path = paths_dict[folder]
+        if not os.path.exists(folder_path) and makedir:
+            print(f"Make a new folder at: {folder_path}")
+            os.makedirs(folder_path)
+    
+    paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['trainer_save_dir'],'ckpt.pt')
+    paths_dict['query_result_path']   = os.path.join(paths_dict['finetuned_dir']   ,'query_result.pt')
+    paths_dict['finetuned_ckpt_path'] = os.path.join(paths_dict['finetuned_dir']   ,'ckpt.pt')
+    paths_dict['test_result_path']    = os.path.join(paths_dict['test_dir']        ,'test_result.pt')
+
+    return paths_dict

@@ -17,7 +17,7 @@ class TrainsetInfo(object):
 
 
 class Trainer(object):
-    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_method, save_dir=None):
+    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_method, paths_dict):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
@@ -27,7 +27,7 @@ class Trainer(object):
                 query_method (str) : The method for querying from the unlabeled pool
                 budget (int/float) : The querying budget
                 open_set_method (str) : The method for open_set recognition
-                save_dir (str) : The directory to save/load the checkpoints.
+                paths_dict (dict) : The directionary that has directory to save/load the checkpoints.
         """
         super(Trainer, self).__init__()
         self.training_method = training_method
@@ -37,23 +37,11 @@ class Trainer(object):
         self.query_method = query_method
         self.budget = budget
         self.open_set_method = open_set_method
-
-        trainer_save_dir = os.path.join(save_dir,
-                                        "_".join([training_method,train_mode]))
-        
-        query_dir     = os.path.join(trainer_save_dir, "active_"+self.query_method)
-        self.finetuned_dir = os.path.join(query_dir, "budget_"+str(budget))
-        self.test_dir      = os.path.join(self.finetuned_dir, "openset_"+self.open_set_method)
-
-        for folder in [trainer_save_dir, self.finetuned_dir, self.test_dir]:
-            if not os.path.exists(folder):
-                print(f"Make a new folder at: {folder}")
-                os.makedirs(folder)
        
-        self.trained_ckpt_path   = os.path.join(trainer_save_dir,'ckpt.pt')
-        self.query_result_path   = os.path.join(self.finetuned_dir,'query_result.pt')
-        self.finetuned_ckpt_path = os.path.join(self.finetuned_dir,'ckpt.pt')
-        self.test_result_path    = os.path.join(self.test_dir,'test_result.pt')
+        self.trained_ckpt_path   = paths_dict['trained_ckpt_path']
+        self.query_result_path   = paths_dict['query_result_path']
+        self.finetuned_ckpt_path = paths_dict['finetuned_ckpt_path']
+        self.test_result_path    = paths_dict['test_result_path']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    trainset_info,

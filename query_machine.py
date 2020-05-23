@@ -61,7 +61,8 @@ class QueryMachine(object):
                 new_discovered_samples, new_discovered_classes = self._query_helper(trainer_machine,
                                                                                     budget,
                                                                                     discovered_samples,
-                                                                                    discovered_classes)
+                                                                                    discovered_classes,
+                                                                                    verbose=verbose)
 
                 classes_diff = new_discovered_classes.difference(discovered_classes)
                 print(f"Recognized class from {len(discovered_classes)} to {len(new_discovered_classes)}")
@@ -84,6 +85,17 @@ class QueryMachine(object):
                 inputs (A batch of images)
         """
         raise NotImplementedError()
+    
+    def _get_loader(self, samples, use_tqdm=True):
+        dataloader = get_subset_loader(self.trainset_info.train_dataset,
+                                        samples,
+                                        None, # target transform is None,
+                                        batch_size=self.batch,
+                                        shuffle=False, # Very important!
+                                        workers=self.workers)
+        if use_tqdm: pbar = tqdm(dataloader, ncols=80)
+        else: pbar = dataloader
+        return pbar
 
     def _query_helper(self, trainer_machine, budget, discovered_samples, discovered_classes, verbose=True):
         """Return new labeled samples from unlabeled_pool.
@@ -104,29 +116,12 @@ class QueryMachine(object):
             print("Remaining data is fewer than the budget constraint. Label all.")
             return list(self.trainset_info.query_samples), self.trainset_info.query_classes
 
-        dataloader = get_subset_loader(self.trainset_info.train_dataset,
-                                        unlabeled_pool,
-                                        None, # target transform is None,
-                                        batch_size=self.batch,
-                                        shuffle=False, # Very important!
-                                        workers=self.workers)
-
-        if verbose:
-            pbar = tqdm(dataloader, ncols=80)
-        else:
-            pbar = dataloader
+        # Keep a score for each sample. Higher scores means more preferable to label.
+        favorable_scores = self._get_favorable_scores(unlabeled_pool,
+                                                      trainer_machine,
+                                                      discovered_samples,
+                                                      verbose=verbose)
         
-        # Keep a score for each sample. Higher scores means more likely to labelself.
-        favorable_scores = torch.Tensor().to(self.device)
-        
-        with torch.no_grad():
-            for batch, data in enumerate(pbar):
-                inputs, _ = data
-                
-                scores = self._get_favorable_scores(trainer_machine,
-                                                    inputs.to(self.device))
-                favorable_scores = torch.cat((favorable_scores, scores))
-
         sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
         rankings = list(rankings[:budget])
 
@@ -143,28 +138,52 @@ class RandomQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(RandomQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_scores(self, trainer_machine, inputs):
-        return torch.rand(inputs.shape[0]).to(inputs.device)
+    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose):
+        dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
+
+        favorable_scores = torch.Tensor().to(self.device)
+        
+        with torch.no_grad():
+            for batch, data in enumerate(dataloader):
+                inputs, _ = data
+                
+                scores = torch.rand(inputs.shape[0]).to(self.device)
+                favorable_scores = torch.cat((favorable_scores, scores))
+        return favorable_scores
 
 class EntropyQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(EntropyQuery, self).__init__(*args, **kwargs)
-
-    def _get_favorable_scores(self, trainer_machine, inputs):
-        class_scores = trainer_machine.get_class_scores(inputs)
-        prob_scores = F.softmax(class_scores, dim=1)
-        entropy = -(prob_scores*prob_scores.log()).sum(1)
-        return entropy
+    
+    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+        dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
+        favorable_scores = torch.Tensor().to(self.device)
+        
+        with torch.no_grad():
+            for batch, data in enumerate(dataloader):
+                inputs, _ = data
+                class_scores = trainer_machine.get_class_scores(inputs.to(self.device))
+                prob_scores = F.softmax(class_scores, dim=1)
+                entropy = -(prob_scores*prob_scores.log()).sum(1)
+                favorable_scores = torch.cat((favorable_scores, entropy))
+        return favorable_scores
 
 class SoftmaxQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(SoftmaxQuery, self).__init__(*args, **kwargs)
-
-    def _get_favorable_scores(self, trainer_machine, inputs):
-        class_scores = trainer_machine.get_class_scores(inputs)
-        prob_scores = F.softmax(class_scores, dim=1)
-        prob_max, _ = torch.max(prob_scores, dim=1)
-        return -prob_max
+    
+    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+        dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
+        favorable_scores = torch.Tensor().to(self.device)
+        
+        with torch.no_grad():
+            for batch, data in enumerate(dataloader):
+                inputs, _ = data
+                class_scores = trainer_machine.get_class_scores(inputs.to(self.device))
+                prob_scores = F.softmax(class_scores, dim=1)
+                prob_max, _ = torch.max(prob_scores, dim=1)
+                favorable_scores = torch.cat((favorable_scores, -prob_max))
+        return favorable_scores
 
 class ULDRQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
@@ -188,7 +207,239 @@ class CoresetQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(CoresetQuery, self).__init__(*args, **kwargs)
         raise NotImplementedError()
+    
+    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+        unlabeled_features = self._get_features(unlabeled_pool, use_tqdm=verbose)
+        labeled_features = self._get_features(discovered_samples, use_tqdm=verbose)
+        
+        favorable_scores = torch.Tensor().to(self.device)
+        
+        with torch.no_grad():
+            for batch, data in enumerate(pbar):
+                inputs, _ = data
+                # favorable_scores = 
+        return favorable_scores
+    
+    def _get_features(self, samples, trainer_machine, verbose=True):
+        dataloader = self._get_loader(samples, use_tqdm=verbose)
 
+        features = torch.Tensor([]).to(self.device)
+        for batch, data in enumerate(dataloader):
+            inputs, _ = data
+            
+            with torch.no_grad():
+                cur_features = trainer_machine.get_features(inputs.to(self.device))
+
+            features = torch.cat((features, cur_features),dim=0)
+
+        return features
+
+class CoresetMeasure(LabelPicker):
+
+    def select_new_data(self, discovered_samples, discovered_classes):
+        self.model = self.trainer_machine.model
+        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
+
+        unlabeled_pool = self.train_instance.query_samples.difference(discovered_samples)
+        unlabeled_pool = list(unlabeled_pool)
+        undiscovered_classes = self.train_instance.query_classes.difference(discovered_classes)
+        if len(unlabeled_pool) < self.config.budget:
+            print("Remaining data is fewer than the budget constraint. Label all.")
+            return unlabeled_pool, undiscovered_classes
+        elif self.config.budget == 0:
+            print("No label budget")
+            return set(), discovered_classes
+
+        if self.active_random_sampling == 'fixed_10K':
+            if len(unlabeled_pool) > 10000:
+                random.shuffle(unlabeled_pool)
+                unlabeled_pool = unlabeled_pool[:10000]
+        elif self.active_random_sampling == "1_out_of_5":
+            if len(unlabeled_pool)*0.2 > self.config.budget:
+                random.shuffle(unlabeled_pool)
+                unlabeled_pool = unlabeled_pool[:int(len(unlabeled_pool)*.2)]
+
+
+
+        unlabeled_features, unlabeled_dataloader = self.get_features(unlabeled_pool)
+        unlabeled_features = unlabeled_features.cpu()
+        labeled_features, _ = self.get_features(discovered_samples)
+        labeled_features = labeled_features.cpu()
+
+        unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]
+        unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features)
+
+        # Normalize the distances to 0-1 by dividing max
+
+        dist_max = torch.max(unlabel_to_label_dist.max(), unlabel_to_unlabel_dist.max())
+        unlabel_to_label_dist = unlabel_to_label_dist/dist_max
+        unlabel_to_unlabel_dist = unlabel_to_unlabel_dist/dist_max
+
+        
+
+# class CoresetMeasure(LabelPicker):
+#     def __init__(self, *args, **kwargs):
+#         super(CoresetMeasure, self).__init__(*args, **kwargs)
+#         assert isinstance(self.trainer_machine, trainer_machine.Network)
+#         assert self.config.label_picker == 'coreset_measure'
+#         self.coreset_feature = self.config.coreset_feature
+
+
+#         # Make sure Network (parent class) is at last branch
+#         if isinstance(self.trainer_machine, trainer_machine.OSDNNetwork):
+#             pass            
+#         elif isinstance(self.trainer_machine, trainer_machine.ClusterNetwork):
+#             import pdb; pdb.set_trace()  # breakpoint 37c80b49 //
+            
+#         elif isinstance(self.trainer_machine, learning_loss.NetworkLearningLoss):
+#             import pdb; pdb.set_trace()  # breakpoint 7988875e //
+#         elif isinstance(self.trainer_machine, trainer_machine.Network):
+#             print("Using Network's coreset_measure")
+#         else:
+#             raise NotImplementedError()
+
+#     def get_features(self, samples):
+#         self.model.eval()
+#         dataloader = get_subset_loader(self.train_instance.train_dataset,
+#                                        samples,
+#                                        None, # target transform is None,
+#                                        batch_size=self.config.batch,
+#                                        shuffle=False,
+#                                        workers=self.config.workers)
+#         pbar = dataloader
+
+
+#         cur_features = []
+#         if self.coreset_feature == 'before_fc':
+#             def forward_hook_func(self, inputs, outputs):
+#                 cur_features.append(inputs[0])
+#         elif self.coreset_feature == 'after_fc':
+#             def forward_hook_func(self, inputs, outputs):
+#                 cur_features.append(outputs)
+#         hook_handle = self.model.fc.register_forward_hook(forward_hook_func)
+        
+#         features = torch.Tensor([])
+#         for batch, data in enumerate(pbar):
+#             cur_features = []
+#             inputs, _ = data
+            
+#             inputs = inputs.to(self.config.device)
+
+#             with torch.set_grad_enabled(False):
+#                 outputs = self.model(inputs)
+
+#             features = torch.cat((features, cur_features[0].cpu()),dim=0)
+
+#         hook_handle.remove()
+#         return features, dataloader
+
+#     def select_new_data(self, discovered_samples, discovered_classes):
+#         self.model = self.trainer_machine.model
+#         self.unmapping = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
+
+#         unlabeled_pool = self.train_instance.query_samples.difference(discovered_samples)
+#         unlabeled_pool = list(unlabeled_pool)
+#         undiscovered_classes = self.train_instance.query_classes.difference(discovered_classes)
+#         if len(unlabeled_pool) < self.config.budget:
+#             print("Remaining data is fewer than the budget constraint. Label all.")
+#             return unlabeled_pool, undiscovered_classes
+#         elif self.config.budget == 0:
+#             print("No label budget")
+#             return set(), discovered_classes
+
+#         if self.active_random_sampling == 'fixed_10K':
+#             if len(unlabeled_pool) > 10000:
+#                 random.shuffle(unlabeled_pool)
+#                 unlabeled_pool = unlabeled_pool[:10000]
+#         elif self.active_random_sampling == "1_out_of_5":
+#             if len(unlabeled_pool)*0.2 > self.config.budget:
+#                 random.shuffle(unlabeled_pool)
+#                 unlabeled_pool = unlabeled_pool[:int(len(unlabeled_pool)*.2)]
+
+
+
+#         unlabeled_features, unlabeled_dataloader = self.get_features(unlabeled_pool)
+#         unlabeled_features = unlabeled_features.cpu()
+#         labeled_features, _ = self.get_features(discovered_samples)
+#         labeled_features = labeled_features.cpu()
+
+#         unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]
+#         unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features)
+
+#         # Normalize the distances to 0-1 by dividing max
+
+#         dist_max = torch.max(unlabel_to_label_dist.max(), unlabel_to_unlabel_dist.max())
+#         unlabel_to_label_dist = unlabel_to_label_dist/dist_max
+#         unlabel_to_unlabel_dist = unlabel_to_unlabel_dist/dist_max
+
+#         if self.open_active_setup in ['half', 'hr100', 'hr200', 'hr300', 'hr400', 'open']:
+#             open_collector = OpenCollector(self.trainer_machine)
+#             open_scores = open_collector.gather_open_info(
+#                               unlabeled_dataloader,
+#                               device=self.config.device
+#                           )
+#             open_scores = open_scores - open_scores.min()
+#             open_scores = open_scores / open_scores.max()
+#         else:
+#             open_scores = None
+
+#         sorted_dist, rankings = torch.sort(unlabel_to_label_dist, descending=True)
+#         if self.open_active_setup in ['half', 'hr100', 'hr200', 'hr300', 'hr400', 'open']:
+#             score_ranking_pair = [(int(r), float(sorted_dist[i]), float(open_scores[r])) for i, r in enumerate(rankings)]
+#             if self.open_active_setup == 'open':
+#                 score_ranking_pair.sort(key=lambda x: x[2], reverse=True)
+#             elif self.open_active_setup in ['hr100', 'hr200', 'hr300',] and self.trainer_machine.round < int(self.open_active_setup[2:]):
+#                 random.shuffle(score_ranking_pair)
+#             else:
+#                 score_ranking_pair.sort(key=lambda x: x[1]+x[2], reverse=True)
+#         else:
+#             score_ranking_pair = [(int(r), float(sorted_dist[i]), 0) for i, r in enumerate(rankings)]
+        
+#         new_samples = set() # New labeled samples
+#         new_classes = set() # New classes (may include seen classes)
+#         while len(new_samples) < self.config.budget:
+#             real_idx = score_ranking_pair[0][0]
+#             new_sample = unlabeled_pool[real_idx]
+#             new_samples.add(new_sample)
+#             new_classes.add(self.train_instance.train_labels[new_sample])
+
+#             score_ranking_pair = score_ranking_pair[1:]
+#             score_ranking_pair_new = []
+#             for i, (r, s, o) in enumerate(score_ranking_pair):
+#                 min_score = min(s, float(unlabel_to_unlabel_dist[real_idx, r]))
+#                 score_ranking_pair_new.append((r, min_score, o))
+#             if self.open_active_setup in ['half'] or (self.open_active_setup in ['hr100','hr200','hr300', 'hr400'] and self.trainer_machine.round >= int(self.open_active_setup[2:])):
+#                 score_ranking_pair_new.sort(key=lambda x: x[1]+x[2], reverse=True)
+#             elif self.open_active_setup in ['active'] or (self.open_active_setup in ['ar100','ar200','ar300'] and self.trainer_machine.round >= int(self.open_active_setup[2:])):
+#                 score_ranking_pair_new.sort(key=lambda x: x[1], reverse=True)
+#             elif self.open_active_setup in ['open']:
+#                 score_ranking_pair_new.sort(key=lambda x: x[2], reverse=True)
+#             else:
+#                 pass # Keep it random shuffled
+#             score_ranking_pair = score_ranking_pair_new
+#         return new_samples, new_classes
+    
+#     def get_logging_str(self, verbose=False):
+#         logging_strs = []
+#         if verbose:
+#             logging_strs += ["coreset"]
+#             logging_strs += [self.config.coreset_measure,
+#                              self.config.active_random_sampling,
+#                              self.config.coreset_feature]
+#             logging_strs += ['oa', self.config.open_active_setup]
+#         else:
+#             raise NotImplementedError()
+#         return "_".join(logging_strs)
+
+# def distance_matrix(A, B):
+#     # A is m x d pytorch matrix, B is n x d pytorch matrix.
+#     # Result is m x n pytorch matrix
+#     A_2 = (A**2).sum(dim=1)
+#     B_2 = (B**2).sum(dim=1)
+#     A_B_2 = A_2.view(A.shape[0], 1) + B_2
+
+#     dists = A_B_2 + -2. * torch.mm(A, B.t())
+#     return dists
 
 # def highest_loss(outputs):
 #     _, losses = outputs
@@ -505,15 +756,15 @@ class CoresetQuery(QueryMachine):
 #             raise NotImplementedError()
 #         return "_".join(logging_strs)
 
-# def distance_matrix(A, B):
-#     # A is m x d pytorch matrix, B is n x d pytorch matrix.
-#     # Result is m x n pytorch matrix
-#     A_2 = (A**2).sum(dim=1)
-#     B_2 = (B**2).sum(dim=1)
-#     A_B_2 = A_2.view(A.shape[0], 1) + B_2
+def distance_matrix(A, B):
+    # A is m x d pytorch matrix, B is n x d pytorch matrix.
+    # Result is m x n pytorch matrix
+    A_2 = (A**2).sum(dim=1)
+    B_2 = (B**2).sum(dim=1)
+    A_B_2 = A_2.view(A.shape[0], 1) + B_2
 
-#     dists = A_B_2 + -2. * torch.mm(A, B.t())
-#     return dists
+    dists = A_B_2 + -2. * torch.mm(A, B.t())
+    return dists
 
 # if __name__ == '__main__':
 #     import pdb; pdb.set_trace()  # breakpoint a576792d //
