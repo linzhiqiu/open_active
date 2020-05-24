@@ -1,4 +1,4 @@
-import trainer_machine, query_machine
+import trainer_machine, query_machine, eval_machine
 import os
 
 class TrainsetInfo(object):
@@ -76,13 +76,13 @@ class Trainer(object):
                                       ckpt_path=self.finetuned_ckpt_path,
                                       verbose=verbose)
 
-    def eval_closed_set(self, discovered_classes, test_dataset, verbose=verbose):
+    def eval_closed_set(self, discovered_classes, test_dataset, verbose=False):
         return self.trainer_machine.eval_closed_set(discovered_classes,
                                                     test_dataset,
                                                     result_path=self.test_result_path,
                                                     verbose=verbose)
 
-    def eval_open_set(self, discovered_classes, test_dataset, verbose=verbose):
+    def eval_open_set(self, discovered_classes, test_dataset, verbose=False):
         raise NotImplementedError()
         self.eval_machine.eval_open_set(discovered_classes,
                                         test_dataset,

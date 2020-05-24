@@ -258,8 +258,8 @@ class CoresetQuery(QueryMachine):
         unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
-        unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]
-        unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features)
+        unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0].cpu()
+        unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features).cpu()
         
         
         sorted_min_dist_to_labeled, rankings = torch.sort(unlabel_to_label_dist, descending=True)

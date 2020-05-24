@@ -128,7 +128,7 @@ class TrainerMachine(object):
         """
         raise NotImplementedError()
     
-    def _eval_closed_set_helper(discovered_classes, test_dataset, verbose=verbose):
+    def _eval_closed_set_helper(discovered_classes, test_dataset, verbose=True):
         """ To be overwrite by subclass
         """
         raise NotImplementedError()

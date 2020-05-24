@@ -688,7 +688,7 @@ class AnalysisMachine(object):
                             )
 
     def check_ckpts_exist(self):
-        budget_list_regular, budget_list_fewer = self._get_budget_candidates()
+        budget_list_regular, budget_list_fewer = self._get_budget_candidates(analysis_mode=self.analysis_mode)
         
         print("For regular setup, the budgets to query are: " + str(budget_list_regular))
         print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
@@ -699,7 +699,7 @@ class AnalysisMachine(object):
         script_err = os.path.join(self.script_dir, "scripts.err")
         script_out = os.path.join(self.script_dir, "scripts.out")
         for init_mode, b_list in [
-                                  ('regular', budget_list_regular),
+                                #   ('regular', budget_list_regular),
                                   ('fewer_class', budget_list_fewer),
                                   ('fewer_sample',budget_list_fewer)]:
             print(f"For {init_mode} setting: The experiments to run are:")
@@ -723,10 +723,20 @@ class AnalysisMachine(object):
                                                           b,
                                                           open_set_method,
                                                           makedir=False)
-                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
+                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
                                 # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
-                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
+                            
+                            # For not test ready ckpts
+                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
                                 if not os.path.exists(paths_dict[k]):
+                            
+                            # For only test ready ckpts
+                            # test_ready = True
+                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
+                            #     if not os.path.exists(paths_dict[k]):
+                            #         test_ready = False
+                            # if test_ready:
+                            #     if True:
                                     python_script = self._get_exp_name(init_mode,
                                                                          training_method,
                                                                          query_method,
@@ -756,6 +766,54 @@ class AnalysisMachine(object):
                     file.write(line)
         print(f"Budget analysis {self.analysis_mode}: {len(undone_exp)} experiments to run at {script_file}.")
 
+    def draw_closed_set(self):
+        budget_list_regular, budget_list_fewer_1 = self._get_budget_candidates(analysis_mode='same_budget')
+        _, budget_list_fewer_2 = self._get_budget_candidates(analysis_mode='same_sample')
+        budget_list_fewer = budget_list_fewer_1 + budget_list_fewer_2
+        budget_list_fewer.sort()
+        print("For regular setup, the budgets to query are: " + str(budget_list_regular))
+        print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
+        
+        print(f"Saving all unfinished experiments to {self.script_dir}")
+        finished_exp = {'regular' : {},
+                        'fewer_class' : {},
+                        'fewer_sample' : {}}
+        finished = 0
+        unfinished = 0
+        for init_mode, b_list in [
+                                  ('regular', budget_list_regular),
+                                  ('fewer_class', budget_list_fewer),
+                                  ('fewer_sample',budget_list_fewer)]:
+            print(f"For {init_mode} setting: The experiments completed are:")
+            for b in b_list:
+                if not b in finished_exp[init_mode]:
+                    finished_exp[init_mode][b] = {}
+                for training_method in self.training_method_list:
+                    if not training_method in finished_exp[init_mode][b]:
+                        finished_exp[init_mode][b][training_method] = {}
+                    for query_method in self.query_method_list:
+                        paths_dict = prepare_save_dir(self.dataset_save_path,
+                                                        self.data_download_path,
+                                                        self.trainer_save_dir,
+                                                        self.data,
+                                                        init_mode,
+                                                        self.dataset_rand_seed,
+                                                        training_method,
+                                                        self.train_mode,
+                                                        query_method,
+                                                        b,
+                                                        'softmax',
+                                                        makedir=False)
+                        if query_method in finished_exp[init_mode][b][training_method]:
+                            import pdb; pdb.set_trace()
+                        if os.path.exists(paths_dict['test_result_path']):
+                            test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
+                            finished_exp[init_mode][b][training_method][query_method] = test_result
+                            finished += 1
+                        else:
+                            unfinished += 1
+        print(f"{finished}/{finished+unfinished} experiments are finished.")
+
     def _get_exp_name(self, init_mode, training_method, query_method, b, open_set_method):
         script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {self.dataset_rand_seed}"
                         f" --init_mode {init_mode} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
@@ -763,12 +821,12 @@ class AnalysisMachine(object):
                         f" --verbose False")
         return script_prefix
 
-    def _get_budget_candidates(self):
+    def _get_budget_candidates(self, analysis_mode=None):
         """Returns:
             budget_list_regular : List of budget for regular setting
             budget_list_fewer : List of budget for fewer class/sample setting
         """
-        assert self.analysis_mode in ['same_sample', 'same_budget']
+        assert analysis_mode in ['same_sample', 'same_budget']
         import torch
         from utils import get_trainset_info_path
         trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
@@ -791,9 +849,9 @@ class AnalysisMachine(object):
         else:
             raise NotImplementedError()
         
-        if self.analysis_mode == 'same_budget':
+        if analysis_mode == 'same_budget':
             return budget_list, budget_list
-        elif self.analysis_mode == 'same_sample':
+        elif analysis_mode == 'same_sample':
             return budget_list, list(
                                     map(
                                          lambda x: int(min(fewer_unlabeled_pool_size, x + sample_diff)),
