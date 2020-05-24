@@ -699,7 +699,7 @@ class AnalysisMachine(object):
         script_err = os.path.join(self.script_dir, "scripts.err")
         script_out = os.path.join(self.script_dir, "scripts.out")
         for init_mode, b_list in [
-                                  ('regular', budget_list_regular),
+                                #   ('regular', budget_list_regular),
                                   ('fewer_class', budget_list_fewer),
                                   ('fewer_sample',budget_list_fewer)]:
             print(f"For {init_mode} setting: The experiments to run are:")
@@ -809,7 +809,8 @@ if __name__ == "__main__":
     # Below are the settings to want to compare
     # INIT_MODES = ['regular', 'fewer_class', 'fewer_sample']
     TRAINING_METHODS = ['softmax_network', 'cosine_network']
-    QUERY_METHODS = ['random', 'entropy', 'softmax']
+    # QUERY_METHODS = ['random', 'entropy', 'softmax']
+    QUERY_METHODS = ['uldr', 'coreset']
     OPEN_SET_METHODS = ['softmax'] # TODO: Add candidates
     analysis_machine = AnalysisMachine(config.analysis_save_dir,
                                        config.analysis_mode,

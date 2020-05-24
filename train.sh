@@ -1,3 +1,14 @@
+# CUB200
+python train.py CUB200 --training_method softmax_network --init_mode regular --query_method entropy --budget 3000;
+
+#Coreset exp
+        # No random seed
+            python train.py CIFAR100 --training_method softmax_network --init_mode regular --query_method coreset --budget 3000;
+#ULDR exp
+        # No random seed
+            python train.py CIFAR100 --training_method softmax_network --init_mode regular --query_method uldr --budget 3000;
+
+# CIFAR100
 # Softmax Trainer
     # Regular setting - budget 10% = 3000 samples
         # Active learning : Entropy

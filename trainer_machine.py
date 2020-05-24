@@ -103,7 +103,7 @@ class TrainerMachine(object):
     def get_features(self, inputs):
         """Returns the features for each inputs
             Returns:
-                class_scores (B x feature_dim)
+                features (B x feature_dim)
             Args:
                 inputs (B x 3 x ? x ?)
         """

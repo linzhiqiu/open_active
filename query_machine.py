@@ -78,7 +78,7 @@ class QueryMachine(object):
             }, query_result_path)    
             return new_discovered_samples, new_discovered_classes
 
-    def _get_favorable_scores(self, trainer_machine, inputs):
+    def _get_favorable_rankings(self, trainer_machine, inputs):
         """Returns a 1-D tensor specifying the query favorability score for inputs
             Args:
                 trainer_machine (TrainerMachine)
@@ -96,6 +96,20 @@ class QueryMachine(object):
         if use_tqdm: pbar = tqdm(dataloader, ncols=80)
         else: pbar = dataloader
         return pbar
+    
+    def _get_features(self, samples, trainer_machine, verbose=True):
+        dataloader = self._get_loader(samples, use_tqdm=verbose)
+
+        features = torch.Tensor([]).to(self.device)
+        for batch, data in enumerate(dataloader):
+            inputs, _ = data
+            
+            with torch.no_grad():
+                cur_features = trainer_machine.get_features(inputs.to(self.device))
+
+            features = torch.cat((features, cur_features),dim=0)
+
+        return features
 
     def _query_helper(self, trainer_machine, budget, discovered_samples, discovered_classes, verbose=True):
         """Return new labeled samples from unlabeled_pool.
@@ -116,19 +130,18 @@ class QueryMachine(object):
             print("Remaining data is fewer than the budget constraint. Label all.")
             return list(self.trainset_info.query_samples), self.trainset_info.query_classes
 
-        # Keep a score for each sample. Higher scores means more preferable to label.
-        favorable_scores = self._get_favorable_scores(unlabeled_pool,
-                                                      trainer_machine,
-                                                      discovered_samples,
-                                                      verbose=verbose)
+        # Keep a rank for each sample. Higher ranks means more preferable to label.
+        rankings = self._get_favorable_rankings(unlabeled_pool,
+                                                trainer_machine,
+                                                discovered_samples,
+                                                verbose=verbose)
         
-        sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
         rankings = list(rankings[:budget])
 
         new_discovered_samples = set(discovered_samples.copy())
         new_discovered_classes = discovered_classes.copy()
         for idx in rankings:
-            new_sample = unlabeled_pool[idx]
+            new_sample = unlabeled_pool[int(idx)]
             new_discovered_samples.add(new_sample)
             new_discovered_classes.add(self.trainset_info.train_labels[new_sample])
         return list(new_discovered_samples), new_discovered_classes
@@ -138,7 +151,7 @@ class RandomQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(RandomQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
 
         favorable_scores = torch.Tensor().to(self.device)
@@ -149,13 +162,14 @@ class RandomQuery(QueryMachine):
                 
                 scores = torch.rand(inputs.shape[0]).to(self.device)
                 favorable_scores = torch.cat((favorable_scores, scores))
-        return favorable_scores
+        sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
+        return rankings
 
 class EntropyQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(EntropyQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
         favorable_scores = torch.Tensor().to(self.device)
         
@@ -166,13 +180,14 @@ class EntropyQuery(QueryMachine):
                 prob_scores = F.softmax(class_scores, dim=1)
                 entropy = -(prob_scores*prob_scores.log()).sum(1)
                 favorable_scores = torch.cat((favorable_scores, entropy))
-        return favorable_scores
+        sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
+        return rankings
 
 class SoftmaxQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(SoftmaxQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
         favorable_scores = torch.Tensor().to(self.device)
         
@@ -183,12 +198,44 @@ class SoftmaxQuery(QueryMachine):
                 prob_scores = F.softmax(class_scores, dim=1)
                 prob_max, _ = torch.max(prob_scores, dim=1)
                 favorable_scores = torch.cat((favorable_scores, -prob_max))
-        return favorable_scores
+        sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
+        return rankings
 
 class ULDRQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(ULDRQuery, self).__init__(*args, **kwargs)
-        raise NotImplementedError()
+        self.gaussian_kernel = 100
+
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+        unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
+        labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
+        
+        u_to_l = torch.exp(-distance_matrix(unlabeled_features, labeled_features)/(2*self.gaussian_kernel**2)).cpu()
+        u_to_u = torch.exp(-distance_matrix(unlabeled_features, unlabeled_features)/(2*self.gaussian_kernel**2)).cpu()
+        u_to_l_sum = u_to_l.sum(1)
+        u_to_u_sum = u_to_u.sum(1) - 1.
+        
+        idx_uu_ul_tuples = torch.FloatTensor([[i, float(u_to_u_sum[i]), float(u_to_l_sum[i])] for i in range(u_to_l_sum.shape[0])]).cpu()
+        uldr_ratios = idx_uu_ul_tuples[:,1]/idx_uu_ul_tuples[:,2]
+        _, rankings = uldr_ratios.sort(descending=True)
+        final_rankings = []
+
+        if verbose:
+            pbar = tqdm(range(0, len(idx_uu_ul_tuples)), ncols=80)
+        else:
+            pbar = range(0, len(idx_uu_ul_tuples))
+        
+        for _, _ in enumerate(pbar):
+            first_idx = idx_uu_ul_tuples[rankings[0]][0]
+            final_rankings.append(first_idx)
+            idx_uu_ul_tuples = idx_uu_ul_tuples[idx_uu_ul_tuples[:,0] != first_idx]
+            idx_uu_ul_tuples[:, 1] = idx_uu_ul_tuples[:, 1] - u_to_u[idx_uu_ul_tuples[:, 0].long(), int(first_idx)]
+            idx_uu_ul_tuples[:, 2] = idx_uu_ul_tuples[:, 2] + u_to_u[idx_uu_ul_tuples[:, 0].long(), int(first_idx)]
+            
+            uldr_ratios = idx_uu_ul_tuples[:,1]/idx_uu_ul_tuples[:,2]
+            _, rankings = uldr_ratios.sort(descending=True)
+
+        return final_rankings
 
 class LearnLossQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
@@ -206,76 +253,38 @@ class LearnLossQuery(QueryMachine):
 class CoresetQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(CoresetQuery, self).__init__(*args, **kwargs)
-        raise NotImplementedError()
     
-    def _get_favorable_scores(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
-        unlabeled_features = self._get_features(unlabeled_pool, use_tqdm=verbose)
-        labeled_features = self._get_features(discovered_samples, use_tqdm=verbose)
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+        unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
+        labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
-        favorable_scores = torch.Tensor().to(self.device)
-        
-        with torch.no_grad():
-            for batch, data in enumerate(pbar):
-                inputs, _ = data
-                # favorable_scores = 
-        return favorable_scores
-    
-    def _get_features(self, samples, trainer_machine, verbose=True):
-        dataloader = self._get_loader(samples, use_tqdm=verbose)
-
-        features = torch.Tensor([]).to(self.device)
-        for batch, data in enumerate(dataloader):
-            inputs, _ = data
-            
-            with torch.no_grad():
-                cur_features = trainer_machine.get_features(inputs.to(self.device))
-
-            features = torch.cat((features, cur_features),dim=0)
-
-        return features
-
-class CoresetMeasure(LabelPicker):
-
-    def select_new_data(self, discovered_samples, discovered_classes):
-        self.model = self.trainer_machine.model
-        self.unmapping = get_target_unmapping_dict(self.train_instance.classes, discovered_classes)
-
-        unlabeled_pool = self.train_instance.query_samples.difference(discovered_samples)
-        unlabeled_pool = list(unlabeled_pool)
-        undiscovered_classes = self.train_instance.query_classes.difference(discovered_classes)
-        if len(unlabeled_pool) < self.config.budget:
-            print("Remaining data is fewer than the budget constraint. Label all.")
-            return unlabeled_pool, undiscovered_classes
-        elif self.config.budget == 0:
-            print("No label budget")
-            return set(), discovered_classes
-
-        if self.active_random_sampling == 'fixed_10K':
-            if len(unlabeled_pool) > 10000:
-                random.shuffle(unlabeled_pool)
-                unlabeled_pool = unlabeled_pool[:10000]
-        elif self.active_random_sampling == "1_out_of_5":
-            if len(unlabeled_pool)*0.2 > self.config.budget:
-                random.shuffle(unlabeled_pool)
-                unlabeled_pool = unlabeled_pool[:int(len(unlabeled_pool)*.2)]
-
-
-
-        unlabeled_features, unlabeled_dataloader = self.get_features(unlabeled_pool)
-        unlabeled_features = unlabeled_features.cpu()
-        labeled_features, _ = self.get_features(discovered_samples)
-        labeled_features = labeled_features.cpu()
-
         unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0]
         unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features)
-
-        # Normalize the distances to 0-1 by dividing max
-
-        dist_max = torch.max(unlabel_to_label_dist.max(), unlabel_to_unlabel_dist.max())
-        unlabel_to_label_dist = unlabel_to_label_dist/dist_max
-        unlabel_to_unlabel_dist = unlabel_to_unlabel_dist/dist_max
-
         
+        
+        sorted_min_dist_to_labeled, rankings = torch.sort(unlabel_to_label_dist, descending=True)
+        idx_score_pairs = [(int(idx), float(sorted_min_dist_to_labeled[i])) for i, idx in enumerate(rankings)]
+        final_rankings = []
+
+        if verbose:
+            pbar = tqdm(range(0, len(idx_score_pairs)), ncols=80)
+        else:
+            pbar = range(0, len(idx_score_pairs))
+        for _, _ in enumerate(pbar):
+            first_idx = idx_score_pairs[0][0]
+            final_rankings.append(first_idx)
+
+            idx_score_pairs = idx_score_pairs[1:]
+            new_idx_score_pairs = []
+            for i, (idx, min_dist_to_old_labeled) in enumerate(idx_score_pairs):
+                min_score = min(min_dist_to_old_labeled,
+                                float(unlabel_to_unlabel_dist[first_idx, idx]))
+                new_idx_score_pairs.append((idx, min_score))
+            new_idx_score_pairs.sort(key=lambda x: x[1], reverse=True)
+            idx_score_pairs = new_idx_score_pairs
+
+        return final_rankings
+    
 
 # class CoresetMeasure(LabelPicker):
 #     def __init__(self, *args, **kwargs):
@@ -762,7 +771,6 @@ def distance_matrix(A, B):
     A_2 = (A**2).sum(dim=1)
     B_2 = (B**2).sum(dim=1)
     A_B_2 = A_2.view(A.shape[0], 1) + B_2
-
     dists = A_B_2 + -2. * torch.mm(A, B.t())
     return dists
 
