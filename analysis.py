@@ -723,8 +723,9 @@ class AnalysisMachine(object):
                                                           b,
                                                           open_set_method,
                                                           makedir=False)
-                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
-                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
+                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
+                                # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
+                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
                                 if not os.path.exists(paths_dict[k]):
                                     python_script = self._get_exp_name(init_mode,
                                                                          training_method,

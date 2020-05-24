@@ -42,6 +42,7 @@ class Trainer(object):
         self.query_result_path   = paths_dict['query_result_path']
         self.finetuned_ckpt_path = paths_dict['finetuned_ckpt_path']
         self.test_result_path    = paths_dict['test_result_path']
+        self.open_result_path    = paths_dict['open_result_path']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    trainset_info,
@@ -49,6 +50,7 @@ class Trainer(object):
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              trainset_info,
                                                              trainer_config)
+        self.eval_machine = eval_machine.get_eval_machine(open_set_method)
 
     def train(self, discovered_samples, discovered_classes, verbose=False):
         """Performs training using discovered_samples
@@ -74,6 +76,17 @@ class Trainer(object):
                                       ckpt_path=self.finetuned_ckpt_path,
                                       verbose=verbose)
 
-    def eval(self, discovered_classes, test_dataset):
-        assert len(discovered_classes) == len(self.trainset_info.query_classes)
+    def eval_closed_set(self, discovered_classes, test_dataset, verbose=verbose):
+        return self.trainer_machine.eval_closed_set(discovered_classes,
+                                                    test_dataset,
+                                                    result_path=self.test_result_path,
+                                                    verbose=verbose)
+
+    def eval_open_set(self, discovered_classes, test_dataset, verbose=verbose):
         raise NotImplementedError()
+        self.eval_machine.eval_open_set(discovered_classes,
+                                        test_dataset,
+                                        self.trainer_machine,
+                                        result_path=self.open_result_path,
+                                        verbose=verbose)
+        

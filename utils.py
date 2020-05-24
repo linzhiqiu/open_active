@@ -300,6 +300,6 @@ def prepare_save_dir(save_path,
     paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['trainer_save_dir'],'ckpt.pt')
     paths_dict['query_result_path']   = os.path.join(paths_dict['finetuned_dir']   ,'query_result.pt')
     paths_dict['finetuned_ckpt_path'] = os.path.join(paths_dict['finetuned_dir']   ,'ckpt.pt')
-    paths_dict['test_result_path']    = os.path.join(paths_dict['test_dir']        ,'test_result.pt')
-
+    paths_dict['test_result_path']    = os.path.join(paths_dict['finetuned_dir']   ,'test_result.pt')
+    paths_dict['open_result_path']    = os.path.join(paths_dict['test_dir'],       ,'open_result.pt')
     return paths_dict

@@ -88,7 +88,20 @@ class TrainerMachine(object):
                                                 discovered_classes,
                                                 verbose=verbose)
             torch.save(self.ckpt_dict, ckpt_path)
-
+    
+    def eval_closed_set(self, discovered_classes, test_dataset, result_path=None, verbose=True):
+        """ Performing closed set evaluation
+        """
+        if os.path.exists(result_path):
+            print("Closed set result already saved.")
+            self.closed_set_result = torch.load(result_path)
+        else:
+            self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
+                                                                  test_dataset,
+                                                                  verbose=verbose)
+            torch.save(self.closed_set_result, result_path)
+        return self.closed_set_result['acc']
+    
     def get_class_scores(self, inputs):
         """Returns the class scores for each inputs
             Returns:
@@ -109,9 +122,14 @@ class TrainerMachine(object):
         """
         self.backbone.eval()
         return self.backbone(inputs)
-
+    
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
         """ The subclasses only need to overwrite this function
+        """
+        raise NotImplementedError()
+    
+    def _eval_closed_set_helper(discovered_classes, test_dataset, verbose=verbose):
+        """ To be overwrite by subclass
         """
         raise NotImplementedError()
 
@@ -230,7 +248,68 @@ class Network(TrainerMachine):
             'acc_curve' : avg_acc_per_epoch
         }
         return ckpt_dict
-   
+    
+    def _eval_closed_set_helper(self, discovered_classes, test_dataset, verbose=True):
+        """Test the model/classifier and return the acc in ckpt_dict
+        """
+        self.backbone.eval()
+        self.classifier.eval()
+        
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        dataloader = get_loader(test_dataset,
+                                None,
+                                shuffle=False,
+                                batch_size=self.batch,
+                                workers=self.workers)
+        
+        with SetPrintMode(hidden=not verbose):
+            if verbose:
+                pbar = tqdm(dataloader, ncols=80)
+            else:
+                pbar = dataloader
+
+            performance_dict = {'corrects' : 0., 'not_seen' : 0., 'count' : 0.} # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
+                
+            with torch.no_grad():
+                for batch, data in enumerate(pbar):
+                    inputs, real_labels = data
+
+                    inputs = inputs.to(self.device)
+                    labels = target_mapping_func(real_labels.to(self.device))
+
+                    outputs = self.classifier(self.backbone(inputs))
+                    _, preds = torch.max(outputs, 1)
+
+                    undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
+                    discovered_closed_indices = labels >= 0
+                    hold_out_open_indices = labels == OPEN_CLASS_INDEX
+                    unlabeled_pool_class_indices = undiscovered_open_indices | discovered_closed_indices
+                    assert torch.sum(undiscovered_open_indices & discovered_closed_indices & hold_out_open_indices) == 0
+
+                    performance_dict['count'] += float(torch.sum(unlabeled_pool_class_indices))
+
+                    performance_dict['not_seen'] += torch.sum(undiscovered_open_indices).float()
+                    performance_dict['corrects'] += torch.sum(
+                                                                 torch.masked_select(
+                                                                     (preds==labels.data),
+                                                                     discovered_closed_indices
+                                                                 )
+                                                             ).float()
+            test_acc = performance_dict['corrects'] / performance_dict['count']
+            seen_rate = 1. - performance_dict['not_seen'] / performance_dict['count']
+            
+            
+            print(f"Test => "
+                  f"Closed set test Acc {test_acc}, "
+                  f"Discovered precentage {seen_rate}")
+
+            print(f"Test Accuracy {test_acc}.")
+        test_dict = {
+            'acc' : test_acc,
+            'seen' : seen_rate
+        }
+        return test_dict
+    
     def _get_optimizer(self, cfg, backbone, classifier):
         """ Get optimizer of both backbone and classifier
         """
@@ -664,32 +743,32 @@ class CosineNetwork(Network):
 #                     performance_dict['overall_acc']['count'] += inputs.size(0)
 #                     performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
                     
-#                     unseen_open_indices = labels == UNDISCOVERED_CLASS_INDEX
-#                     seen_closed_indices = labels >= 0
+#                     undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
+#                     discovered_closed_indices = labels >= 0
 #                     hold_out_open_indices = labels == OPEN_CLASS_INDEX
-#                     train_class_indices = unseen_open_indices | seen_closed_indices
-#                     all_open_indices = unseen_open_indices | hold_out_open_indices
-#                     assert torch.sum(unseen_open_indices & seen_closed_indices & hold_out_open_indices) == 0
+#                     unlabeled_pool_class_indices = undiscovered_open_indices | discovered_closed_indices
+#                     all_open_indices = undiscovered_open_indices | hold_out_open_indices
+#                     assert torch.sum(undiscovered_open_indices & discovered_closed_indices & hold_out_open_indices) == 0
                     
-#                     performance_dict['train_class_acc']['count'] += float(torch.sum(train_class_indices))
-#                     performance_dict['unseen_open_acc']['count'] += float(torch.sum(unseen_open_indices))
+#                     performance_dict['train_class_acc']['count'] += float(torch.sum(unlabeled_pool_class_indices))
+#                     performance_dict['unseen_open_acc']['count'] += float(torch.sum(undiscovered_open_indices))
 #                     performance_dict['holdout_open_acc']['count'] += float(torch.sum(hold_out_open_indices))
-#                     performance_dict['seen_closed_acc']['count'] += float(torch.sum(seen_closed_indices))
+#                     performance_dict['seen_closed_acc']['count'] += float(torch.sum(discovered_closed_indices))
 #                     performance_dict['all_open_acc']['count'] += float(torch.sum(all_open_indices))
 
 #                     performance_dict['train_class_acc']['not_seen'] += torch.sum(
-#                                                                            unseen_open_indices
+#                                                                            undiscovered_open_indices
 #                                                                        ).float()
 #                     performance_dict['train_class_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                seen_closed_indices
+#                                                                                discovered_closed_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['unseen_open_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                unseen_open_indices
+#                                                                                undiscovered_open_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['holdout_open_acc']['corrects'] += torch.sum(
@@ -701,13 +780,13 @@ class CosineNetwork(Network):
 #                     performance_dict['seen_closed_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                seen_closed_indices
+#                                                                                discovered_closed_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['seen_closed_acc']['open'] += torch.sum(
 #                                                                        torch.masked_select(
 #                                                                            (preds==UNDISCOVERED_CLASS_INDEX),
-#                                                                            seen_closed_indices
+#                                                                            discovered_closed_indices
 #                                                                        )
 #                                                                    ).float()
 #                     performance_dict['all_open_acc']['corrects'] += torch.sum(
@@ -1015,32 +1094,32 @@ class CosineNetwork(Network):
 #                     performance_dict['overall_acc']['count'] += inputs.size(0)
 #                     performance_dict['overall_acc']['corrects'] += float(torch.sum(preds == labels_for_openset_pred.data))
                     
-#                     unseen_open_indices = labels == UNDISCOVERED_CLASS_INDEX
-#                     seen_closed_indices = labels >= 0
+#                     undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
+#                     discovered_closed_indices = labels >= 0
 #                     hold_out_open_indices = labels == OPEN_CLASS_INDEX
-#                     train_class_indices = unseen_open_indices | seen_closed_indices
-#                     all_open_indices = unseen_open_indices | hold_out_open_indices
-#                     assert torch.sum(unseen_open_indices & seen_closed_indices & hold_out_open_indices) == 0
+#                     unlabeled_pool_class_indices = undiscovered_open_indices | discovered_closed_indices
+#                     all_open_indices = undiscovered_open_indices | hold_out_open_indices
+#                     assert torch.sum(undiscovered_open_indices & discovered_closed_indices & hold_out_open_indices) == 0
                     
-#                     performance_dict['train_class_acc']['count'] += float(torch.sum(train_class_indices))
-#                     performance_dict['unseen_open_acc']['count'] += float(torch.sum(unseen_open_indices))
+#                     performance_dict['train_class_acc']['count'] += float(torch.sum(unlabeled_pool_class_indices))
+#                     performance_dict['unseen_open_acc']['count'] += float(torch.sum(undiscovered_open_indices))
 #                     performance_dict['holdout_open_acc']['count'] += float(torch.sum(hold_out_open_indices))
-#                     performance_dict['seen_closed_acc']['count'] += float(torch.sum(seen_closed_indices))
+#                     performance_dict['seen_closed_acc']['count'] += float(torch.sum(discovered_closed_indices))
 #                     performance_dict['all_open_acc']['count'] += float(torch.sum(all_open_indices))
 
 #                     performance_dict['train_class_acc']['not_seen'] += torch.sum(
-#                                                                            unseen_open_indices
+#                                                                            undiscovered_open_indices
 #                                                                        ).float()
 #                     performance_dict['train_class_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                seen_closed_indices
+#                                                                                discovered_closed_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['unseen_open_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                unseen_open_indices
+#                                                                                undiscovered_open_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['holdout_open_acc']['corrects'] += torch.sum(
@@ -1052,13 +1131,13 @@ class CosineNetwork(Network):
 #                     performance_dict['seen_closed_acc']['corrects'] += torch.sum(
 #                                                                            torch.masked_select(
 #                                                                                (preds==labels.data),
-#                                                                                seen_closed_indices
+#                                                                                discovered_closed_indices
 #                                                                            )
 #                                                                        ).float()
 #                     performance_dict['seen_closed_acc']['open'] += torch.sum(
 #                                                                        torch.masked_select(
 #                                                                            (preds==UNDISCOVERED_CLASS_INDEX),
-#                                                                            seen_closed_indices
+#                                                                            discovered_closed_indices
 #                                                                        )
 #                                                                    ).float()
 #                     performance_dict['all_open_acc']['corrects'] += torch.sum(

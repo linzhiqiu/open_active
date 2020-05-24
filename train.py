@@ -81,8 +81,10 @@ def main():
     
     trainer.finetune(discovered_samples, discovered_classes, verbose=config.verbose)
     
+
+    closed_set_test_acc = trainer.eval_closed_set(discovered_classes, test_dataset, verbose=config.verbose)
     exit(0)
-    import pdb; pdb.set_trace()
+    trainer.eval_open_set(discovered_classes, test_dataset, verbose=config.verbose)
     # for round_i in range(0, config.max_rounds):
     #     print(f"Round [{round_i}]")
 
