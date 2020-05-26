@@ -130,14 +130,15 @@ class QueryMachine(object):
         unlabeled_pool = self.trainset_info.query_samples.difference(discovered_samples)
         unlabeled_pool = list(unlabeled_pool)
         unmapping = get_target_unmapping_dict(self.trainset_info.classes, discovered_classes)
-        if len(unlabeled_pool) < budget:
-            print("Remaining data is fewer than the budget constraint. Label all.")
+        if len(unlabeled_pool) <= budget:
+            print("Remaining data is fewer/ equal than the budget constraint. Label all.")
             return list(self.trainset_info.query_samples), self.trainset_info.query_classes
 
         # Keep a rank for each sample. Higher ranks means more preferable to label.
         rankings = self._get_favorable_rankings(unlabeled_pool,
                                                 trainer_machine,
                                                 discovered_samples,
+                                                budget=budget,
                                                 verbose=verbose)
         
         rankings = list(rankings[:budget])
@@ -155,7 +156,7 @@ class RandomQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(RandomQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True, budget=None):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
 
         favorable_scores = torch.Tensor().to(self.device)
@@ -173,7 +174,7 @@ class EntropyQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(EntropyQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True, budget=None):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
         favorable_scores = torch.Tensor().to(self.device)
         
@@ -191,7 +192,7 @@ class SoftmaxQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(SoftmaxQuery, self).__init__(*args, **kwargs)
     
-    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True, budget=None):
         dataloader = self._get_loader(unlabeled_pool, use_tqdm=verbose)
         favorable_scores = torch.Tensor().to(self.device)
         
@@ -211,7 +212,7 @@ class ULDRQuery(QueryMachine):
         self.gaussian_kernel = 100.
         self.distance_matrix = distance_matrix
 
-    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True, budget=None):
         unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
@@ -231,9 +232,9 @@ class ULDRQuery(QueryMachine):
         final_rankings = []
 
         if verbose:
-            pbar = tqdm(range(0, len(idx_uu_ul_tuples)), ncols=80)
+            pbar = tqdm(range(0, budget), ncols=80)
         else:
-            pbar = range(0, len(idx_uu_ul_tuples))
+            pbar = range(0, budget)
         
         for _, _ in enumerate(pbar):
             first_idx = idx_uu_ul_tuples[rankings[0]][0]
@@ -271,34 +272,47 @@ class CoresetQuery(QueryMachine):
         super(CoresetQuery, self).__init__(*args, **kwargs)
         self.distance_matrix = distance_matrix
     
-    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
+    def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True, budget=None):
         unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
         unlabel_to_label_dist = self.distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0].cpu()
         unlabel_to_unlabel_dist = self.distance_matrix(unlabeled_features, unlabeled_features).cpu()
         
-        sorted_min_dist_to_labeled, rankings = torch.sort(unlabel_to_label_dist, descending=True)
-        idx_score_pairs = [(int(idx), float(sorted_min_dist_to_labeled[i])) for i, idx in enumerate(rankings)]
+        # sorted_min_dist_to_labeled, rankings = torch.sort(unlabel_to_label_dist, descending=True)
+        # idx_score_pairs = [(int(idx), float(sorted_min_dist_to_labeled[i])) for i, idx in enumerate(rankings)]
+        
         final_rankings = []
 
         if verbose:
-            pbar = tqdm(range(0, len(idx_score_pairs)), ncols=80)
+            pbar = tqdm(range(0, budget), ncols=80)
         else:
-            pbar = range(0, len(idx_score_pairs))
+            pbar = range(0, budget)
+        
+        idx_score_pairs = torch.FloatTensor([[i, float(unlabel_to_label_dist[i])] for i in range(unlabel_to_label_dist.shape[0])]).cpu()
+        _, rankings = idx_score_pairs[:, 1].sort(descending=True)
         for _, _ in enumerate(pbar):
-            first_idx = idx_score_pairs[0][0]
+            first_idx = int(idx_score_pairs[rankings[0]][0])
             final_rankings.append(first_idx)
+            
+            idx_score_pairs = idx_score_pairs[idx_score_pairs[:,0] != first_idx]
+            
+            idx_score_pairs[:, 1] = torch.min(idx_score_pairs[:, 1], unlabel_to_unlabel_dist[idx_score_pairs[:,0].long(), int(first_idx)])
+            _, rankings = idx_score_pairs[:, 1].sort(descending=True)
 
-            idx_score_pairs = idx_score_pairs[1:]
-            new_idx_score_pairs = []
-            for i, (idx, min_dist_to_old_labeled) in enumerate(idx_score_pairs):
-                min_score = min(min_dist_to_old_labeled,
-                                float(unlabel_to_unlabel_dist[first_idx, idx]))
-                new_idx_score_pairs.append((idx, min_score))
-            new_idx_score_pairs.sort(key=lambda x: x[1], reverse=True)
-            idx_score_pairs = new_idx_score_pairs
+        # for _, _ in enumerate(pbar):
+        #     first_idx = idx_score_pairs[0][0]
+        #     final_rankings.append(first_idx)
 
+        #     idx_score_pairs = idx_score_pairs[1:]
+        #     new_idx_score_pairs = []
+        #     for i, (idx, min_dist_to_old_labeled) in enumerate(idx_score_pairs):
+        #         min_score = min(min_dist_to_old_labeled,
+        #                         float(unlabel_to_unlabel_dist[first_idx, idx]))
+        #         new_idx_score_pairs.append((idx, min_score))
+        #     new_idx_score_pairs.sort(key=lambda x: x[1], reverse=True)
+        #     idx_score_pairs = new_idx_score_pairs
+        # import pdb; pdb.set_trace()
         return final_rankings
     
 class CoresetNormCosQuery(CoresetQuery):

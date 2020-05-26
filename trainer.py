@@ -51,7 +51,9 @@ class Trainer(object):
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              trainset_info,
                                                              trainer_config)
-        self.eval_machine = eval_machine.get_eval_machine(open_set_method)
+        self.eval_machine = eval_machine.get_eval_machine(open_set_method,
+                                                          trainset_info,
+                                                          trainer_config)
 
     def train(self, discovered_samples, discovered_classes, verbose=False):
         """Performs training using discovered_samples

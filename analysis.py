@@ -657,6 +657,7 @@ class AnalysisMachine(object):
     """
     def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, dataset_save_path, trainer_save_dir, data, dataset_rand_seed, training_method_list, train_mode, query_method_list, open_set_method_list):
         super().__init__()
+        self.silent_mode = False
         self.analysis_save_dir = analysis_save_dir
         self.analysis_trainer = analysis_trainer
         self.budget_mode = budget_mode
@@ -668,7 +669,7 @@ class AnalysisMachine(object):
             input(f"Already exists: {self.save_dir} . Overwrite? >>")
 
         self.train_mode = train_mode
-        
+
         self.script_dir = self.get_script_dir()
         self.plot_dir = self.get_plot_dir()
 
@@ -762,12 +763,16 @@ class AnalysisMachine(object):
                                                                             training_method,
                                                                             query_method,
                                                                             b,
-                                                                            open_set_method)
+                                                                            open_set_method,
+                                                                            silent=self.silent_mode)
                                         idx = len(undone_exp_b)
                                         b_err_i = os.path.join(b_dir, f"{idx}.err")
                                         b_out_i = os.path.join(b_dir, f"{idx}.out")
                                         # script = python_script + f" >> >(tee -a {b_out_i} >> {script_out}) 2>> >(tee -a {b_err_i} >> {script_err}) \n"
-                                        script = python_script + f" > {b_out_i} 2> {b_err_i} \n"
+                                        if self.silent_mode:
+                                            script = python_script + f" > {b_out_i} 2> {b_err_i} \n"
+                                        else:
+                                            script = python_script + " \n"
                                         undone_exp_b.append(script)
                                         break
                     if undone_exp_b.__len__() > 0:
@@ -879,6 +884,7 @@ class AnalysisMachine(object):
                 COMPARARISON = self.ALL_INIT_MODES
 
             for compare_thing in COMPARARISON:
+                lines = 0
                 color_dict = {}
                 color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
                 marker_dict = {}
@@ -894,6 +900,7 @@ class AnalysisMachine(object):
 
                 def get_marker_func(s):
                     if not s in marker_dict:
+                        # print(s)
                         random.seed(s)
                         c = random.choice(marker_list)
                         marker_list.remove(c)
@@ -959,6 +966,7 @@ class AnalysisMachine(object):
                                     res = float(finished_exp[init_mode][b][training_method][query_method][item])
                                     y[idx] = res
                             if np.any(np.isfinite(y)):
+                                lines += 1
                                 label_str = "_".join([init_mode, training_method, query_method])
                                 c = color_func(init_mode, training_method, query_method)
                                 m = marker_func(init_mode, training_method, query_method)
@@ -967,19 +975,20 @@ class AnalysisMachine(object):
                                          label=label_str,
                                          color=c,
                                          marker=m)
-                                plt.legend()
+                plt.legend()
                 
                 # plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
                 # plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
                 plt.tight_layout()
+                print(save_path + f"has {lines} lines.")
                 plt.savefig(save_path)
                 plt.close('all')
 
-    def _get_exp_name(self, init_mode, training_method, query_method, b, open_set_method):
+    def _get_exp_name(self, init_mode, training_method, query_method, b, open_set_method, silent=False):
         script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {self.dataset_rand_seed}"
                         f" --init_mode {init_mode} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
                         f" --query_method {query_method} --budget {b} --open_set_method {open_set_method}"
-                        f" --verbose False")
+                        f" --verbose {str(not silent)}")
         return script_prefix
 
     def _get_dataset_info(self):
