@@ -108,6 +108,18 @@ class TrainerMachine(object):
             torch.save(self.closed_set_result, result_path)
         return self.closed_set_result['acc']
     
+    def eval_open_set(self, discovered_classes, test_dataset, result_path=None, verbose=True):
+        """ Performing open set evaluation
+        """
+        if os.path.exists(result_path):
+            print("Open set result already saved.")
+            self.open_set_result = torch.load(result_path)
+        else:
+            self.open_set_result = self._eval_open_set_helper(discovered_classes,
+                                                              test_dataset,
+                                                              verbose=verbose)
+            torch.save(self.open_set_result, result_path)
+    
     def get_class_scores(self, inputs):
         """Returns the class scores for each inputs
             Returns:

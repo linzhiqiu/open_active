@@ -118,9 +118,11 @@
     # Few class, start with 8 classes 250 samples each
         # No finetuning - train a new network (200 epochs, lr 0.1, decay every 60 epochs): 77.81
         # With finetuning (140 epochs, lr 0.01, decay every 60 epochs): 68.59
+        # With finetuning (200 epochs, lr 0.1, decay every 60 epochs): 76.8
     # Few samples, start with 40 classes 50 samples each  
         # No finetuning - 77.99
-        # With finetuning - 68.33
+        # With finetuning (140 epochs, lr 0.01) - 68.33
+        # With finetuning (200 epochs, lr 0.1) - 77.0
     # Regular, start with 40 classes 250 samples Each
         # No finetuning - 77.93
         # With finetuning - 74.90

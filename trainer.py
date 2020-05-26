@@ -84,7 +84,6 @@ class Trainer(object):
                                                     verbose=verbose)
 
     def eval_open_set(self, discovered_classes, test_dataset, verbose=False):
-        raise NotImplementedError()
         self.eval_machine.eval_open_set(discovered_classes,
                                         test_dataset,
                                         self.trainer_machine,
