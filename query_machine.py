@@ -23,10 +23,14 @@ def get_query_machine(query_method, trainset_info, trainer_config):
         query_machine_class = SoftmaxQuery
     elif query_method == 'uldr':
         query_machine_class = ULDRQuery
+    elif query_method == 'uldr_norm_cosine':
+        query_machine_class = ULDRNormCosQuery
     elif query_method == 'learnloss':
         query_machine_class = LearnLossQuery
     elif query_method == 'coreset':
         query_machine_class = CoresetQuery
+    elif query_method == 'coreset_norm_cosine':
+        query_machine_class = CoresetNormCosQuery
     else:
         raise NotImplementedError()
     return query_machine_class(trainset_info, trainer_config)
@@ -204,17 +208,23 @@ class SoftmaxQuery(QueryMachine):
 class ULDRQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(ULDRQuery, self).__init__(*args, **kwargs)
-        self.gaussian_kernel = 100
+        self.gaussian_kernel = 100.
+        self.distance_matrix = distance_matrix
 
     def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
         unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
-        u_to_l = torch.exp(-distance_matrix(unlabeled_features, labeled_features)/(2*self.gaussian_kernel**2)).cpu()
-        u_to_u = torch.exp(-distance_matrix(unlabeled_features, unlabeled_features)/(2*self.gaussian_kernel**2)).cpu()
+
+        ul_dist = self.distance_matrix(unlabeled_features, labeled_features).cpu()
+        uu_dist = self.distance_matrix(unlabeled_features, unlabeled_features).cpu()
+        print(f"The average pairwise distance between unlabeled to unlabeled is {float(((uu_dist.sum(1)-1.)/uu_dist.shape[1]).mean())}")
+        print(f"The average pairwise distance between unlabeled to labeled is {float(ul_dist.mean())}")
+        
+        u_to_l = torch.exp(-ul_dist/(2*self.gaussian_kernel**2)).cpu()
+        u_to_u = torch.exp(-uu_dist/(2*self.gaussian_kernel**2)).cpu()
         u_to_l_sum = u_to_l.sum(1)
         u_to_u_sum = u_to_u.sum(1) - 1.
-        
         idx_uu_ul_tuples = torch.FloatTensor([[i, float(u_to_u_sum[i]), float(u_to_l_sum[i])] for i in range(u_to_l_sum.shape[0])]).cpu()
         uldr_ratios = idx_uu_ul_tuples[:,1]/idx_uu_ul_tuples[:,2]
         _, rankings = uldr_ratios.sort(descending=True)
@@ -237,6 +247,12 @@ class ULDRQuery(QueryMachine):
 
         return final_rankings
 
+class ULDRNormCosQuery(ULDRQuery):
+    def __init__(self, *args, **kwargs):
+        super(ULDRNormCosQuery, self).__init__(*args, **kwargs)
+        self.distance_matrix = cosine_distance
+        self.gaussian_kernel = .5
+
 class LearnLossQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(LearnLossQuery, self).__init__(*args, **kwargs)
@@ -253,14 +269,14 @@ class LearnLossQuery(QueryMachine):
 class CoresetQuery(QueryMachine):
     def __init__(self, *args, **kwargs):
         super(CoresetQuery, self).__init__(*args, **kwargs)
+        self.distance_matrix = distance_matrix
     
     def _get_favorable_rankings(self, unlabeled_pool, trainer_machine, discovered_samples, verbose=True):
         unlabeled_features = self._get_features(unlabeled_pool, trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(discovered_samples, trainer_machine, verbose=verbose).cpu()
         
-        unlabel_to_label_dist = distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0].cpu()
-        unlabel_to_unlabel_dist = distance_matrix(unlabeled_features, unlabeled_features).cpu()
-        
+        unlabel_to_label_dist = self.distance_matrix(unlabeled_features, labeled_features).min(dim=1)[0].cpu()
+        unlabel_to_unlabel_dist = self.distance_matrix(unlabeled_features, unlabeled_features).cpu()
         
         sorted_min_dist_to_labeled, rankings = torch.sort(unlabel_to_label_dist, descending=True)
         idx_score_pairs = [(int(idx), float(sorted_min_dist_to_labeled[i])) for i, idx in enumerate(rankings)]
@@ -285,7 +301,11 @@ class CoresetQuery(QueryMachine):
 
         return final_rankings
     
-
+class CoresetNormCosQuery(CoresetQuery):
+    def __init__(self, *args, **kwargs):
+        super(CoresetNormCosQuery, self).__init__(*args, **kwargs)
+        self.distance_matrix = cosine_distance
+    
 # class CoresetMeasure(LabelPicker):
 #     def __init__(self, *args, **kwargs):
 #         super(CoresetMeasure, self).__init__(*args, **kwargs)
@@ -773,6 +793,12 @@ def distance_matrix(A, B):
     A_B_2 = A_2.view(A.shape[0], 1) + B_2
     dists = A_B_2 + -2. * torch.mm(A, B.t())
     return dists
+
+def cosine_distance(A, B):
+    # whether the A and B are normalized unit vectors
+    A_normalized = torch.nn.functional.normalize(A, p=2, dim=1, eps=1e-12)
+    B_normalized = torch.nn.functional.normalize(B, p=2, dim=1, eps=1e-12)
+    return 1. - torch.matmul(A_normalized, B_normalized.t())
 
 # if __name__ == '__main__':
 #     import pdb; pdb.set_trace()  # breakpoint a576792d //

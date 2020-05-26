@@ -22,10 +22,11 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINE
 import libmr
 import math
 
-def get_trainer_machine(training_method, trainset_info, trainer_config):
+def get_trainer_machine(training_method, train_mode, trainset_info, trainer_config):
     """Return a TrainerMachine object
         Args:
             training_method (str) : The training method
+            train_mode (str) : The training mode (with/without finetune)
             trainset_info (TrainsetInfo) : The details about training set
             trainer_config (dict) : The details about hyperparameter and etc.
     """
@@ -38,12 +39,13 @@ def get_trainer_machine(training_method, trainset_info, trainer_config):
     else:
         raise NotImplementedError()
     
-    return trainer_machine_class(trainset_info, trainer_config)
+    return trainer_machine_class(train_mode, trainset_info, trainer_config)
 
 class TrainerMachine(object):
     """Abstract class"""
-    def __init__(self, trainset_info, trainer_config):
+    def __init__(self, train_mode, trainset_info, trainer_config):
         super(TrainerMachine, self).__init__()
+        self.train_mode = train_mode
         self.trainset_info = trainset_info
         
         self.train_config = trainer_config['train']
@@ -53,6 +55,7 @@ class TrainerMachine(object):
         self.workers = trainer_config['workers']
         self.device = trainer_config['device']
         
+        self.trainer_config  = trainer_config
         self.backbone = self._get_backbone_network(trainer_config['backbone']).to(self.device)
         self.feature_dim = trainer_config['feature_dim']
         self.classifier = None # Initialize per train()/finetune() call.
@@ -83,6 +86,9 @@ class TrainerMachine(object):
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
+            if self.train_mode == "no_finetune":
+                print("Use a new backbone network without finetuning.")
+                self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
             self.ckpt_dict = self._train_helper(self.finetune_config,
                                                 discovered_samples,
                                                 discovered_classes,

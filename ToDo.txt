@@ -81,3 +81,47 @@
         
 
         # Finetune - should it be different from train?
+
+
+# Check pairwise distance first. Validate gaussian kernel. 
+# Run BIRD dataset with softmax network and ULDR/Entropy/Random Query. 
+
+# Rerun for coreset/uldr, noralized cosine network. Drop sigma to 1.
+
+# Check pairwise distance first. For softmax network/cosine network/cosine network with normalized.
+
+# Average pairwise distance
+    # For softmax network 
+        # L2 distance
+            # Unlabeled to Unlabeled is 117.06800079345703
+            # Unlabeled to Labeled is 141.25936889648438
+        # Cosine norm distance
+            # Unlabeled to Unlabeled is 0.013295680284500122
+            # Unlabeled to Labeled is 0.0050145648419857025
+    # For cosine network   
+        # L2 distance  
+            # Unlabeled to Unlabeled is 19.5631103515625
+            # Unlabeled to Labeled is 28.473447799682617
+        # Cosine norm distance
+            # Unlabeled to Unlabeled is 0.0062626698
+            # Unlabeled to Labeled is 0.0011482930
+
+
+# TODO
+    # First softmax/cosine network - finetune step use a new network, lr 0.1 200 epochs, decay every 60 steps
+    # Train from scratch for 40000 see the upperbound. See if regular setting actually hit the upperbound
+    # Compute accurracy on trainset using the evaluation script for test set
+    # Fix the color/marker on the graphs
+    # Sort the labels based on the results
+
+# Test accuracy when using all training examples
+    # Few class, start with 8 classes 250 samples each
+        # No finetuning - train a new network (200 epochs, lr 0.1, decay every 60 epochs): 77.81
+        # With finetuning (140 epochs, lr 0.01, decay every 60 epochs): 68.59
+    # Few samples, start with 40 classes 50 samples each  
+        # No finetuning - 77.99
+        # With finetuning - 68.33
+    # Regular, start with 40 classes 250 samples Each
+        # No finetuning - 77.93
+        # With finetuning - 74.90
+    

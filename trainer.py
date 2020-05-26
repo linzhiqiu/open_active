@@ -45,6 +45,7 @@ class Trainer(object):
         self.open_result_path    = paths_dict['open_result_path']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
+                                                                   train_mode,
                                                                    trainset_info,
                                                                    trainer_config)
         self.query_machine = query_machine.get_query_machine(query_method,

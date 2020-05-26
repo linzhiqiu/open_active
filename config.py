@@ -61,8 +61,10 @@ trainer_args.add_argument('--query_method',
                                    'entropy',
                                    'softmax', # Max score of softmax as an uncertainty measure
                                    'uldr', # Unlabeled to labeled density
+                                   'uldr_norm_cosine', # ULDR With features normalized and then use cosine distance
                                    'learnloss', # Learning Loss paper - might be a variant of it
                                    'coreset',
+                                   'coreset_norm_cosine', # Coreset With features normalized and then use cosine distance
                           ],
                           help='The active learning method determines how to query from unlabeled pool.'
                           )
@@ -87,7 +89,7 @@ trainer_args.add_argument('--open_set_method',
 analysis_arg = add_argument_group('Analysis.')
 analysis_arg.add_argument('--analysis_save_dir', default="/share/coecis/open_active/analysis",
                           help='The directory to save all the plots.')
-analysis_arg.add_argument('--analysis_mode', choices=['same_sample', 'same_budget'], default='same_sample',
+analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network'], default='same_sample',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
@@ -173,7 +175,7 @@ disc_args.add_argument('--div_eu',
 
 training_arg = add_argument_group('Training and Finetuning Param.')
 training_arg.add_argument('--train_mode', type=str,
-                          choices=['default'], default='default',
+                          choices=['default', 'no_finetune', 'default_lr01_200eps'], default='default',
                           help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')
