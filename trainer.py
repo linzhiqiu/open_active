@@ -43,6 +43,8 @@ class Trainer(object):
         self.finetuned_ckpt_path = paths_dict['finetuned_ckpt_path']
         self.test_result_path    = paths_dict['test_result_path']
         self.open_result_path    = paths_dict['open_result_path']
+        self.roc_result_path     = paths_dict['open_result_roc_path']
+        self.goscr_result_path   = paths_dict['open_result_goscr_path']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    train_mode,
@@ -53,7 +55,9 @@ class Trainer(object):
                                                              trainer_config)
         self.eval_machine = eval_machine.get_eval_machine(open_set_method,
                                                           trainset_info,
-                                                          trainer_config)
+                                                          trainer_config,
+                                                          self.roc_result_path,
+                                                          self.goscr_result_path)
 
     def train(self, discovered_samples, discovered_classes, verbose=False):
         """Performs training using discovered_samples

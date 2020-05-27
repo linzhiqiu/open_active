@@ -551,6 +551,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
     else:
         print(f"Continue working on {output_folder} from round {len(parsed_results.keys())-1}")
         start_round = len(parsed_results.keys())-1
+    
     output_folder_interval = os.path.join(output_folder, f'plot_every_{args.interval}_round_{threshold}_threshold')
     sorted_keys_tqdm = tqdm.tqdm(sorted_keys) if printed else sorted_keys
     for round_idx in sorted_keys_tqdm:

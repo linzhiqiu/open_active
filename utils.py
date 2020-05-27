@@ -302,4 +302,6 @@ def prepare_save_dir(save_path,
     paths_dict['finetuned_ckpt_path'] = os.path.join(paths_dict['finetuned_dir']   ,'ckpt.pt')
     paths_dict['test_result_path']    = os.path.join(paths_dict['finetuned_dir']   ,'test_result.pt')
     paths_dict['open_result_path']    = os.path.join(paths_dict['test_dir']        ,'open_result.pt')
+    paths_dict['open_result_roc_path'] = os.path.join(paths_dict['test_dir'],       "roc.png")
+    paths_dict['open_result_goscr_path'] = os.path.join(paths_dict['test_dir'],     'goscr.png')
     return paths_dict
