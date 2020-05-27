@@ -353,7 +353,7 @@ class DeepMetric(Network): # Xiuyu : You may also inherit the Network class
     def __init__(self, *args, **kwargs):
         """A deep metric network (with last relu layer disabled) class
         """
-        super(SoftmaxNetwork, self).__init__(*args, **kwargs)
+        super(DeepMetric, self).__init__(*args, **kwargs)
 
 class SoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):

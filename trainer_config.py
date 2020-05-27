@@ -70,6 +70,32 @@ CUB200_DEFAULT_CONFIG = {
     }),
 }
 
+CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
+    'backbone' : 'ResNet18',
+    'feature_dim' : 512,
+    'batch' : 128,
+    'workers' : 4,
+    'device' : 'cuda',
+    'train' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        'epochs' : 200,
+        'decay_epochs': 60,
+        'decay_by' : 0.1,
+    }),
+    'finetune' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        'epochs' : 200,
+        'decay_epochs': 60,
+        'decay_by' : 0.1,
+    }),
+}
+
 CUB200_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
     'backbone' : 'ResNet18HighRes',
     'feature_dim' : 512,
@@ -112,6 +138,9 @@ TRAIN_CONFIG_DICT = {
             'default' : CIFAR100_DEFAULT_CONFIG,
             'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
+        },
+        'deep_metric' : {
+            'default' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
         },
     },
     'CUB200' : {
