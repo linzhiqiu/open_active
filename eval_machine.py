@@ -32,8 +32,6 @@ def calc_auc_score(x, y):
     return area
 
 def get_eval_machine(open_set_method, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path):
-    return None
-    
     if open_set_method == 'entropy':
         eval_machine_class = EntropyOpen
     elif open_set_method == "openmax":
@@ -74,7 +72,7 @@ class EvalMachine(object):
         """ Performing open set evaluation
         """
         if os.path.exists(result_path):
-            print("Open set result already saved.")
+            print(f"Open set result already saved at {result_path}.")
             self.open_set_result = torch.load(result_path)
         else:
             self.open_set_result = self._eval_open_set_helper(discovered_classes,
@@ -83,8 +81,6 @@ class EvalMachine(object):
                                                               verbose=verbose)
             torch.save(self.open_set_result, result_path)
             
-            self._plot_open_set_result(self.open_set_result, self.roc_path, self.goscr_path)
-        
         
 
     def _eval_open_set_helper(self, discovered_classes, test_dataset, trainer_machine, verbose=True):
@@ -150,7 +146,7 @@ class NetworkOpen(EvalMachine):
         open_set_result['goscr'] = self._parse_goscr_result(open_set_result)
         return open_set_result
     
-    def _parse_roc_result(self, open_set_result):
+    def _parse_roc_result(self, open_set_result, do_plot=True):
         res = {'fpr' : None,
                'tpr' : None,
                'auroc' : None}
@@ -174,24 +170,26 @@ class NetworkOpen(EvalMachine):
             import pdb; pdb.set_trace()
 
         res = {'fpr' : fpr, 'tpr' : tpr, 'auc_score' : auc_score}
-        plt.figure(figsize=(10,10))
-        axes = plt.gca()
-        axes.set_ylim([0,1])
-        axes.set_xlim([0,1])
-        plt.title(f'ROC curve plot', y=0.96, fontsize=12)
-        plt.xlabel("False Positive Rate (Closed set examples classified as open set)", fontsize=12)
-        plt.ylabel("True Positive Rate (Open set example classified as open set)", fontsize=12)
+        if do_plot:
+            plt.figure(figsize=(10,10))
+            axes = plt.gca()
+            axes.set_ylim([0,1])
+            axes.set_xlim([0,1])
+            plt.title(f'ROC curve plot', y=0.96, fontsize=12)
+            plt.xlabel("False Positive Rate (Closed set examples classified as open set)", fontsize=12)
+            plt.ylabel("True Positive Rate (Open set example classified as open set)", fontsize=12)
 
-        label_name = f"AUC_"+f"{auc_score:.3f}"
-        plt.plot(fpr, tpr, label=label_name, linestyle='-')
-        plt.legend(loc='upper left',
-                   borderaxespad=0., fontsize=10)
-        plt.tight_layout()
-        plt.savefig(self.roc_path)
-        plt.close('all')
+            label_name = f"AUC_"+f"{auc_score:.3f}"
+            plt.plot(fpr, tpr, label=label_name, linestyle='-')
+            plt.legend(loc='upper left',
+                    borderaxespad=0., fontsize=10)
+            plt.tight_layout()
+            plt.savefig(self.roc_path)
+            print(f"ROC plot saved at {self.roc_path} with AUROC {auc_score:.3f}")
+            plt.close('all')
         return res
     
-    def _parse_goscr_result(self, open_set_result):
+    def _parse_goscr_result(self, open_set_result, do_plot=True):
         # Discovered v.s. Hold-out open
         gt = np.array(open_set_result['ground_truth'])
         open_predicted = np.array(open_set_result['open_predicted'])
@@ -259,112 +257,97 @@ class NetworkOpen(EvalMachine):
 
         plt.tight_layout()
         plt.savefig(self.goscr_path)
+        print(f"GOSCR plot saved at {self.goscr_path} with AUGOSCR {auc_score:.3f}")
         plt.close('all')
         return res
 
     def _get_open_set_pred_func(self, trainer_machine):
         raise NotImplementedError()           
 
-# class OpenmaxOpen(NetworkOpen):
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     self.div_eu = ?
-    #     self.distance_func = ?
-    #     self.openmax_meta_learn = self.config.openmax_meta_learn
-    #     if self.openmax_meta_learn == None:
-    #         print("Using fixed OpenMax hyper")
-    #         if 'fixed' in self.config.weibull_tail_size:
-    #             self.weibull_tail_size = int(self.config.weibull_tail_size.split("_")[-1])
-    #         else:
-    #             raise NotImplementedError()
+class OpenmaxOpen(NetworkOpen):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.div_eu = 200 # EU distance will be divided by this number
+        self.distance_func = None
+        from distance import eu_distance, cos_distance
+        self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
+        self.weibull_tail_size = 20
+        self.alpha_ranks = [2, 4, 8, 16, 32, 64]
 
-    #         if 'fixed' in self.config.alpha_rank: 
-    #             self.alpha_rank = int(self.config.alpha_rank.split('_')[-1])
-    #         else:
-    #             raise NotImplementedError()
+        self.mav_features_selection = "none_correct_then_all"
+        self.weibull_distributions = None # The dictionary that contains all weibull related information
+        # self.training_features = None # A dictionary holding the features of all examples
 
-    #         self.osdn_eval_threshold = self.config.osdn_eval_threshold
-    #     else:
-    #         print("Using meta learning on pseudo-open class examples")
-    #         self.weibull_tail_size = None
-    #         self.alpha_rank = None
-    #         self.osdn_eval_threshold = None
-    #         self.pseudo_open_set_metric = self.config.pseudo_open_set_metric
-
-    #     self.mav_features_selection = self.config.mav_features_selection
-    #     self.weibull_distributions = None # The dictionary that contains all weibull related information
-    #     # self.training_features = None # A dictionary holding the features of all examples
-
-    #     def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
-#         ''' Meta learning on self.curr_full_train_set and self.pseudo_open_set_classes
-#             Pick and update the best openmax hyper including:
-#                 self.weibull_tail_size
-#                 self.alpha_rank
-#                 self.osdn_eval_threshold
-#         '''
-#         print("Perform cross validation using pseudo open class..")
-#         assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
-#         training_features = self._gather_correct_features(pseudo_open_model,
-#                                                           self.dataloaders['train'], # from super._train()
-#                                                           discovered_classes=pseudo_discovered_classes,
-#                                                           mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
+    def _meta_learning(self, pseudo_open_model, full_train_set, pseudo_discovered_classes):
+        ''' Meta learning on self.curr_full_train_set and self.pseudo_open_set_classes
+            Pick and update the best openmax hyper including:
+                self.weibull_tail_size
+                self.alpha_rank
+                self.osdn_eval_threshold
+        '''
+        print("Perform cross validation using pseudo open class..")
+        assert hasattr(self, 'dataloaders') # Should be updated after calling super._train()
+        training_features = self._gather_correct_features(pseudo_open_model,
+                                                          self.dataloaders['train'], # from super._train()
+                                                          discovered_classes=pseudo_discovered_classes,
+                                                          mav_features_selection=self.mav_features_selection) # A dict of (key: seen_class_indice, value: A list of feature vector that has correct prediction in this class)
         
-#         from global_setting import OPENMAX_META_LEARN
-#         meta_setting = OPENMAX_META_LEARN[self.openmax_meta_learn]
-#         list_w_tail_size = meta_setting['weibull_tail_size']
-#         list_alpha_rank = meta_setting['alpha_rank']
-#         list_threshold = meta_setting['osdn_eval_threshold']
+        from global_setting import OPENMAX_META_LEARN
+        meta_setting = OPENMAX_META_LEARN[self.openmax_meta_learn]
+        list_w_tail_size = meta_setting['weibull_tail_size']
+        list_alpha_rank = meta_setting['alpha_rank']
+        list_threshold = meta_setting['osdn_eval_threshold']
 
-#         curr_train_set = torch.utils.data.Subset(
-#                              self.train_instance.train_dataset,
-#                              full_train_set
-#                          )
-#         meta_learn_result = [] # A list of tuple: (acc : float, hyper_setting : dict)
-#         for tail_size in list_w_tail_size:
-#             for alpha_rank in list_alpha_rank:
-#                 for threshold in list_threshold:
-#                     self.weibull_tail_size = tail_size
-#                     self.alpha_rank = alpha_rank
-#                     self.osdn_eval_threshold = threshold
+        curr_train_set = torch.utils.data.Subset(
+                             self.train_instance.train_dataset,
+                             full_train_set
+                         )
+        meta_learn_result = [] # A list of tuple: (acc : float, hyper_setting : dict)
+        for tail_size in list_w_tail_size:
+            for alpha_rank in list_alpha_rank:
+                for threshold in list_threshold:
+                    self.weibull_tail_size = tail_size
+                    self.alpha_rank = alpha_rank
+                    self.osdn_eval_threshold = threshold
 
-#                     self.weibull_distributions = self._gather_weibull_distribution(
-#                                                      training_features,
-#                                                      distance_metric=self.distance_metric,
-#                                                      weibull_tail_size=self.weibull_tail_size
-#                                                  ) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
+                    self.weibull_distributions = self._gather_weibull_distribution(
+                                                     training_features,
+                                                     distance_metric=self.distance_metric,
+                                                     weibull_tail_size=self.weibull_tail_size
+                                                 ) # A dict of (key: seen_class_indice, value: A per channel, MAV + weibull model)
 
-#                     eval_result = self._eval(
-#                                       pseudo_open_model,
-#                                       curr_train_set,
-#                                       pseudo_discovered_classes,
-#                                       # verbose=False,
-#                                       verbose=True,
-#                                       training_features=training_features # If not None, can save time by not recomputing it
-#                                   )
-#                     if self.pseudo_open_set_metric == 'weighted':
-#                         acc = eval_result['overall_acc']
-#                     elif self.pseudo_open_set_metric == 'average':
-#                         acc = (eval_result['seen_closed_acc'] + eval_result['all_open_acc']) / 2.
-#                     elif self.pseudo_open_set_metric == '7_3':
-#                         acc = 0.7 * eval_result['seen_closed_acc'] + 0.3 * eval_result['all_open_acc']
-#                     else:
-#                         raise NotImplementedError()
-#                     meta_learn_result.append(
-#                         { 'acc':acc,
-#                           'tail':tail_size,
-#                           'alpha':alpha_rank,
-#                           'threshold':threshold
-#                         }
-#                     )
-#         meta_learn_result.sort(reverse=True, key=lambda x:x['acc'])
-#         print("Meta Learning result (sorted by acc):")
-#         print(meta_learn_result)
-#         best_res = meta_learn_result[0]
-#         self.weibull_tail_size = best_res['tail']
-#         self.alpha_rank = best_res['alpha']
-#         self.osdn_eval_threshold = best_res['threshold']
-#         print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
-
+                    eval_result = self._eval(
+                                      pseudo_open_model,
+                                      curr_train_set,
+                                      pseudo_discovered_classes,
+                                      # verbose=False,
+                                      verbose=True,
+                                      training_features=training_features # If not None, can save time by not recomputing it
+                                  )
+                    if self.pseudo_open_set_metric == 'weighted':
+                        acc = eval_result['overall_acc']
+                    elif self.pseudo_open_set_metric == 'average':
+                        acc = (eval_result['seen_closed_acc'] + eval_result['all_open_acc']) / 2.
+                    elif self.pseudo_open_set_metric == '7_3':
+                        acc = 0.7 * eval_result['seen_closed_acc'] + 0.3 * eval_result['all_open_acc']
+                    else:
+                        raise NotImplementedError()
+                    meta_learn_result.append(
+                        { 'acc':acc,
+                          'tail':tail_size,
+                          'alpha':alpha_rank,
+                          'threshold':threshold
+                        }
+                    )
+        meta_learn_result.sort(reverse=True, key=lambda x:x['acc'])
+        print("Meta Learning result (sorted by acc):")
+        print(meta_learn_result)
+        best_res = meta_learn_result[0]
+        self.weibull_tail_size = best_res['tail']
+        self.alpha_rank = best_res['alpha']
+        self.osdn_eval_threshold = best_res['threshold']
+        print(f"Updated to : W_TAIL={self.weibull_tail_size}, ALPHA={best_res['alpha']}, THRESHOLD={best_res['threshold']}")
+        
 #     def _gather_correct_features(self, model, train_loader, discovered_classes=set(), mav_features_selection='correct'):
 #         assert len(discovered_classes) > 0
 #         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
@@ -673,15 +656,14 @@ class SoftmaxOpen(NetworkOpen):
     def _get_open_set_pred_func(self, trainer_machine):
         def open_set_prediction(inputs):
             open_set_result_i = {}
-            outputs = trainer_machine.get_class_scores(inputs)
-            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_outputs = F.softmax(trainer_machine.get_prob_scores(inputs), dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
 
-            open_set_result_i['open_set_score']     += (-softmax_max).tolist()
-            open_set_result_i['closed_predicted']   += softmax_preds.tolist()
-            open_set_result_i['closed_argmax_prob'] += softmax_max.tolist()
-            open_set_result_i['open_predicted']     += softmax_preds.tolist()
-            open_set_result_i['open_argmax_prob']   += softmax_max.tolist()
+            open_set_result_i['open_set_score']     = (-softmax_max).tolist()
+            open_set_result_i['closed_predicted']   = softmax_preds.tolist()
+            open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
+            open_set_result_i['open_predicted']     = softmax_preds.tolist()
+            open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
             # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction
@@ -694,18 +676,17 @@ class EntropyOpen(NetworkOpen):
     def _get_open_set_pred_func(self, trainer_machine):
         def open_set_prediction(inputs):
             open_set_result_i = {}
-            outputs = trainer_machine.get_class_scores(inputs)
-            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_outputs = F.softmax(trainer_machine.get_prob_scores(inputs), dim=1)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
             neg_entropy = softmax_outputs*softmax_outputs.log()
             neg_entropy[softmax_outputs < 1e-5] = 0
             scores = neg_entropy.sum(dim=1) # negative entropy!
 
-            open_set_result_i['open_set_score']     += (-scores).tolist()
-            open_set_result_i['closed_predicted']   += softmax_preds.tolist()
-            open_set_result_i['closed_argmax_prob'] += softmax_max.tolist()
-            open_set_result_i['open_predicted']     += softmax_preds.tolist()
-            open_set_result_i['open_argmax_prob']   += softmax_max.tolist()
+            open_set_result_i['open_set_score']     = (-scores).tolist()
+            open_set_result_i['closed_predicted']   = softmax_preds.tolist()
+            open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
+            open_set_result_i['open_predicted']     = softmax_preds.tolist()
+            open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
             # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction

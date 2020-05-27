@@ -33,6 +33,8 @@ def get_trainer_machine(training_method, train_mode, trainset_info, trainer_conf
         trainer_machine_class = SoftmaxNetwork
     elif training_method == "cosine_network":
         trainer_machine_class = CosineNetwork
+    elif training_method == 'deep_metric':
+        trainer_machine_class = DeepMetric
     # elif training_method == 'sigmoid_network':
     #     trainer_machine_class = SigmoidNetwork
     else:
@@ -107,16 +109,16 @@ class TrainerMachine(object):
             torch.save(self.closed_set_result, result_path)
         return self.closed_set_result['acc']
     
-    def get_class_scores(self, inputs):
-        """Returns the class scores for each inputs
+    def get_prob_scores(self, inputs):
+        """Returns the prob scores for each inputs
             Returns:
-                class_scores (B x NUM_OF_DISCOVERED_CLASSES)
+                prob_scores (B x NUM_OF_DISCOVERED_CLASSES)
             Args:
                 inputs (B x 3 x ? x ?)
         """
         self.classifier.eval()
         self.backbone.eval()
-        return self.classifier(self.backbone(inputs))
+        return torch.nn.functional.softmax(self.classifier(self.backbone(inputs)),dim=1)
 
     def get_features(self, inputs):
         """Returns the features for each inputs
@@ -169,7 +171,6 @@ class TrainerMachine(object):
                                                   
     # def _get_target_unmapping_func_for_list(self, discovered_classes):
     #     return get_target_unmapping_func_for_list(self.trainset_info.classes,
-                                                
 
 class Network(TrainerMachine):
     def __init__(self, *args, **kwargs):
@@ -348,6 +349,11 @@ class Network(TrainerMachine):
                     )
         return scheduler
 
+class DeepMetric(Network): # Xiuyu : You may also inherit the Network class
+    def __init__(self, *args, **kwargs):
+        """A deep metric network (with last relu layer disabled) class
+        """
+        super(SoftmaxNetwork, self).__init__(*args, **kwargs)
 
 class SoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):

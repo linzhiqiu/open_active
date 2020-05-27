@@ -1,3 +1,8 @@
+# For xiuyu to train on CUB200
+    # Regular setting and 30000 budget (all training samples for the 80 classes)
+        python train.py CUB200 --training_method deep_metric --init_mode regular --query_method softmax --budget 3000;
+
+
 # CUB200
 python train.py CUB200 --training_method softmax_network --init_mode regular --query_method entropy --budget 3000;
 

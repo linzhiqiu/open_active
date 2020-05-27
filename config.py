@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Act
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", "CIFAR100"],
+                          choices=["CIFAR10", "CIFAR100", 'CUB200'],
                           help='Choice of dataset + preprocessing method.')
 dataset_args.add_argument('--download_path', 
                           default="/scratch", metavar='PATH',
@@ -48,6 +48,7 @@ trainer_args.add_argument('--training_method',
                           choices=['softmax_network',
                                    'sigmoid_network', # Use 1 v.s. rest sigmoid network instead of softmax.
                                    'cosine_network', # Use cosine similarity as final layer in place of fc layer
+                                   'deep_metric',
                           ],
                           help='The training method determines how to train/finetune using labeled samples.'
                           )

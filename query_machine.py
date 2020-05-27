@@ -181,8 +181,7 @@ class EntropyQuery(QueryMachine):
         with torch.no_grad():
             for batch, data in enumerate(dataloader):
                 inputs, _ = data
-                class_scores = trainer_machine.get_class_scores(inputs.to(self.device))
-                prob_scores = F.softmax(class_scores, dim=1)
+                prob_scores = trainer_machine.get_prob_scores(inputs.to(self.device))
                 entropy = -(prob_scores*prob_scores.log()).sum(1)
                 favorable_scores = torch.cat((favorable_scores, entropy))
         sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
@@ -199,8 +198,7 @@ class SoftmaxQuery(QueryMachine):
         with torch.no_grad():
             for batch, data in enumerate(dataloader):
                 inputs, _ = data
-                class_scores = trainer_machine.get_class_scores(inputs.to(self.device))
-                prob_scores = F.softmax(class_scores, dim=1)
+                prob_scores = trainer_machine.get_prob_scores(inputs.to(self.device))
                 prob_max, _ = torch.max(prob_scores, dim=1)
                 favorable_scores = torch.cat((favorable_scores, -prob_max))
         sorted_favorable_scores, rankings = torch.sort(favorable_scores, descending=True)
