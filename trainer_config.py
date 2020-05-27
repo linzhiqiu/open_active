@@ -128,11 +128,13 @@ TRAIN_CONFIG_DICT = {
             'default' : CIFAR100_DEFAULT_CONFIG,
             'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
+            'fix_feature_extractor' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'cosine_network' : {
             'default' : CIFAR100_DEFAULT_CONFIG,
             'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
+            'fix_feature_extractor' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'sigmoid_network' : {
             'default' : CIFAR100_DEFAULT_CONFIG,

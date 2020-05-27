@@ -90,6 +90,9 @@ class TrainerMachine(object):
             if self.train_mode == "no_finetune":
                 print("Use a new backbone network without finetuning.")
                 self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
+            elif self.train_mode == 'fix_feature_extractor':
+                print("Fix feature extractor..")
+                self.backbone.requires_grad = False
             self.ckpt_dict = self._train_helper(self.finetune_config,
                                                 discovered_samples,
                                                 discovered_classes,

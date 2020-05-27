@@ -176,7 +176,7 @@ disc_args.add_argument('--div_eu',
 
 training_arg = add_argument_group('Training and Finetuning Param.')
 training_arg.add_argument('--train_mode', type=str,
-                          choices=['default', 'no_finetune', 'default_lr01_200eps'], default='default',
+                          choices=['default', 'no_finetune', 'default_lr01_200eps', 'fix_feature_extractor'], default='default',
                           help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')

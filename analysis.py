@@ -662,14 +662,12 @@ class AnalysisMachine(object):
         self.analysis_save_dir = analysis_save_dir
         self.analysis_trainer = analysis_trainer
         self.budget_mode = budget_mode
-
+        self.train_mode = train_mode
         self.save_dir = self.get_save_dir()
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         else:
             input(f"Already exists: {self.save_dir} . Overwrite? >>")
-
-        self.train_mode = train_mode
 
         self.script_dir = self.get_script_dir()
         self.plot_dir = self.get_plot_dir()
@@ -688,10 +686,12 @@ class AnalysisMachine(object):
         
         self.training_method_list = training_method_list
         self.query_method_list = query_method_list
-        self.open_set_method_list = open_set_method_list
+        # self.open_set_method_list = open_set_method_list
+        self.open_set_method = 'softmax'
 
     def get_save_dir(self):
         return os.path.join(self.analysis_save_dir,
+                            self.train_mode,
                             self.analysis_trainer,
                             self.budget_mode)
     
@@ -733,7 +733,8 @@ class AnalysisMachine(object):
                     if not os.path.exists(b_dir): os.makedirs(b_dir)
                     for training_method in self.training_method_list:
                         for query_method in self.query_method_list:
-                            for open_set_method in self.open_set_method_list:
+                            # for open_set_method in self.open_set_method_list:
+                            if True:
                                 paths_dict = prepare_save_dir(self.dataset_save_path,
                                                             self.data_download_path,
                                                             self.trainer_save_dir,
@@ -744,13 +745,13 @@ class AnalysisMachine(object):
                                                             self.train_mode,
                                                             query_method,
                                                             b,
-                                                            open_set_method,
+                                                            self.open_set_method,
                                                             makedir=False)
                                 # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
                                     # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
                                 
                                 # For all ckpts
-                                for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
+                                for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
                                     if not os.path.exists(paths_dict[k]):
                                 
                                 # For only test ready ckpts
@@ -764,7 +765,7 @@ class AnalysisMachine(object):
                                                                             training_method,
                                                                             query_method,
                                                                             b,
-                                                                            open_set_method,
+                                                                            self.open_set_method,
                                                                             silent=self.silent_mode)
                                         idx = len(undone_exp_b)
                                         b_err_i = os.path.join(b_dir, f"{idx}.err")
@@ -830,16 +831,20 @@ class AnalysisMachine(object):
                                                         self.train_mode,
                                                         query_method,
                                                         b,
-                                                        'softmax',
+                                                        self.open_set_method,
                                                         makedir=False)
                         if query_method in finished_exp[init_mode][b][training_method]:
                             import pdb; pdb.set_trace()
-                        if os.path.exists(paths_dict['test_result_path']):
+                        if os.path.exists(paths_dict['test_result_path']) and os.path.exists(paths_dict['open_result_path']):
                             test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                             finished_exp[init_mode][b][training_method][query_method] = test_result
+                            open_result = torch.load(paths_dict['open_result_path'], map_location=torch.device('cpu'))
+                            finished_exp[init_mode][b][training_method][query_method]['auroc'] = open_result['roc']['auc_score']
+                            finished_exp[init_mode][b][training_method][query_method]['augoscr'] = open_result['goscr']['auc_score']
                             finished += 1
                         else:
                             unfinished += 1
+
         total = finished+unfinished
         print(f"{finished}/{total} experiments are finished.")
         print(f"Plot will be draw at {self.plot_dir}")
@@ -872,9 +877,11 @@ class AnalysisMachine(object):
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
 
-        for item in ['acc', 'seen']:
+        for item in ['acc', 'seen', 'auroc', 'augoscr']:
             if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
             if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
+            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
+            if item == 'seen': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
             
 
             if plot_mode == 'compare_active':

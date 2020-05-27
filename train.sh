@@ -6,6 +6,32 @@
 # CUB200
 python train.py CUB200 --training_method softmax_network --init_mode regular --query_method entropy --budget 3000;
 
+
+# CIFAR 100 Fix feature extractor
+    # softmax training method
+        # random query
+            # Regular setup
+                # 300: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 300;
+                # 1500: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 1500;
+                # 3000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 3000;
+                # 6000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 6000;
+                # 15000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 15000;
+                # 30000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode regular --query_method random --budget 30000;
+            # Fewer samples
+                # 8300: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 8300;
+                # 9500: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 9500;
+                # 11000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 11000;
+                # 14000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 14000;
+                # 23000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 23000;
+                # 38000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_sample --query_method random --budget 38000;
+            # Fewer classes
+                # 8300: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 8300;
+                # 9500: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 9500;
+                # 11000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 11000;
+                # 14000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 14000;
+                # 23000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 23000;
+                # 38000: python train.py CIFAR100 --train_mode fix_feature_extractor --training_method softmax_network --init_mode fewer_class --query_method random --budget 38000;
+
 #Coreset exp
         # No random seed
             python train.py CIFAR100 --training_method softmax_network --init_mode regular --query_method coreset --budget 3000;
