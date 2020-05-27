@@ -559,7 +559,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         if max_round != None and int(round_idx) > max_round:
             break
         output_folder_round = os.path.join(output_folder_interval, round_idx)
-        if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
+        if not os.path.exists(output_folder_round): os.makedirs(output_folder_round, mode=0o777)
         if int(round_idx) == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx), printed=printed)
         else:

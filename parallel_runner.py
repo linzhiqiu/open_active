@@ -10,7 +10,7 @@ if __name__ == "__main__":
     
     
     script_dir = args.script_file[:-3]
-    if not os.path.exists(script_dir) : os.makedirs(script_dir)
+    if not os.path.exists(script_dir) : os.makedirs(script_dir, mode=0o777)
     exps = list(map(lambda x : x.strip(), open(args.script_file, "r").readlines()))
     each_file_lines = int(len(exps) / args.parallel_max)
     sub_script_files = [exps[i:i + each_file_lines] for i in range(0, len(exps), each_file_lines)]
