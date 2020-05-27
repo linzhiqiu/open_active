@@ -328,7 +328,7 @@ class Network(TrainerMachine):
                            "momentum" : cfg.momentum,
                            "weight_decay" : float(cfg.weight_decay)}
         else: raise NotImplementedError()
-            
+        import pdb; pdb.set_trace()    
         optimizer = optim_module(
                         [
                             {'params': filter(lambda x : x.requires_grad, backbone.parameters())},
