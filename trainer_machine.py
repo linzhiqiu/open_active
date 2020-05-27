@@ -92,7 +92,8 @@ class TrainerMachine(object):
                 self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
             elif self.train_mode == 'fix_feature_extractor':
                 print("Fix feature extractor..")
-                self.backbone.requires_grad = False
+                for p in self.backbone.parameters():
+                    p.requires_grad = False
             self.ckpt_dict = self._train_helper(self.finetune_config,
                                                 discovered_samples,
                                                 discovered_classes,
@@ -328,7 +329,6 @@ class Network(TrainerMachine):
                            "momentum" : cfg.momentum,
                            "weight_decay" : float(cfg.weight_decay)}
         else: raise NotImplementedError()
-        import pdb; pdb.set_trace()    
         optimizer = optim_module(
                         [
                             {'params': filter(lambda x : x.requires_grad, backbone.parameters())},

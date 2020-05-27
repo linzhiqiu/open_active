@@ -45,7 +45,7 @@ class FixedRepresentationDataset(torch.utils.data.TensorDataset):
 
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
-        os.makedirs(dir_name)
+        os.makedirs(dir_name, mode=0o777)
     else:
         print(f"{dir_name} already exists.")
 
@@ -210,7 +210,7 @@ def get_dataset_dir(save_path, data, makedir=True):
     dataset_dir = os.path.join(save_path, data)
     if not os.path.exists(dataset_dir) and makedir:
         print(f"{dataset_dir} does not exists. Press anything to create it >> ")
-        os.makedirs(dataset_dir)
+        os.makedirs(dataset_dir, mode=0o777)
     return dataset_dir
 
 def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
@@ -220,7 +220,7 @@ def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
                         )
     if not os.path.exists(dataset_info_dir):
         print(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
-        os.makedirs(dataset_info_dir)
+        os.makedirs(dataset_info_dir, mode=0o777)
     dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
     return dataset_info_path
 
@@ -233,7 +233,7 @@ def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, t
     if not os.path.exists(save_dir) and makedir:
         print("Making a new directory to save checkpoints after train/query/finetune step.")
         print(f"Location {save_dir}")
-        os.makedirs(save_dir)
+        os.makedirs(save_dir, mode=0o777)
     return save_dir
 
 def get_trainset_info_path(save_path, data):
@@ -295,7 +295,7 @@ def prepare_save_dir(save_path,
         folder_path = paths_dict[folder]
         if not os.path.exists(folder_path) and makedir:
             print(f"Make a new folder at: {folder_path}")
-            os.makedirs(folder_path)
+            os.makedirs(folder_path, mode=0o777)
     
     paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['trainer_save_dir'],'ckpt.pt')
     paths_dict['query_result_path']   = os.path.join(paths_dict['finetuned_dir']   ,'query_result.pt')
