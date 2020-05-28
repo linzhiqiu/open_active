@@ -270,48 +270,51 @@ class NetworkOpen(EvalMachine):
 class OpenmaxOpen(NetworkOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.weibull_tail_sizes = [20, 10]
-        self.alpha_ranks = [2, 5, 10, 20, 80]
-        self.div_eus = [200, 500, 1000] # EU distance will be divided by this number
+        # self.weibull_tail_sizes = [20]
+        # self.alpha_ranks = [20, 80]
+        # self.div_eus = [1000] # EU distance will be divided by this number
+        self.weibull_tail_size = 20
+        self.alpha_rank = 10
+        self.div_eu = 1000.
         self.mav_features_selection = "none_correct_then_all"
 
     def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
         train_loader = self.trainer_machine.get_trainloader(discovered_samples, shuffle=False)
         self.num_discovered_classes = len(discovered_classes)
 
-        all_open_set_results = []
-        for weibull_tail_size in self.weibull_tail_sizes:
-            for alpha_rank in self.alpha_ranks:
-                for div_eu in self.div_eus:
-                    self.div_eu = div_eu
-                    self.alpha_rank = alpha_rank
-                    self.weibull_tail_size = weibull_tail_size
-                    self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
-                    features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
-                    self.weibull_distributions = self._gather_weibull_distribution(features_dict, div_eu)
-                    open_set_result_i = super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=False)
-                    roc_i = open_set_result_i['roc']['auc_score']
-                    print(f"AUROC {roc_i}, div_eu {div_eu}, alpha {alpha_rank}, tail {weibull_tail_size}")
-                    d = {'roc' : roc_i,
-                         'div_eu' : div_eu,
-                         'alpha_rank' : alpha_rank,
-                         'weibull_tail_size': weibull_tail_size}
-                    all_open_set_results.append(d)
-        all_open_set_results.sort(key=lambda x: x['roc'], reverse=True)
-        for res in all_open_set_results:
-            tail = res['weibull_tail_size']
-            score = res['roc']
-            alpha_rank = res['alpha_rank']
-            div_eu = res['div_eu']
-            print(f"AUROC {score}, div_eu {div_eu}, alpha {alpha_rank}, tail {tail}")
-        res = all_open_set_results[0]
-        self.weibull_tail_size = res['weibull_tail_size']
-        self.alpha_rank = res['alpha_rank']
-        self.div_eu = res['div_eu']
+        # all_open_set_results = []
+        # for weibull_tail_size in self.weibull_tail_sizes:
+        #     for alpha_rank in self.alpha_ranks:
+        #         for div_eu in self.div_eus:
+        #             self.div_eu = div_eu
+        #             self.alpha_rank = alpha_rank
+        #             self.weibull_tail_size = weibull_tail_size
+        #             self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
+        #             features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
+        #             self.weibull_distributions = self._gather_weibull_distribution(features_dict, div_eu)
+        #             open_set_result_i = super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=False)
+        #             roc_i = open_set_result_i['roc']['auc_score']
+        #             print(f"AUROC {roc_i}, div_eu {div_eu}, alpha {alpha_rank}, tail {weibull_tail_size}")
+        #             d = {'roc' : roc_i,
+        #                  'div_eu' : div_eu,
+        #                  'alpha_rank' : alpha_rank,
+        #                  'weibull_tail_size': weibull_tail_size}
+        #             all_open_set_results.append(d)
+        # all_open_set_results.sort(key=lambda x: x['roc'], reverse=True)
+        # for res in all_open_set_results:
+        #     tail = res['weibull_tail_size']
+        #     score = res['roc']
+        #     alpha_rank = res['alpha_rank']
+        #     div_eu = res['div_eu']
+        #     print(f"AUROC {score}, div_eu {div_eu}, alpha {alpha_rank}, tail {tail}")
+        # res = all_open_set_results[0]
+        # self.weibull_tail_size = res['weibull_tail_size']
+        # self.alpha_rank = res['alpha_rank']
+        # self.div_eu = res['div_eu']
         self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
         features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
-        self.weibull_distributions = self._gather_weibull_distribution(features_dict, div_eu)
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=False)
+        self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
     
 
     def _gather_correct_features(self, train_loader, discovered_classes=set(), mav_features_selection='correct', verbose=False):
@@ -548,7 +551,7 @@ class SoftmaxOpen(NetworkOpen):
     def _get_open_set_pred_func(self):
         def open_set_prediction(inputs):
             open_set_result_i = {}
-            softmax_outputs = F.softmax(self.trainer_machine.get_prob_scores(inputs), dim=1)
+            softmax_outputs = self.trainer_machine.get_prob_scores(inputs)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
 
             open_set_result_i['open_set_score']     = (-softmax_max).tolist()
@@ -568,7 +571,7 @@ class EntropyOpen(NetworkOpen):
     def _get_open_set_pred_func(self):
         def open_set_prediction(inputs):
             open_set_result_i = {}
-            softmax_outputs = F.softmax(self.trainer_machine.get_prob_scores(inputs), dim=1)
+            softmax_outputs = self.trainer_machine.get_prob_scores(inputs)
             softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
             neg_entropy = softmax_outputs*softmax_outputs.log()
             neg_entropy[softmax_outputs < 1e-5] = 0
