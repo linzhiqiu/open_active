@@ -131,60 +131,61 @@
     # Default
         # Softmax
             # Regular
-                # 300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 300;
-                # 15000: python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 15000;
-                # 30000: python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 30000;
+                # 300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 300 --open_set_method openmax;
+                    # 
+                # 15000: python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 15000 --open_set_method openmax;
+                # 30000: python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode regular --query_method random --budget 30000 --open_set_method openmax;
             # Few_class
-                # 8300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_class --query_method random --budget 38000 --open_set_method openmax;
             # Few_sample
-                # 8300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default --training_method softmax_network --init_mode fewer_sample --query_method random --budget 38000 --open_set_method openmax;
         # Cosine
             # Softmax
             # Regular
-                # 300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 300;
-                # 15000: python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 15000;
-                # 30000: python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 30000;
+                # 300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 300 --open_set_method openmax;
+                # 15000: python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 15000 --open_set_method openmax;
+                # 30000: python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode regular --query_method random --budget 30000 --open_set_method openmax;
             # Few_class
-                # 8300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_class --query_method random --budget 38000 --open_set_method openmax;
             # Few_sample
-                # 8300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default --training_method cosine_network --init_mode fewer_sample --query_method random --budget 38000 --open_set_method openmax;
     # Default retrain 200 epochs
         # Softmax
             # Softmax
             # Regular
-                # 300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 300;
-                # 15000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 15000;
-                # 30000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 30000;
+                # 300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 300 --open_set_method openmax;
+                # 15000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 15000 --open_set_method openmax;
+                # 30000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode regular --query_method random --budget 30000 --open_set_method openmax;
             # Few_class
-                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_class --query_method random --budget 38000 --open_set_method openmax;
             # Few_sample
-                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method softmax_network --init_mode fewer_sample --query_method random --budget 38000 --open_set_method openmax;
         # Cosine
             # Softmax
             # Regular
-                # 300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 300;
-                # 15000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 15000;
-                # 30000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 30000;
+                # 300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 300 --open_set_method openmax;
+                # 15000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 15000 --open_set_method openmax;
+                # 30000: python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode regular --query_method random --budget 30000 --open_set_method openmax;
             # Few_class
-                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_class --query_method random --budget 38000 --open_set_method openmax;
             # Few_sample
-                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 8300;
-                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 23000;
-                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 38000;
+                # 8300 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 8300 --open_set_method openmax;
+                # 23000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 23000 --open_set_method openmax;
+                # 38000 : python train.py CIFAR100 --train_mode default_lr01_200eps --training_method cosine_network --init_mode fewer_sample --query_method random --budget 38000 --open_set_method openmax;
     
     # Fix Extractor
         # Softmax

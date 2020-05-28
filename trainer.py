@@ -90,11 +90,10 @@ class Trainer(object):
                                                     result_path=self.test_result_path,
                                                     verbose=verbose)
 
-    def eval_open_set(self, discovered_sample, discovered_classes, test_dataset, verbose=False):
-        self.eval_machine.eval_open_set(discovered_sample,
+    def eval_open_set(self, discovered_samples, discovered_classes, test_dataset, verbose=False):
+        self.eval_machine.eval_open_set(discovered_samples,
                                         discovered_classes,
                                         test_dataset,
-                                        self.trainer_machine,
                                         result_path=self.open_result_path,
                                         verbose=verbose)
         
