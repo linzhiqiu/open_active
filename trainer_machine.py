@@ -14,6 +14,7 @@ import os
 import models
 from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
+from utils import IndexDataset
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
 
 from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
@@ -368,6 +369,17 @@ class DeepMetric(Network): # Xiuyu : You may also inherit the Network class
         """A deep metric network (with last relu layer disabled) class
         """
         super(DeepMetric, self).__init__(*args, **kwargs)
+    
+    def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
+        train_dataset_with_index = IndexDataset(self.trainset_info.train_dataset)
+        train_loader_with_index = get_subset_loader(train_dataset_with_index,
+                                                    discovered_samples,
+                                                    None, # No target transform
+                                                    batch_size=self.batch,
+                                                    shuffle=shuffle,
+                                                    workers=self.workers)
+        raise NotImplementedError()
+
 
 class SoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):

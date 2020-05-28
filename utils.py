@@ -43,6 +43,16 @@ class FixedRepresentationDataset(torch.utils.data.TensorDataset):
     def __len__(self):
         return self.data_tensor.size(0)
 
+class IndexDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __getitem__(self, idx):
+        return self.dataset[idx][0], self.dataset[idx][1], idx
+
+    def __len__(self):
+        return len(self.dataset)
+
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, mode=0o777)
