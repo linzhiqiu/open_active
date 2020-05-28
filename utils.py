@@ -160,6 +160,10 @@ def get_target_mapping_func(classes,
                for idx in classes}
     return lambda idx : mapping[idx]
 
+def get_index_mapping_func(discovered_samples):
+    mapping = {idx : i for i, idx in enumerate(discovered_samples)}
+    return lambda idx : mapping[idx]
+
 def get_target_mapping_func_for_tensor(classes,
                                        discovered_classes,
                                        open_classes,

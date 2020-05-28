@@ -13,9 +13,10 @@ import os
 
 import models
 from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
+from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list, get_index_mapping_func
 from utils import IndexDataset
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
+from deep_metric import *
 
 from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 
@@ -35,7 +36,7 @@ def get_trainer_machine(training_method, train_mode, trainset_info, trainer_conf
     elif training_method == "cosine_network":
         trainer_machine_class = CosineNetwork
     elif training_method == 'deep_metric':
-        trainer_machine_class = DeepMetric
+        trainer_machine_class = DeepMetricNetwork
     # elif training_method == 'sigmoid_network':
     #     trainer_machine_class = SigmoidNetwork
     else:
@@ -184,6 +185,9 @@ class TrainerMachine(object):
                                                   discovered_classes,
                                                   self.trainset_info.open_classes,
                                                   device=self.device)
+
+    def _get_index_mapp_func(self, discovered_samples):
+        return get_index_mapping_func(discovered_samples)
                                                   
     # def _get_target_unmapping_func_for_list(self, discovered_classes):
     #     return get_target_unmapping_func_for_list(self.trainset_info.classes,
@@ -364,21 +368,150 @@ class Network(TrainerMachine):
                     )
         return scheduler
 
-class DeepMetric(Network): # Xiuyu : You may also inherit the Network class
+class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network class
     def __init__(self, *args, **kwargs):
         """A deep metric network (with last relu layer disabled) class
         """
-        super(DeepMetric, self).__init__(*args, **kwargs)
+        super(DeepMetricNetwork, self).__init__(*args, **kwargs)
+
+    def get_prob_scores(self, inputs):
+        return self.get_class_scores(inputs)
+
+    def _get_optimizer(self, cfg, backbone, classifier):
+        """ Get optimizer of both backbone and classifier
+        """
+
+        optim_module = torch.optim.Adam
+        optim_param = {"lr" : cfg.lr, 
+                       "weight_decay" : float(cfg.weight_decay)}
+        optimizer = optim_module(
+                    [
+                        {'params': filter(lambda x : x.requires_grad, backbone.parameters())},
+                        {'params': filter(lambda x : x.requires_grad, classifier.parameters()), 'lr': cfg.lr}
+                    ],
+                    **optim_param
+                )
+        
+        return optimizer
     
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
         train_dataset_with_index = IndexDataset(self.trainset_info.train_dataset)
+        update_loader = get_subset_loader(train_dataset_with_index,
+                                          discovered_samples,
+                                          None, # No target transform
+                                          batch_size=self.batch,
+                                          shuffle=False,
+                                          workers=self.workers)
         train_loader_with_index = get_subset_loader(train_dataset_with_index,
                                                     discovered_samples,
                                                     None, # No target transform
                                                     batch_size=self.batch,
-                                                    shuffle=shuffle,
+                                                    shuffle=True,
                                                     workers=self.workers)
-        raise NotImplementedError()
+        self.num_train = len(discovered_samples)        
+
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        index_mapping_func = self._get_index_mapp_func(discovered_samples)
+
+        # Create tensor to store kernel centres
+        self.centres = torch.zeros(self.num_train, self.feature_dim).type(torch.FloatTensor).to(self.device)
+        print("Size of centres is {0}".format(self.centres.size()))
+
+        # Create tensor to store labels of centres
+        targets = [target_mapping_func(self.trainset_info.train_dataset.targets[i]) for i in discovered_samples]
+        # print(f'targets {targets}')
+        self.centre_labels = torch.LongTensor(targets).to(self.device)
+
+        self.classifier = self._get_classifier(discovered_classes).to(self.device)
+        
+        optimizer = self._get_optimizer(cfg, self.backbone, self.classifier)
+        scheduler = self._get_scheduler(cfg, optimizer)
+
+        criterion = nn.NLLLoss()
+
+        avg_loss_per_epoch = []
+        avg_acc_per_epoch = []
+        with SetPrintMode(hidden=not verbose):
+            for epoch in range(0, cfg.epochs):
+                running_loss = 0.0
+                running_corrects = 0.
+                count = 0
+
+                # Update stored kernel centres
+                if (epoch % 5) == 0:
+
+                    print("Updating kernel centres...")
+                    self.centres = update_centres(self.backbone, self.centres, update_loader, self.batch, self.device)
+                    print("Finding training set neighbours...")
+                    self.centres = self.centres.cpu()
+                    neighbours_tr = find_neighbours(200, self.centres)
+                    self.centres = self.centres.to(self.device)
+                    self.classifier.centres = self.centres
+                    print("Finished update!")
+
+                self.backbone.train()
+                self.classifier.train()
+
+                if verbose:
+                    pbar = tqdm(train_loader_with_index, ncols=80)
+                else:
+                    pbar = train_loader_with_index
+
+                for batch, data in enumerate(pbar):
+                    inputs, real_labels, indices = data
+                    labels = target_mapping_func(real_labels)
+                    indices = torch.tensor([index_mapping_func(indice.item()) for indice in indices])
+                    # print(f'indices {indices}')
+                    count += inputs.size(0)
+                    
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
+                    indices = indices.to(self.device)
+
+                    optimizer.zero_grad()
+
+                    features = self.backbone(inputs)
+                    outputs = self.classifier(features, neighbours_tr[indices, :])
+                    _, preds = torch.max(outputs, 1)
+
+                    log_probability = outputs
+
+                    loss = criterion(log_probability, labels)
+
+                    loss.backward()
+                    optimizer.step()
+
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
+                    if verbose:
+                        pbar.set_postfix(loss=float(running_loss)/count, 
+                                         acc=float(running_corrects)/count,
+                                         epoch=epoch)
+                
+                avg_loss = float(running_loss)/count
+                avg_acc = float(running_corrects)/count
+                avg_loss_per_epoch.append(avg_loss)
+                avg_acc_per_epoch.append(avg_acc)
+                scheduler.step()
+            print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
+        ckpt_dict = {
+            'backbone' : self.backbone.state_dict(),
+            'classifier' : self.classifier.state_dict(),
+            'optimizer' : optimizer.state_dict(),
+            'discovered_samples' : discovered_samples,
+            'discovered_classes' : discovered_classes,
+            'loss_curve' : avg_loss_per_epoch,
+            'acc_curve' : avg_acc_per_epoch
+        }
+        return ckpt_dict
+
+    def _get_classifier(self, discovered_classes):
+        # Create Gaussian kernel classifier
+        kernel_classifier = GaussianKernels(
+            len(discovered_classes), 200, self.num_train, 10, self.centres, self.centre_labels)
+        kernel_classifier = kernel_classifier.to(self.device)
+        return kernel_classifier
 
 
 class SoftmaxNetwork(Network):
