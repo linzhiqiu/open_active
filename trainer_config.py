@@ -84,6 +84,8 @@ CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
         'epochs' : 200,
         'decay_epochs': 60,
         'decay_by' : 0.1,
+        'num_neighbours': 200,
+        'sigma': 10,
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -102,6 +104,8 @@ CUB200_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
     'batch' : 20,
     'workers' : 4,
     'device' : 'cuda',
+    'num_neighbours': 200,
+    'sigma': 10,
     'train' : TrainConfig({
         'optim' : 'adam',
         'weight_decay' : 0.0005,
@@ -115,7 +119,7 @@ CUB200_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
         'optim' : 'adam',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
-        'lr' : 0.01,
+        'lr' : 0.00001,
         'epochs' : 280,
         'decay_epochs': 120,
         'decay_by' : 0.1,

@@ -373,6 +373,8 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         """A deep metric network (with last relu layer disabled) class
         """
         super(DeepMetricNetwork, self).__init__(*args, **kwargs)
+        self.num_neighbours = self.trainer_config['num_neighbours']
+        self.sigma = self.trainer_config['sigma']
 
     def get_prob_scores(self, inputs):
         return self.get_class_scores(inputs)
@@ -381,9 +383,17 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         """ Get optimizer of both backbone and classifier
         """
 
-        optim_module = torch.optim.Adam
-        optim_param = {"lr" : cfg.lr, 
-                       "weight_decay" : float(cfg.weight_decay)}
+        if cfg.optim == 'sgd':
+            optim_module = torch.optim.SGD
+            optim_param = {"lr" : cfg.lr, 
+                           "momentum" : cfg.momentum,
+                           "weight_decay" : float(cfg.weight_decay)}
+        elif cfg.optim == 'adam':
+            optim_module = torch.optim.Adam
+            optim_param = {"lr" : cfg.lr, 
+                           "weight_decay" : float(cfg.weight_decay)}
+        else: raise NotImplementedError()
+
         optimizer = optim_module(
                     [
                         {'params': filter(lambda x : x.requires_grad, backbone.parameters())},
@@ -444,7 +454,7 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
                     self.centres = update_centres(self.backbone, self.centres, update_loader, self.batch, self.device)
                     print("Finding training set neighbours...")
                     self.centres = self.centres.cpu()
-                    neighbours_tr = find_neighbours(200, self.centres)
+                    neighbours_tr = find_neighbours(self.num_neighbours, self.centres)
                     self.centres = self.centres.to(self.device)
                     self.classifier.centres = self.centres
                     print("Finished update!")
@@ -509,7 +519,7 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
     def _get_classifier(self, discovered_classes):
         # Create Gaussian kernel classifier
         kernel_classifier = GaussianKernels(
-            len(discovered_classes), 200, self.num_train, 10, self.centres, self.centre_labels)
+            len(discovered_classes), self.num_neighbours, self.num_train, self.sigma, self.centres, self.centre_labels)
         kernel_classifier = kernel_classifier.to(self.device)
         return kernel_classifier
 
