@@ -170,12 +170,12 @@ class TrainerMachine(object):
             raise NotImplementedError()
         return backbone
 
-    def get_trainloader(self, discovered_samples):
+    def get_trainloader(self, discovered_samples, shuffle=True):
         return get_subset_loader(self.trainset_info.train_dataset,
                                  discovered_samples,
                                  None, # No target transform
                                  batch_size=self.batch,
-                                 shuffle=True,
+                                 shuffle=shuffle,
                                  workers=self.workers)
         
     def _get_target_mapp_func(self, discovered_classes):

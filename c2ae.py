@@ -107,7 +107,7 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                     if save_output:
                         save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}_arch_{arch}_trainineval_{train_in_eval_mode}"
                         if not os.path.exists(save_dir):
-                            os.makedirs(save_dir)
+                            os.makedirs(save_dir, mode=0o777)
                         
                         if epoch==max_epochs-1:
                             # Save the histogram 
@@ -607,7 +607,7 @@ class C2AE(Network):
         
         if not os.path.exists(save_dir):
             model.eval()
-            os.makedirs(save_dir)
+            os.makedirs(save_dir, mode=0o777)
             torch.save({
                 'model_state_dict': model.state_dict(),
                 # 'optimizer_state_dict': optimizer.state_dict(),

@@ -560,7 +560,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         if max_round != None and int(round_idx) > max_round:
             break
         output_folder_round = os.path.join(output_folder_interval, round_idx)
-        if not os.path.exists(output_folder_round): os.makedirs(output_folder_round)
+        if not os.path.exists(output_folder_round): os.makedirs(output_folder_round, mode=0o777)
         if int(round_idx) == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx), printed=printed)
         else:
@@ -665,7 +665,7 @@ class AnalysisMachine(object):
         self.train_mode = train_mode
         self.save_dir = self.get_save_dir()
         if not os.path.exists(self.save_dir):
-            os.makedirs(self.save_dir)
+            os.makedirs(self.save_dir, mode=0o777)
         else:
             input(f"Already exists: {self.save_dir} . Overwrite? >>")
 
@@ -730,7 +730,7 @@ class AnalysisMachine(object):
                 for b in b_list:
                     undone_exp_b = []
                     b_dir = os.path.join(self.script_dir, init_mode, f"budget_{b}")
-                    if not os.path.exists(b_dir): os.makedirs(b_dir)
+                    if not os.path.exists(b_dir): os.makedirs(b_dir, mode=0o777)
                     for training_method in self.training_method_list:
                         for query_method in self.query_method_list:
                             # for open_set_method in self.open_set_method_list:
@@ -787,7 +787,7 @@ class AnalysisMachine(object):
                 if os.path.exists(script_file):
                     input(f"{script_file} already exists. Overwrite >> ")
                 if not os.path.exists(b_dir):
-                    os.makedirs(b_dir)
+                    os.makedirs(b_dir, mode=0o777)
                     print(f"Details will be saved at {script_dir}")
                 with open(script_file, "w+") as file:
                     for i, line in enumerate(undone_exp):
@@ -861,7 +861,7 @@ class AnalysisMachine(object):
                           'regular_b_list': budget_list_regular},
             
         }
-        if not os.path.exists(self.plot_dir): os.makedirs(self.plot_dir)
+        if not os.path.exists(self.plot_dir): os.makedirs(self.plot_dir, mode=0o777)
         print("All plots are saved at " + self.plot_dir)
         total_pool_size, regular_init_size, fewer_init_size, budget_ratio = self._get_dataset_info()
         
@@ -872,7 +872,7 @@ class AnalysisMachine(object):
     def _draw_closed_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
         assert key in comparsion_dict
         path = os.path.join(comparsion_dict[key]['path'], plot_mode)
-        if not os.path.exists(path): os.makedirs(path)
+        if not os.path.exists(path): os.makedirs(path, mode=0o777)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
