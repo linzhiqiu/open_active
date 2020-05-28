@@ -14,19 +14,20 @@ def get_transform_dict(data):
     return transforms_dict
 
 def get_ImageNet_transform():
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean = [0.5, 0.5, 0.5],
+                                     std = [0.5, 0.5, 0.5])
 
     transform_train = transforms.Compose([
-        transforms.RandomResizedCrop(224),
+        transforms.Resize(256),
+        transforms.RandomCrop(256),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        normalize
+        normalize,
     ])
 
     transform_test = transforms.Compose([
             transforms.Resize(256),
-            transforms.CenterCrop(224),
+            transforms.CenterCrop(256),
             transforms.ToTensor(),
             normalize,
     ])
