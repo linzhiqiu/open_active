@@ -84,7 +84,7 @@ def main():
 
     closed_set_test_acc = trainer.eval_closed_set(discovered_classes, test_dataset, verbose=config.verbose)
     
-    trainer.eval_open_set(discovered_classes, test_dataset, verbose=config.verbose)
+    trainer.eval_open_set(discovered_sample, discovered_classes, test_dataset, verbose=config.verbose)
     exit(0)
     # for round_i in range(0, config.max_rounds):
     #     print(f"Round [{round_i}]")
@@ -96,7 +96,7 @@ def main():
     #     # training_str = '_'.join(log_strs[2:])
     #     # save_dir = os.path.join('first_round_thresholds', dataset_str, method_str, training_str)
     #     # if not os.path.exists(save_dir):
-    #     #     os.makedirs(save_dir)
+    #     #     os.makedirs(save_dir, mode=0o777)
 
     #     if config.log_everything:
     #         log_strs = logging_helper.get_experiment_name(config).split(os.sep)

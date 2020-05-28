@@ -54,6 +54,7 @@ class Trainer(object):
                                                              trainset_info,
                                                              trainer_config)
         self.eval_machine = eval_machine.get_eval_machine(open_set_method,
+                                                          self.trainer_machine,
                                                           trainset_info,
                                                           trainer_config,
                                                           self.roc_result_path,
@@ -89,8 +90,9 @@ class Trainer(object):
                                                     result_path=self.test_result_path,
                                                     verbose=verbose)
 
-    def eval_open_set(self, discovered_classes, test_dataset, verbose=False):
-        self.eval_machine.eval_open_set(discovered_classes,
+    def eval_open_set(self, discovered_sample, discovered_classes, test_dataset, verbose=False):
+        self.eval_machine.eval_open_set(discovered_sample,
+                                        discovered_classes,
                                         test_dataset,
                                         self.trainer_machine,
                                         result_path=self.open_result_path,

@@ -124,6 +124,17 @@ class TrainerMachine(object):
         self.backbone.eval()
         return torch.nn.functional.softmax(self.classifier(self.backbone(inputs)),dim=1)
 
+    def get_class_scores(self, inputs):
+        """Returns the class scores for each inputs (before softmax)
+            Returns:
+                prob_scores (B x NUM_OF_DISCOVERED_CLASSES)
+            Args:
+                inputs (B x 3 x ? x ?)
+        """
+        self.classifier.eval()
+        self.backbone.eval()
+        return self.classifier(self.backbone(inputs))
+
     def get_features(self, inputs):
         """Returns the features for each inputs
             Returns:
@@ -159,7 +170,7 @@ class TrainerMachine(object):
             raise NotImplementedError()
         return backbone
 
-    def _get_trainloader(self, discovered_samples):
+    def get_trainloader(self, discovered_samples):
         return get_subset_loader(self.trainset_info.train_dataset,
                                  discovered_samples,
                                  None, # No target transform
@@ -196,7 +207,7 @@ class Network(TrainerMachine):
         scheduler = self._get_scheduler(cfg, optimizer)
             
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
-        trainloader = self._get_trainloader(discovered_samples)
+        trainloader = self.get_trainloader(discovered_samples)
 
         criterion = torch.nn.NLLLoss(reduction='mean')
 
