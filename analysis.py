@@ -704,7 +704,7 @@ class AnalysisMachine(object):
         return os.path.join(self.analysis_save_dir,
                             self.train_mode,
                             self.budget_mode)
-
+    
     def check_ckpts_exist(self):
         for a_mode in ['same_budget', 'same_sample']:
             budget_list_regular, budget_list_fewer= self._get_budget_candidates(analysis_mode=a_mode)
@@ -835,18 +835,19 @@ class AnalysisMachine(object):
                                                         makedir=False)
                         if query_method in finished_exp[init_mode][b][training_method]:
                             import pdb; pdb.set_trace()
-                        if os.path.exists(paths_dict['test_result_path']) and os.path.exists(paths_dict['open_result_path']):
+                        if os.path.exists(paths_dict['test_result_path']):
                             test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                             finished_exp[init_mode][b][training_method][query_method] = test_result
                             finished_exp[init_mode][b][training_method][query_method]['open_results'] = {}
                             for o_method in utils.get_open_set_methods(training_method):
-                                
-                                open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
-                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method] = {}
-                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['auroc'] = open_result['roc']['auc_score']
-                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['roc'] = open_result['roc']
-                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['augoscr'] = open_result['goscr']['auc_score']
-                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['goscr'] = open_result['goscr']
+                                if os.path.exists(paths_dict['open_result_paths'][o_method]):
+                                        
+                                    open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
+                                    finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method] = {}
+                                    finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['auroc'] = open_result['roc']['auc_score']
+                                    finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['roc'] = open_result['roc']
+                                    finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['augoscr'] = open_result['goscr']['auc_score']
+                                    finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['goscr'] = open_result['goscr']
                             finished += 1
                         else:
                             unfinished += 1
@@ -874,7 +875,7 @@ class AnalysisMachine(object):
         for k in comparsion_dict.keys():
             for plot_mode in self.PLOT_MODE:
                 self._draw_closed_set_plot(plot_mode, finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
-                self._draw_open_set_plot(plot_mode, finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
+                self._draw_open_set_plot(finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
 
     def _draw_closed_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
         assert key in comparsion_dict
@@ -884,9 +885,6 @@ class AnalysisMachine(object):
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
         for item in ['acc', 'seen']:
-            if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
-            if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
-
             if plot_mode == 'compare_active':
                 COMPARARISON = self.ALL_QUERY_METHODS
             elif plot_mode == 'compare_train':
@@ -895,6 +893,10 @@ class AnalysisMachine(object):
                 COMPARARISON = self.ALL_INIT_MODES
 
             for compare_thing in COMPARARISON:
+                plt.figure(figsize=(15,12))
+                if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
+                if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
+
                 lines = 0
                 color_dict = {}
                 color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
@@ -931,7 +933,6 @@ class AnalysisMachine(object):
                     return color_func, marker_func
 
                 color_func, marker_func = get_style_funcs(plot_mode)
-                plt.figure(figsize=(15,12))
                 axes = plt.gca()
                 axes.set_ylim([0,1])
                 axes.set_xlim([0, total_size])
@@ -995,10 +996,9 @@ class AnalysisMachine(object):
         
         ALL_OPEN_METHODS = ['softmax', 'entropy', 'nn', 'nn_cosine', 'openmax']
         for item in ['auroc', 'augoscr']:
-            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
-            if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
             for o_method in ALL_OPEN_METHODS:
                 open_path = os.path.join(path, o_method)
+                utils.makedirs(open_path)
                 if plot_mode == 'compare_active':
                     COMPARARISON = self.ALL_QUERY_METHODS
                 elif plot_mode == 'compare_train':
@@ -1007,11 +1007,24 @@ class AnalysisMachine(object):
                     COMPARARISON = self.ALL_INIT_MODES
 
                 for compare_thing in COMPARARISON:
+                    plt.figure(figsize=(15,12))
+                    if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
+                    if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
                     lines = 0
                     color_dict = {}
                     color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
                     marker_dict = {}
                     marker_list = [',', '+', '.', 'o', '*', 'p', 'D']
+                    style_dict = {}
+                    style_list = [',', 'solid', 'dashed', 'dashdot', 'dotted']
+                    def get_style_func(s):
+                        if not s in style_dict:
+                            random.seed(s)
+                            c = random.choice(style_list)
+                            style_list.remove(c)
+                            style_dict[s] = c
+                        return style_dict[s]
+                    
                     def get_color_func(s):
                         if not s in color_dict:
                             random.seed(s)
@@ -1043,7 +1056,6 @@ class AnalysisMachine(object):
                         return color_func, marker_func
 
                     color_func, marker_func = get_style_funcs(plot_mode)
-                    plt.figure(figsize=(15,12))
                     axes = plt.gca()
                     axes.set_ylim([0,1])
                     axes.set_xlim([0, total_size])
@@ -1084,149 +1096,174 @@ class AnalysisMachine(object):
                                     if b in finished_exp[init_mode]:
                                         if training_method in finished_exp[init_mode][b]:
                                             if query_method in finished_exp[init_mode][b][training_method]:
-                                                is_ready = True
+                                                if o_method in finished_exp[init_mode][b][training_method][query_method]['open_results']:
+                                                    is_ready = True
                                     if is_ready:
-                                        res = float(finished_exp[init_mode][b][training_method][query_method]['open_results']['softmax'][item])
+                                        res = float(finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method][item])
                                         y[idx] = res
                                 if np.any(np.isfinite(y)):
                                     lines += 1
-                                    label_str = "_".join([init_mode, training_method, query_method])
+                                    label_str = "_".join([init_mode, training_method, "Q:"+query_method, "O:"+o_method])
                                     c = color_func(init_mode, training_method, query_method)
                                     m = marker_func(init_mode, training_method, query_method)
                                     plt.plot(x[np.isfinite(y)],
                                             y[np.isfinite(y)],
                                             label=label_str,
                                             color=c,
+                                            linestyle=get_style_func(o_method),
                                             marker=m)
                     plt.legend()
                     
                     plt.tight_layout()
-                    print(save_path + f"has {lines} lines.")
+                    # print(save_path + f"has {lines} lines.")
                     plt.savefig(save_path)
                     plt.close('all')
     
-    def _draw_open_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
+    def _draw_open_set_plot(self, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
         assert key in comparsion_dict
-        path = os.path.join(comparsion_dict[key]['path'], plot_mode)
-        if not os.path.exists(path): utils.makedirs(path, mode=0o777)
+        path = os.path.join(comparsion_dict[key]['path'], "compare_open")
+        if not os.path.exists(path): utils.makedirs(path)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
+        for item in ['auroc', 'augoscr']:
+            ALL_INIT_MODES = self.ALL_INIT_MODES
+            ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
+            ALL_QUERY_METHODS = self.ALL_QUERY_METHODS
 
-        for item in ['roc', 'goscr']:
-            if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
-            if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
-            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
-            if item == 'seen': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
-            
-
-            if plot_mode == 'compare_active':
-                COMPARARISON = self.ALL_QUERY_METHODS
-            elif plot_mode == 'compare_train':
-                COMPARARISON = self.ALL_TRAIN_METHODS
-            elif plot_mode == 'compare_setting':
-                COMPARARISON = self.ALL_INIT_MODES
-
-            for compare_thing in COMPARARISON:
-                lines = 0
-                color_dict = {}
-                color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
-                marker_dict = {}
-                marker_list = [',', '+', '.', 'o', '*', 'p', 'D']
-                def get_color_func(s):
-                    if not s in color_dict:
-                        random.seed(s)
-                        # print(len(color_list))
-                        c = random.choice(color_list)
-                        color_list.remove(c)
-                        color_dict[s] = c
-                    return color_dict[s]
-
-                def get_marker_func(s):
-                    if not s in marker_dict:
-                        # print(s)
-                        random.seed(s)
-                        c = random.choice(marker_list)
-                        marker_list.remove(c)
-                        marker_dict[s] = c
-                    return marker_dict[s]
-
-                def get_style_funcs(plot_mode):
-                    if plot_mode == 'compare_active':
-                        color_func = lambda i, t, a: get_color_func(i)
-                        marker_func = lambda i, t, a: get_marker_func(t)
-                    elif plot_mode == 'compare_train':
-                        color_func = lambda i, t, a: get_color_func(i)
-                        marker_func = lambda i, t, a: get_marker_func(a)
-                    elif plot_mode == 'compare_setting':
-                        color_func = lambda i, t, a: get_color_func(a)
-                        marker_func = lambda i, t, a: get_marker_func(t)
-                    return color_func, marker_func
-
-                color_func, marker_func = get_style_funcs(plot_mode)
-                plt.figure(figsize=(15,12))
-                axes = plt.gca()
-                axes.set_ylim([0,1])
-                axes.set_xlim([0, total_size])
-                if key == 'same_sample':
-                    plt.xlabel("Number of total labeled samples")
-                elif key == 'same_budget':
-                    plt.xlabel("Number of budgets after initial round")
-                elif key == 'combined':
-                    plt.xlabel("Number of total labeled samples")
-                
-                save_path = os.path.join(path, compare_thing+"_"+item+".png")
-                
-                ALL_INIT_MODES = self.ALL_INIT_MODES
-                ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
-                ALL_QUERY_METHODS = self.ALL_QUERY_METHODS
-                if plot_mode == 'compare_active':
-                    ALL_QUERY_METHODS = [compare_thing]
-                elif plot_mode == 'compare_train':
-                    ALL_TRAIN_METHODS = [compare_thing]
+            for init_mode in ALL_INIT_MODES:
+                if init_mode in 'regular':
+                    budget_list = regular_b_list
+                    init_size = regular_size
                 else:
-                    ALL_INIT_MODES = [compare_thing]
+                    budget_list = fewer_b_list
+                    init_size = fewer_size
+                x = np.array(budget_list)
+                if key in ['combined', 'same_sample']:
+                    x = x + init_size
+                for training_method in ALL_TRAIN_METHODS:
+                    for query_method in ALL_QUERY_METHODS:
+                        color_dict = {}
+                        color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
+                        def get_color_func(s):
+                            if not s in color_dict:
+                                random.seed(s)
+                                # print(len(color_list))
+                                c = random.choice(color_list)
+                                color_list.remove(c)
+                                color_dict[s] = c
+                            return color_dict[s]
+                        plt.figure(figsize=(15,12))
+                        if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
+                        if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
 
-                for init_mode in ALL_INIT_MODES:
-                    if init_mode in 'regular':
-                        budget_list = regular_b_list
-                        init_size = regular_size
-                    else:
-                        budget_list = fewer_b_list
-                        init_size = fewer_size
-                    x = np.array(budget_list)
-                    if key in ['combined', 'same_sample']:
-                        x = x + init_size
-                    for training_method in ALL_TRAIN_METHODS:
-                        for query_method in ALL_QUERY_METHODS:
+                        axes = plt.gca()
+                        axes.set_ylim([0,1])
+                        axes.set_xlim([0, total_size])
+                        if key == 'same_sample':
+                            plt.xlabel("Number of total labeled samples")
+                        elif key == 'same_budget':
+                            plt.xlabel("Number of budgets after initial round")
+                        elif key == 'combined':
+                            plt.xlabel("Number of total labeled samples")
+                        for o_method in utils.get_open_set_methods(training_method):
                             y = np.array([None for _ in x]).astype(np.double)
                             for idx, b in enumerate(budget_list):
                                 is_ready = False
                                 if b in finished_exp[init_mode]:
                                     if training_method in finished_exp[init_mode][b]:
                                         if query_method in finished_exp[init_mode][b][training_method]:
-                                            is_ready = True
+                                            if o_method in finished_exp[init_mode][b][training_method][query_method]['open_results']:
+                                                is_ready = True
                                 if is_ready:
-                                    res = float(finished_exp[init_mode][b][training_method][query_method][item])
-                                    y[idx] = res
+                                    res = finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]
+                                    y[idx] = float(res[item])
                             if np.any(np.isfinite(y)):
-                                lines += 1
-                                label_str = "_".join([init_mode, training_method, query_method])
-                                c = color_func(init_mode, training_method, query_method)
-                                m = marker_func(init_mode, training_method, query_method)
+                                label_str = "_".join([init_mode, training_method, "Q:"+query_method, "O:"+o_method])
+                                c = get_color_func(o_method)
                                 plt.plot(x[np.isfinite(y)],
                                          y[np.isfinite(y)],
                                          label=label_str,
-                                         color=c,
-                                         marker=m)
-                plt.legend()
-                
-                # plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
-                # plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
-                plt.tight_layout()
-                print(save_path + f"has {lines} lines.")
-                plt.savefig(save_path)
-                plt.close('all')
+                                         color=c)
+                        plt.legend()
+                        plt.tight_layout()
+                        save_dir = os.path.join(path, init_mode, training_method, query_method)
+                        utils.makedirs(save_dir)
+                        save_path = os.path.join(save_dir, item+".png")
+                        plt.savefig(save_path)
+                        plt.close('all')
+        
+        for item in ['roc', 'goscr']:
+            ALL_INIT_MODES = self.ALL_INIT_MODES
+            ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
+            ALL_QUERY_METHODS = self.ALL_QUERY_METHODS
+
+            for init_mode in ALL_INIT_MODES:
+                if init_mode in 'regular':
+                    budget_list = regular_b_list
+                    init_size = regular_size
+                else:
+                    budget_list = fewer_b_list
+                    init_size = fewer_size
+                x = np.array(budget_list)
+                if key in ['combined', 'same_sample']:
+                    x = x + init_size
+                for training_method in ALL_TRAIN_METHODS:
+                    for query_method in ALL_QUERY_METHODS:
+                        y = np.array([None for _ in x]).astype(np.double)
+                        for idx, b in enumerate(budget_list):
+                            color_dict = {}
+                            color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
+                            def get_color_func(s):
+                                if not s in color_dict:
+                                    random.seed(s)
+                                    # print(len(color_list))
+                                    c = random.choice(color_list)
+                                    color_list.remove(c)
+                                    color_dict[s] = c
+                                return color_dict[s]
+
+                            plt.figure(figsize=(15,12))
+                            if item == 'roc': plt.title(f'ROC'); plt.xlabel("False Positive Rate (Closed set examples classified as open set)", fontsize=12); plt.ylabel("True Positive Rate (Open set example classified as open set)", fontsize=12)
+                            if item == 'goscr': plt.title(f'GOSCR'); plt.ylabel(f"Area under curve"); plt.xlabel("False Positive Rate (Open set examples classified as closed set)", fontsize=12); plt.ylabel("Correct Classification Rate (Closed set examples classified into correct class)", fontsize=12)
+
+                            axes = plt.gca()
+                            axes.set_ylim([0,1])
+                            axes.set_xlim([0, 1])
+
+                            for o_method in utils.get_open_set_methods(training_method):
+                                is_ready = False
+                                if b in finished_exp[init_mode]:
+                                    if training_method in finished_exp[init_mode][b]:
+                                        if query_method in finished_exp[init_mode][b][training_method]:
+                                            if o_method in finished_exp[init_mode][b][training_method][query_method]['open_results']:
+                                                is_ready = True
+                                if is_ready:
+                                    res = finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method][item]
+                                    x = res['fpr']
+                                    if item == 'roc':
+                                        y = res['tpr']
+                                    else:
+                                        y = res['tcr']
+                                        axes.set_xscale('log')
+                                        axes.autoscale(enable=True, axis='x', tight=True)
+                                        plt.title(f'Open set classification rate plot', y=0.96, fontsize=12)
+                                if np.any(np.isfinite(y)):
+                                    label_str = "_".join(["O:"+o_method, "AUC:"+str(res['auc_score'])])
+                                    c = get_color_func(o_method)
+                                    plt.plot(x[np.isfinite(y)],
+                                            y[np.isfinite(y)],
+                                            label=label_str,
+                                            color=c)
+                            plt.legend(loc='upper left',
+                                    borderaxespad=0., fontsize=10)
+
+                            plt.tight_layout()
+                            save_dir = os.path.join(path, init_mode, training_method, query_method, f"budget_{b}")
+                            utils.makedirs(save_dir)
+                            save_path = os.path.join(save_dir, item+".png")
+                            plt.savefig(save_path)
+                            plt.close('all')
 
     def _get_exp_name(self, init_mode, training_method, query_method, b, silent=False):
         script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {self.dataset_rand_seed}"

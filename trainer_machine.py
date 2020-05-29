@@ -70,9 +70,6 @@ class TrainerMachine(object):
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
             self.ckpt_dict = torch.load(ckpt_path)
-            self.num_train = self.ckpt_dict['num_train']
-            self.centres = self.ckpt_dict['centres']
-            self.centre_labels = self.ckpt_dict['centre_labels']
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
