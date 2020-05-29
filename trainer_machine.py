@@ -12,7 +12,6 @@ import copy
 import os
 
 import models
-from instance_info import BasicInfoCollector, ClusterInfoCollector, SigmoidInfoCollector
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list, get_index_mapping_func
 from utils import IndexDataset
 from distance import eu_distance, cos_distance, eu_distance_batch, cos_distance_batch
@@ -168,6 +167,24 @@ class TrainerMachine(object):
             backbone = models.ResNet18(last_relu=False) # Always false.
         elif backbone_name == 'ResNet18HighRes':
             backbone = models.ResNet18(last_relu=False, high_res=True)
+        elif backbone_name == 'ResNet18ImgNet':
+            import torchvision
+            pretrained_model = torchvision.models.resnet18(pretrained=True)
+            class PretrainedResNetBackbone(torch.nn.Module):
+                def __init__(self, pretrained_model):
+                    super().__init__()
+                    self.model = pretrained_model
+                
+                def forward(self, x):
+                    x = self.model.relu(self.model.bn1(self.model.conv1(x)))
+                    x = self.model.maxpool(x)
+                    x = self.model.layer1(x)
+                    x = self.model.layer2(x)
+                    x = self.model.layer3(x)
+                    x = self.model.layer4(x)
+                    x = self.model.avgpool(x)
+                    return x.view(x.shape[0], -1)
+            backbone = PretrainedResNetBackbone(pretrained_model)
         else:
             raise NotImplementedError()
         return backbone

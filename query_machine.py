@@ -4,9 +4,6 @@ from tqdm import tqdm
 
 import sys, random, os
 import trainer_machine
-import learning_loss
-from instance_info import BasicInfoCollector, ClusterInfoCollector, LearningLossInfoCollector
-from open_info import OpenCollector
 from utils import get_subset_loader, get_target_unmapping_dict, SetPrintMode
 
 def get_query_machine(query_method, trainset_info, trainer_config):

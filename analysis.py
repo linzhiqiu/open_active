@@ -883,13 +883,9 @@ class AnalysisMachine(object):
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
-
-        for item in ['acc', 'seen', 'auroc', 'augoscr']:
+        for item in ['acc', 'seen']:
             if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
             if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
-            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve using Argmax of softmax")
-            if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve using Argmax of softmax")
-            
 
             if plot_mode == 'compare_active':
                 COMPARARISON = self.ALL_QUERY_METHODS
@@ -978,10 +974,7 @@ class AnalysisMachine(object):
                                         if query_method in finished_exp[init_mode][b][training_method]:
                                             is_ready = True
                                 if is_ready:
-                                    if item in ['auroc', 'augoscr']:
-                                        res = float(finished_exp[init_mode][b][training_method][query_method]['open_results']['softmax'][item])
-                                    else:
-                                        res = float(finished_exp[init_mode][b][training_method][query_method][item])
+                                    res = float(finished_exp[init_mode][b][training_method][query_method][item])
                                     y[idx] = res
                             if np.any(np.isfinite(y)):
                                 lines += 1
@@ -995,12 +988,122 @@ class AnalysisMachine(object):
                                          marker=m)
                 plt.legend()
                 
-                # plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
-                # plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
                 plt.tight_layout()
-                print(save_path + f"has {lines} lines.")
+                # print(save_path + f"has {lines} lines.")
                 plt.savefig(save_path)
                 plt.close('all')
+        
+        ALL_OPEN_METHODS = ['softmax', 'entropy', 'nn', 'nn_cosine', 'openmax']
+        for item in ['auroc', 'augoscr']:
+            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
+            if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve")
+            for o_method in ALL_OPEN_METHODS:
+                open_path = os.path.join(path, o_method)
+                if plot_mode == 'compare_active':
+                    COMPARARISON = self.ALL_QUERY_METHODS
+                elif plot_mode == 'compare_train':
+                    COMPARARISON = self.ALL_TRAIN_METHODS
+                elif plot_mode == 'compare_setting':
+                    COMPARARISON = self.ALL_INIT_MODES
+
+                for compare_thing in COMPARARISON:
+                    lines = 0
+                    color_dict = {}
+                    color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
+                    marker_dict = {}
+                    marker_list = [',', '+', '.', 'o', '*', 'p', 'D']
+                    def get_color_func(s):
+                        if not s in color_dict:
+                            random.seed(s)
+                            # print(len(color_list))
+                            c = random.choice(color_list)
+                            color_list.remove(c)
+                            color_dict[s] = c
+                        return color_dict[s]
+
+                    def get_marker_func(s):
+                        if not s in marker_dict:
+                            # print(s)
+                            random.seed(s)
+                            c = random.choice(marker_list)
+                            marker_list.remove(c)
+                            marker_dict[s] = c
+                        return marker_dict[s]
+
+                    def get_style_funcs(plot_mode):
+                        if plot_mode == 'compare_active':
+                            color_func = lambda i, t, a: get_color_func(i)
+                            marker_func = lambda i, t, a: get_marker_func(t)
+                        elif plot_mode == 'compare_train':
+                            color_func = lambda i, t, a: get_color_func(i)
+                            marker_func = lambda i, t, a: get_marker_func(a)
+                        elif plot_mode == 'compare_setting':
+                            color_func = lambda i, t, a: get_color_func(a)
+                            marker_func = lambda i, t, a: get_marker_func(t)
+                        return color_func, marker_func
+
+                    color_func, marker_func = get_style_funcs(plot_mode)
+                    plt.figure(figsize=(15,12))
+                    axes = plt.gca()
+                    axes.set_ylim([0,1])
+                    axes.set_xlim([0, total_size])
+                    if key == 'same_sample':
+                        plt.xlabel("Number of total labeled samples")
+                    elif key == 'same_budget':
+                        plt.xlabel("Number of budgets after initial round")
+                    elif key == 'combined':
+                        plt.xlabel("Number of total labeled samples")
+                    
+                    save_path = os.path.join(open_path, compare_thing+"_"+item+".png")
+                    
+                    ALL_INIT_MODES = self.ALL_INIT_MODES
+                    ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
+                    ALL_QUERY_METHODS = self.ALL_QUERY_METHODS
+                    if plot_mode == 'compare_active':
+                        ALL_QUERY_METHODS = [compare_thing]
+                    elif plot_mode == 'compare_train':
+                        ALL_TRAIN_METHODS = [compare_thing]
+                    else:
+                        ALL_INIT_MODES = [compare_thing]
+
+                    for init_mode in ALL_INIT_MODES:
+                        if init_mode in 'regular':
+                            budget_list = regular_b_list
+                            init_size = regular_size
+                        else:
+                            budget_list = fewer_b_list
+                            init_size = fewer_size
+                        x = np.array(budget_list)
+                        if key in ['combined', 'same_sample']:
+                            x = x + init_size
+                        for training_method in ALL_TRAIN_METHODS:
+                            for query_method in ALL_QUERY_METHODS:
+                                y = np.array([None for _ in x]).astype(np.double)
+                                for idx, b in enumerate(budget_list):
+                                    is_ready = False
+                                    if b in finished_exp[init_mode]:
+                                        if training_method in finished_exp[init_mode][b]:
+                                            if query_method in finished_exp[init_mode][b][training_method]:
+                                                is_ready = True
+                                    if is_ready:
+                                        res = float(finished_exp[init_mode][b][training_method][query_method]['open_results']['softmax'][item])
+                                        y[idx] = res
+                                if np.any(np.isfinite(y)):
+                                    lines += 1
+                                    label_str = "_".join([init_mode, training_method, query_method])
+                                    c = color_func(init_mode, training_method, query_method)
+                                    m = marker_func(init_mode, training_method, query_method)
+                                    plt.plot(x[np.isfinite(y)],
+                                            y[np.isfinite(y)],
+                                            label=label_str,
+                                            color=c,
+                                            marker=m)
+                    plt.legend()
+                    
+                    plt.tight_layout()
+                    print(save_path + f"has {lines} lines.")
+                    plt.savefig(save_path)
+                    plt.close('all')
     
     def _draw_open_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
         assert key in comparsion_dict
@@ -1010,7 +1113,7 @@ class AnalysisMachine(object):
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
 
-        for item in ['acc', 'seen', 'auroc', 'augoscr']:
+        for item in ['roc', 'goscr']:
             if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
             if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
             if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve")
