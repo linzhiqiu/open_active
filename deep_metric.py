@@ -74,7 +74,10 @@ class GaussianKernels(torch.nn.Module):
             p_ii[p_ii == 0] = 1e-10
 
             # Normalise
-            p_ii = p_ii / p_ii.sum()
+            if p_ii.sum() == 0:
+                p_ii = p_ii / (p_ii.sum() + 1e-5)
+            else:
+                p_ii = p_ii / p_ii.sum()
 
             # Convert to log-prob
             p.append(torch.log(p_ii).view(1, self.num_classes))
