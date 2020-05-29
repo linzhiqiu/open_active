@@ -71,13 +71,10 @@ class GaussianKernels(torch.nn.Module):
             p_ii = p_arr.sum(1)  # Unnormalsied class probability distribution
 
             # Avoid divide by zero and log(0)
-            p_ii[p_ii == 0] = 1e-10
+            p_ii[p_ii <= 1e-5] = 1e-5
 
             # Normalise
-            if p_ii.sum() == 0:
-                p_ii = p_ii / (p_ii.sum() + 1e-5)
-            else:
-                p_ii = p_ii / p_ii.sum()
+            p_ii = p_ii / (p_ii.sum() + 1e-5)
 
             # Convert to log-prob
             p.append(torch.log(p_ii).view(1, self.num_classes))
