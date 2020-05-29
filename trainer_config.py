@@ -45,7 +45,7 @@ CIFAR100_NO_FINETUNE_CONFIG['finetune'] = TrainConfig({
                                           })
 
 CUB200_DEFAULT_CONFIG = {
-    'backbone' : 'ResNet18ImgNet',
+    'backbone' : 'ResNet18HighRes',
     'feature_dim' : 512,
     'batch' : 128,
     'workers' : 4,
@@ -54,21 +54,21 @@ CUB200_DEFAULT_CONFIG = {
         'optim' : 'sgd',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
-        'lr' : 0.1,
+        'lr' : 0.01,
         # 'epochs' : 400,
-        'epochs' : 50,
-        'decay_epochs': 30,
-        'decay_by' : 0.1,
+        'epochs' : 1200,
+        'decay_epochs': 240,
+        'decay_by' : 0.5,
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
-        'lr' : 0.1,
+        'lr' : 0.01,
         # 'epochs' : 400,
-        'epochs' : 50,
-        'decay_epochs': 30,
-        'decay_by' : 0.1,
+        'epochs' : 1200,
+        'decay_epochs': 240,
+        'decay_by' : 0.5,
     }),
 }
 
