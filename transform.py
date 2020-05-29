@@ -18,16 +18,16 @@ def get_ImageNet_transform():
                                      std = [0.5, 0.5, 0.5])
 
     transform_train = transforms.Compose([
-        transforms.Resize(256),
-        transforms.RandomCrop(256),
+        transforms.Resize(224),
+        transforms.RandomCrop(224),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         normalize,
     ])
 
     transform_test = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(256),
+            transforms.Resize(224),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
     ])
