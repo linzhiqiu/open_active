@@ -547,6 +547,14 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         kernel_classifier = kernel_classifier.to(self.device)
         return kernel_classifier
 
+    def _load_ckpt_dict(self, ckpt_dict):
+        self.num_train = ckpt_dict['num_train']
+        self.centres = ckpt_dict['centres']
+        self.centre_labels = ckpt_dict['centre_labels']
+
+        self.classifier = self._get_classifier(ckpt_dict['discovered_classes']).to(self.device)
+        self.classifier.load_state_dict(ckpt_dict['classifier'])
+        self.backbone.load_state_dict(ckpt_dict['backbone'])
 
 class SoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):
