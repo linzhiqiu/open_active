@@ -39,10 +39,10 @@ def get_eval_machine(open_set_method, trainer_machine, trainset_info, trainer_co
         eval_machine_class = OpenmaxOpen
     elif open_set_method == 'softmax':
         eval_machine_class = SoftmaxOpen
-    elif open_set_method == 'c2ae':
-        eval_machine_class = C2AEOpen
     elif open_set_method == 'nn':
         eval_machine_class = NNOpen
+    elif open_set_method == 'nn_cosine':
+        eval_machine_class = NNCosineOpen
     else:
         raise NotImplementedError()
     return eval_machine_class(trainer_machine, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path)
@@ -464,85 +464,6 @@ class OpenmaxOpen(NetworkOpen):
         return lambda inputs : self.compute_open_max(inputs)
 
 
-# class OSDNNetworkModified(OSDNNetwork):
-#     def __init__(self, *args, **kwargs):
-#         # This is essentially using the open max algorithm. But this modified version 
-#         # doesn't change the activation score of the seen classes.
-#         super(OSDNNetworkModified, self).__init__(*args, **kwargs)
-
-#     def compute_open_max(self, outputs, log_thresholds=True):
-#         """ Return (openset_score, openset_preds)
-#         """
-#         alpha_weights = [((alpha_rank+1) - i)/float(alpha_rank) for i in range(1, alpha_rank+1)]
-#         softmax_outputs = F.softmax(outputs, dim=1)
-#         _, softmax_rank = torch.sort(softmax_outputs, descending=True)
-        
-#         open_scores = torch.zeros(outputs.size(0)).to(outputs.device)
-#         for batch_i in range(outputs.size(0)):
-#             batch_i_output = outputs[batch_i]
-#             batch_i_rank = softmax_rank[batch_i]
-            
-#             for i in range(len(alpha_weights)):
-#                 class_index = int(batch_i_rank[i])
-#                 alpha_i = alpha_weights[i]
-#                 distance = self.distance_func(self.weibull_distributions[class_index]['mav'], batch_i_output)
-#                 wscore = self.weibull_distributions[class_index]['weibull_model'].w_score(distance)
-#                 open_scores[batch_i] += batch_i_output[class_index] * alpha_i*wscore
-
-#         # total_denominators = torch.sum(torch.exp(outputs), dim=1) + torch.exp(open_scores)
-#         openmax_outputs = F.softmax(torch.cat((outputs, open_scores.unsqueeze(1)), dim=1), dim=1)
-#         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
-#         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
-
-#         closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
-#                                    openmax_preds2[:, 1],
-#                                    openmax_preds)
-#         closed_maxs = torch.where(openmax_preds == self.num_discovered_classes, 
-#                                   openmax_top2[:, 1],
-#                                   openmax_max)
-#         openmax_predicted_label = torch.where(openmax_preds == self.num_discovered_classes, 
-#                                               torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
-#                                               openmax_preds)
-        
-#         if log_thresholds:
-#             # First update the open set stats
-#             self._update_open_set_stats(openmax_max, openmax_preds)
-
-#             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['ground_truth'])
-#             assert len(self.thresholds_checkpoints[self.round]['open_set_score']) == len(self.thresholds_checkpoints[self.round]['closed_predicted'])
-#             self.thresholds_checkpoints[self.round]['open_set_score'] += (openmax_outputs[:, self.num_discovered_classes]).tolist()
-#             self.thresholds_checkpoints[self.round]['closed_predicted'] += closed_preds.tolist()
-#             self.thresholds_checkpoints[self.round]['closed_argmax_prob'] += closed_maxs.tolist()
-#             self.thresholds_checkpoints[self.round]['open_predicted'] += openmax_predicted_label.tolist()
-#             self.thresholds_checkpoints[self.round]['open_argmax_prob'] += openmax_max.tolist()
-
-        
-#         preds = torch.where((openmax_max < self.osdn_eval_threshold) | (openmax_preds == self.num_discovered_classes), 
-#                             torch.LongTensor([UNDISCOVERED_CLASS_INDEX]).to(outputs.device),
-#                             openmax_preds)
-#         return openmax_outputs, preds
-
-    # def _get_open_set_pred_func(self, trainer_machine):
-    #     def open_set_prediction(inputs):
-    #         open_set_result_i = {}
-    #         outputs = trainer_machine.get_class_scores(inputs)
-    #         softmax_outputs = F.softmax(outputs, dim=1)
-    #         softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
-    #         if self.config.threshold_metric == 'softmax':
-    #             scores = softmax_max
-    #         elif self.config.threshold_metric == 'entropy':
-    #             neg_entropy = softmax_outputs*softmax_outputs.log()
-    #             neg_entropy[softmax_outputs < 1e-5] = 0
-    #             scores = neg_entropy.sum(dim=1) # negative entropy!
-
-    #         open_set_result_i['open_set_score']     += (-softmax_max).tolist()
-    #         open_set_result_i['closed_predicted']   += softmax_preds.tolist()
-    #         open_set_result_i['closed_argmax_prob'] += softmax_max.tolist()
-    #         open_set_result_i['open_predicted']     += softmax_preds.tolist()
-    #         open_set_result_i['open_argmax_prob']   += softmax_max.tolist()
-    #         # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
-    #         return open_set_result_i
-    #     return open_set_prediction
 
 class SoftmaxOpen(NetworkOpen):
     def __init__(self, *args, **kwargs):
@@ -586,10 +507,55 @@ class EntropyOpen(NetworkOpen):
             return open_set_result_i
         return open_set_prediction
 
+
+
+from query_machine import distance_matrix, cosine_distance
 class NNOpen(NetworkOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.distance_function = distance_matrix # Euclidean distance matrix
 
-class C2AEOpen(NetworkOpen):
+    def _get_features(self, dataloader, trainer_machine, verbose=True):
+        features = torch.Tensor([]).to(self.device)
+        for batch, data in enumerate(dataloader):
+            inputs, _ = data
+            
+            with torch.no_grad():
+                cur_features = trainer_machine.get_features(inputs.to(self.device))
+
+            features = torch.cat((features, cur_features),dim=0)
+
+        return features
+    
+    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+        train_loader = self.trainer_machine.get_trainloader(discovered_samples, shuffle=False)
+        test_loader = get_loader(test_dataset,
+                                 None,
+                                 shuffle=False,
+                                 batch_size=self.batch,
+                                 workers=self.workers)        
+        test_features = self._get_features(test_loader, self.trainer_machine, verbose=verbose).cpu()
+        labeled_features = self._get_features(train_loader, self.trainer_machine, verbose=verbose).cpu()
+        self.min_dist = self.distance_function(test_features, labeled_features).min(dim=1)[0].cpu().tolist()
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+
+    def _get_open_set_pred_func(self):
+        def open_set_prediction(inputs):
+            open_set_result_i = {}
+            softmax_outputs = self.trainer_machine.get_prob_scores(inputs)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+
+            size_of_inputs = inputs.shape[0]
+            open_set_result_i['open_set_score']     = self.min_dist[:size_of_inputs]
+            self.min_dist = self.min_dist[size_of_inputs:]
+            open_set_result_i['closed_predicted']   = softmax_preds.tolist()
+            open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
+            open_set_result_i['open_predicted']     = softmax_preds.tolist()
+            open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
+            return open_set_result_i
+        return open_set_prediction
+
+class NNCosineOpen(NNOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.distance_function = cosine_distance # Euclidean distance matrix

@@ -11,6 +11,7 @@ import tqdm
 import pickle
 import torch
 import random
+import utils
 
 def break_if_too_long(name, split=80):
     if len(name) > split:
@@ -560,7 +561,7 @@ def plot_json(json_file, output_folder, interval=1, threshold='default', printed
         if max_round != None and int(round_idx) > max_round:
             break
         output_folder_round = os.path.join(output_folder_interval, round_idx)
-        if not os.path.exists(output_folder_round): os.makedirs(output_folder_round, mode=0o777)
+        if not os.path.exists(output_folder_round): utils.makedirs(output_folder_round, mode=0o777)
         if int(round_idx) == 0:
             round_results = plot_round(dictionary[round_idx], output_folder=output_folder_round, threshold=threshold, prev_dict=None, prev_round=None, round_idx=int(round_idx), printed=printed)
         else:
@@ -665,7 +666,7 @@ class AnalysisMachine(object):
         self.train_mode = train_mode
         self.save_dir = self.get_save_dir()
         if not os.path.exists(self.save_dir):
-            os.makedirs(self.save_dir, mode=0o777)
+            utils.makedirs(self.save_dir)
         else:
             input(f"Already exists: {self.save_dir} . Overwrite? >>")
 
@@ -730,7 +731,7 @@ class AnalysisMachine(object):
                 for b in b_list:
                     undone_exp_b = []
                     b_dir = os.path.join(self.script_dir, init_mode, f"budget_{b}")
-                    if not os.path.exists(b_dir): os.makedirs(b_dir, mode=0o777)
+                    if not os.path.exists(b_dir): utils.makedirs(b_dir, mode=0o777)
                     for training_method in self.training_method_list:
                         for query_method in self.query_method_list:
                             # for open_set_method in self.open_set_method_list:
@@ -745,27 +746,26 @@ class AnalysisMachine(object):
                                                             self.train_mode,
                                                             query_method,
                                                             b,
-                                                            self.open_set_method,
+                                                            utils.get_open_set_methods(training_method),
                                                             makedir=False)
                                 # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
                                     # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
                                 
                                 # For all ckpts
-                                for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
-                                    if not os.path.exists(paths_dict[k]):
-                                
-                                # For only test ready ckpts
-                                # test_ready = True
-                                # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path']:
-                                #     if not os.path.exists(paths_dict[k]):
-                                #         test_ready = False
-                                # if test_ready:
-                                #     if True:
+                                for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_paths']:
+                                    exp_finished = True
+                                    if k == 'open_result_paths':
+                                        for o_method in utils.get_open_set_methods(training_method):
+                                            if not os.path.exists(paths_dict[k][o_method]):
+                                                exp_finished = False
+                                    else:
+                                        if not os.path.exists(paths_dict[k]):
+                                            exp_finished = False
+                                    if not exp_finished:
                                         python_script = self._get_exp_name(init_mode,
                                                                             training_method,
                                                                             query_method,
                                                                             b,
-                                                                            self.open_set_method,
                                                                             silent=self.silent_mode)
                                         idx = len(undone_exp_b)
                                         b_err_i = os.path.join(b_dir, f"{idx}.err")
@@ -784,10 +784,10 @@ class AnalysisMachine(object):
                     print(f"Mode {init_mode}: {len(undone_exp_mode)} to run.")
                     undone_exp = undone_exp + undone_exp_mode
             if undone_exp.__len__() > 0:
-                if os.path.exists(script_file):
-                    input(f"{script_file} already exists. Overwrite >> ")
+                # if os.path.exists(script_file):
+                #     input(f"{script_file} already exists. Overwrite >> ")
                 if not os.path.exists(b_dir):
-                    os.makedirs(b_dir, mode=0o777)
+                    utils.makedirs(b_dir, mode=0o777)
                     print(f"Details will be saved at {script_dir}")
                 with open(script_file, "w+") as file:
                     for i, line in enumerate(undone_exp):
@@ -831,23 +831,29 @@ class AnalysisMachine(object):
                                                         self.train_mode,
                                                         query_method,
                                                         b,
-                                                        self.open_set_method,
+                                                        utils.get_open_set_methods(training_method),
                                                         makedir=False)
                         if query_method in finished_exp[init_mode][b][training_method]:
                             import pdb; pdb.set_trace()
                         if os.path.exists(paths_dict['test_result_path']) and os.path.exists(paths_dict['open_result_path']):
                             test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                             finished_exp[init_mode][b][training_method][query_method] = test_result
-                            open_result = torch.load(paths_dict['open_result_path'], map_location=torch.device('cpu'))
-                            finished_exp[init_mode][b][training_method][query_method]['auroc'] = open_result['roc']['auc_score']
-                            finished_exp[init_mode][b][training_method][query_method]['augoscr'] = open_result['goscr']['auc_score']
+                            finished_exp[init_mode][b][training_method][query_method]['open_results'] = {}
+                            for o_method in utils.get_open_set_methods(training_method):
+                                
+                                open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
+                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method] = {}
+                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['auroc'] = open_result['roc']['auc_score']
+                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['roc'] = open_result['roc']
+                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['augoscr'] = open_result['goscr']['auc_score']
+                                finished_exp[init_mode][b][training_method][query_method]['open_results'][o_method]['goscr'] = open_result['goscr']
                             finished += 1
                         else:
                             unfinished += 1
 
-        total = finished+unfinished
-        print(f"{finished}/{total} experiments are finished.")
-        print(f"Plot will be draw at {self.plot_dir}")
+        # total = finished+unfinished
+        # print(f"{finished}/{total} experiments are finished.")
+        # print(f"Plot will be draw at {self.plot_dir}")
 
         comparsion_dict = {
             'same_sample' : {'path':os.path.join(self.plot_dir, "same_sample"),
@@ -861,18 +867,145 @@ class AnalysisMachine(object):
                           'regular_b_list': budget_list_regular},
             
         }
-        if not os.path.exists(self.plot_dir): os.makedirs(self.plot_dir, mode=0o777)
+        if not os.path.exists(self.plot_dir): utils.makedirs(self.plot_dir, mode=0o777)
         print("All plots are saved at " + self.plot_dir)
         total_pool_size, regular_init_size, fewer_init_size, budget_ratio = self._get_dataset_info()
         
         for k in comparsion_dict.keys():
             for plot_mode in self.PLOT_MODE:
                 self._draw_closed_set_plot(plot_mode, finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
+                self._draw_open_set_plot(plot_mode, finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
 
     def _draw_closed_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
         assert key in comparsion_dict
         path = os.path.join(comparsion_dict[key]['path'], plot_mode)
-        if not os.path.exists(path): os.makedirs(path, mode=0o777)
+        if not os.path.exists(path): utils.makedirs(path, mode=0o777)
+        fewer_b_list = comparsion_dict[key]['fewer_b_list']
+        regular_b_list = comparsion_dict[key]['regular_b_list']
+        
+
+        for item in ['acc', 'seen', 'auroc', 'augoscr']:
+            if item == 'acc': plt.title(f'Closed set accuracy'); plt.ylabel(f"Accuracy")
+            if item == 'seen': plt.title(f'Class discovered rate'); plt.ylabel(f"Discovered Rate")
+            if item == 'auroc': plt.title(f'Area under ROC'); plt.ylabel(f"Area under curve using Argmax of softmax")
+            if item == 'augoscr': plt.title(f'Area under GOSCR'); plt.ylabel(f"Area under curve using Argmax of softmax")
+            
+
+            if plot_mode == 'compare_active':
+                COMPARARISON = self.ALL_QUERY_METHODS
+            elif plot_mode == 'compare_train':
+                COMPARARISON = self.ALL_TRAIN_METHODS
+            elif plot_mode == 'compare_setting':
+                COMPARARISON = self.ALL_INIT_MODES
+
+            for compare_thing in COMPARARISON:
+                lines = 0
+                color_dict = {}
+                color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue']
+                marker_dict = {}
+                marker_list = [',', '+', '.', 'o', '*', 'p', 'D']
+                def get_color_func(s):
+                    if not s in color_dict:
+                        random.seed(s)
+                        # print(len(color_list))
+                        c = random.choice(color_list)
+                        color_list.remove(c)
+                        color_dict[s] = c
+                    return color_dict[s]
+
+                def get_marker_func(s):
+                    if not s in marker_dict:
+                        # print(s)
+                        random.seed(s)
+                        c = random.choice(marker_list)
+                        marker_list.remove(c)
+                        marker_dict[s] = c
+                    return marker_dict[s]
+
+                def get_style_funcs(plot_mode):
+                    if plot_mode == 'compare_active':
+                        color_func = lambda i, t, a: get_color_func(i)
+                        marker_func = lambda i, t, a: get_marker_func(t)
+                    elif plot_mode == 'compare_train':
+                        color_func = lambda i, t, a: get_color_func(i)
+                        marker_func = lambda i, t, a: get_marker_func(a)
+                    elif plot_mode == 'compare_setting':
+                        color_func = lambda i, t, a: get_color_func(a)
+                        marker_func = lambda i, t, a: get_marker_func(t)
+                    return color_func, marker_func
+
+                color_func, marker_func = get_style_funcs(plot_mode)
+                plt.figure(figsize=(15,12))
+                axes = plt.gca()
+                axes.set_ylim([0,1])
+                axes.set_xlim([0, total_size])
+                if key == 'same_sample':
+                    plt.xlabel("Number of total labeled samples")
+                elif key == 'same_budget':
+                    plt.xlabel("Number of budgets after initial round")
+                elif key == 'combined':
+                    plt.xlabel("Number of total labeled samples")
+                
+                save_path = os.path.join(path, compare_thing+"_"+item+".png")
+                
+                ALL_INIT_MODES = self.ALL_INIT_MODES
+                ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
+                ALL_QUERY_METHODS = self.ALL_QUERY_METHODS
+                if plot_mode == 'compare_active':
+                    ALL_QUERY_METHODS = [compare_thing]
+                elif plot_mode == 'compare_train':
+                    ALL_TRAIN_METHODS = [compare_thing]
+                else:
+                    ALL_INIT_MODES = [compare_thing]
+
+                for init_mode in ALL_INIT_MODES:
+                    if init_mode in 'regular':
+                        budget_list = regular_b_list
+                        init_size = regular_size
+                    else:
+                        budget_list = fewer_b_list
+                        init_size = fewer_size
+                    x = np.array(budget_list)
+                    if key in ['combined', 'same_sample']:
+                        x = x + init_size
+                    for training_method in ALL_TRAIN_METHODS:
+                        for query_method in ALL_QUERY_METHODS:
+                            y = np.array([None for _ in x]).astype(np.double)
+                            for idx, b in enumerate(budget_list):
+                                is_ready = False
+                                if b in finished_exp[init_mode]:
+                                    if training_method in finished_exp[init_mode][b]:
+                                        if query_method in finished_exp[init_mode][b][training_method]:
+                                            is_ready = True
+                                if is_ready:
+                                    if item in ['auroc', 'augoscr']:
+                                        res = float(finished_exp[init_mode][b][training_method][query_method]['open_results']['softmax'][item])
+                                    else:
+                                        res = float(finished_exp[init_mode][b][training_method][query_method][item])
+                                    y[idx] = res
+                            if np.any(np.isfinite(y)):
+                                lines += 1
+                                label_str = "_".join([init_mode, training_method, query_method])
+                                c = color_func(init_mode, training_method, query_method)
+                                m = marker_func(init_mode, training_method, query_method)
+                                plt.plot(x[np.isfinite(y)],
+                                         y[np.isfinite(y)],
+                                         label=label_str,
+                                         color=c,
+                                         marker=m)
+                plt.legend()
+                
+                # plt.axhline(y=min(y), label=f"Min = {min(y):.4f}", linestyle='--', color='r')
+                # plt.axhline(y=max(y), label=f"Max = {max(y):.4f}", linestyle='--', color='g')
+                plt.tight_layout()
+                print(save_path + f"has {lines} lines.")
+                plt.savefig(save_path)
+                plt.close('all')
+    
+    def _draw_open_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio):
+        assert key in comparsion_dict
+        path = os.path.join(comparsion_dict[key]['path'], plot_mode)
+        if not os.path.exists(path): utils.makedirs(path, mode=0o777)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
@@ -992,10 +1125,10 @@ class AnalysisMachine(object):
                 plt.savefig(save_path)
                 plt.close('all')
 
-    def _get_exp_name(self, init_mode, training_method, query_method, b, open_set_method, silent=False):
+    def _get_exp_name(self, init_mode, training_method, query_method, b, silent=False):
         script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {self.dataset_rand_seed}"
                         f" --init_mode {init_mode} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
-                        f" --query_method {query_method} --budget {b} --open_set_method {open_set_method}"
+                        f" --query_method {query_method} --budget {b}"
                         f" --verbose {str(not silent)}")
         return script_prefix
 
@@ -1034,7 +1167,6 @@ class AnalysisMachine(object):
             for b in budget_list:
                 if not b.is_integer():
                     print(f"{b} is not an integer.")
-                    exit(0)
             budget_list = list(map(int, budget_list))
         else:
             raise NotImplementedError()

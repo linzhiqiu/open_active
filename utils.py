@@ -56,6 +56,7 @@ class IndexDataset(torch.utils.data.Dataset):
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, mode=0o777)
+        os.chmod(dir_name, 0o0777)
     else:
         print(f"{dir_name} already exists.")
 
@@ -224,7 +225,7 @@ def get_dataset_dir(save_path, data, makedir=True):
     dataset_dir = os.path.join(save_path, data)
     if not os.path.exists(dataset_dir) and makedir:
         print(f"{dataset_dir} does not exists. Press anything to create it >> ")
-        os.makedirs(dataset_dir, mode=0o777)
+        makedirs(dataset_dir)
     return dataset_dir
 
 def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
@@ -234,7 +235,7 @@ def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
                         )
     if not os.path.exists(dataset_info_dir):
         print(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
-        os.makedirs(dataset_info_dir, mode=0o777)
+        makedirs(dataset_info_dir)
     dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
     return dataset_info_path
 
@@ -247,13 +248,18 @@ def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, t
     if not os.path.exists(save_dir) and makedir:
         print("Making a new directory to save checkpoints after train/query/finetune step.")
         print(f"Location {save_dir}")
-        os.makedirs(save_dir, mode=0o777)
+        makedirs(save_dir)
     return save_dir
 
 def get_trainset_info_path(save_path, data):
     return os.path.join(get_dataset_dir(save_path, data), "trainset_info.pt")
 
+def get_open_set_methods(training_method):
+    from global_setting import OPEN_SET_METHOD_DICT
+    return OPEN_SET_METHOD_DICT[training_method]
+
 def prepare_save_dir_from_config(config, makedir=True):
+    open_set_methods = get_open_set_methods(config.training_method)
     return prepare_save_dir(config.save_path,
                             config.download_path,
                             config.trainer_save_dir,
@@ -264,7 +270,7 @@ def prepare_save_dir_from_config(config, makedir=True):
                             config.train_mode,
                             config.query_method,
                             config.budget,
-                            config.open_set_method,
+                            open_set_methods,
                             makedir=makedir)
 
 def prepare_save_dir(save_path,
@@ -277,7 +283,7 @@ def prepare_save_dir(save_path,
                      train_mode,
                      query_method,
                      budget,
-                     open_set_method,
+                     open_set_methods,
                      makedir=True):
     """Return a dictionary of save_paths
     """
@@ -302,20 +308,33 @@ def prepare_save_dir(save_path,
                                            "_".join(["active", query_method]))
     paths_dict['finetuned_dir'] = os.path.join(paths_dict['query_dir'],
                                                "_".join(["budget", str(budget)]))
-    paths_dict['test_dir']      = os.path.join(paths_dict['finetuned_dir'],
-                                               "_".join(["openset", open_set_method]))
+    paths_dict['test_dirs'] = {}
+    for open_set_method in open_set_methods:
+        paths_dict['test_dirs'][open_set_method] = os.path.join(paths_dict['finetuned_dir'],
+                                                                "_".join(["openset", open_set_method]))
 
-    for folder in ["trainer_save_dir", "finetuned_dir", "test_dir"]:
+    for folder in ["trainer_save_dir", "finetuned_dir"]:
         folder_path = paths_dict[folder]
         if not os.path.exists(folder_path) and makedir:
             print(f"Make a new folder at: {folder_path}")
-            os.makedirs(folder_path, mode=0o777)
+            makedirs(folder_path)
+
+    for key in paths_dict['test_dirs']:
+        folder_path = paths_dict['test_dirs'][key]
+        if not os.path.exists(folder_path) and makedir:
+            print(f"Make a new folder at: {folder_path}")
+            makedirs(folder_path)
     
     paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['trainer_save_dir'],'ckpt.pt')
     paths_dict['query_result_path']   = os.path.join(paths_dict['finetuned_dir']   ,'query_result.pt')
     paths_dict['finetuned_ckpt_path'] = os.path.join(paths_dict['finetuned_dir']   ,'ckpt.pt')
     paths_dict['test_result_path']    = os.path.join(paths_dict['finetuned_dir']   ,'test_result.pt')
-    paths_dict['open_result_path']    = os.path.join(paths_dict['test_dir']        ,'open_result.pt')
-    paths_dict['open_result_roc_path'] = os.path.join(paths_dict['test_dir'],       "roc.png")
-    paths_dict['open_result_goscr_path'] = os.path.join(paths_dict['test_dir'],     'goscr.png')
+    
+    paths_dict['open_result_paths'] = {}
+    paths_dict['open_result_roc_paths'] = {}
+    paths_dict['open_result_goscr_paths'] = {}
+    for key in paths_dict['test_dirs']:
+        paths_dict['open_result_paths'][key]       = os.path.join(paths_dict['test_dirs'][key],'open_result.pt')
+        paths_dict['open_result_roc_paths'][key]   = os.path.join(paths_dict['test_dirs'][key],"roc.png")
+        paths_dict['open_result_goscr_paths'][key] = os.path.join(paths_dict['test_dirs'][key],'goscr.png')
     return paths_dict

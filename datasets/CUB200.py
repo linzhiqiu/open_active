@@ -13,11 +13,16 @@ import numpy as np
 from PIL import Image
 import os
 
+CUB_SAVED_PATH = "/share/coecis/open_active/CUB200"
 
 class CUB200(Dataset):
     def __init__(self, root, train, transform, num_classes=200, start_indx=0, img_type=".jpg"):
         self.transform = transform
         
+        if not os.path.exists(root+"/CUB200"):
+            import shutil
+            shutil.copytree(CUB_SAVED_PATH, root+"/CUB200")
+
         if train:
             self.root = os.path.join(root, 'CUB200/train')
         else:

@@ -79,7 +79,8 @@ trainer_args.add_argument('--open_set_method',
                           default='entropy',
                           choices=['entropy',
                                    'softmax', # Max score of softmax as an uncertainty measure
-                                   'nn', # Nearest Neighbor
+                                   'nn', # Nearest Neighbor with eu distance
+                                   'nn_cosine', # Nearest Neighbor with cosine distance
                                    'openmax',
                                    'c2ae',
                           ],

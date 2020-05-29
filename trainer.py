@@ -17,7 +17,7 @@ class TrainsetInfo(object):
 
 
 class Trainer(object):
-    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_method, paths_dict):
+    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_methods, paths_dict):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
@@ -26,7 +26,7 @@ class Trainer(object):
                 trainset_info (TrainsetInfo) : The details about the training set
                 query_method (str) : The method for querying from the unlabeled pool
                 budget (int/float) : The querying budget
-                open_set_method (str) : The method for open_set recognition
+                open_set_methods (list) : The list of methods for open_set recognition
                 paths_dict (dict) : The directionary that has directory to save/load the checkpoints.
         """
         super(Trainer, self).__init__()
@@ -36,15 +36,15 @@ class Trainer(object):
         self.trainer_config = trainer_config
         self.query_method = query_method
         self.budget = budget
-        self.open_set_method = open_set_method
+        self.open_set_methods = open_set_methods
        
         self.trained_ckpt_path   = paths_dict['trained_ckpt_path']
         self.query_result_path   = paths_dict['query_result_path']
         self.finetuned_ckpt_path = paths_dict['finetuned_ckpt_path']
         self.test_result_path    = paths_dict['test_result_path']
-        self.open_result_path    = paths_dict['open_result_path']
-        self.roc_result_path     = paths_dict['open_result_roc_path']
-        self.goscr_result_path   = paths_dict['open_result_goscr_path']
+        self.open_result_paths    = paths_dict['open_result_paths']
+        self.roc_result_paths     = paths_dict['open_result_roc_paths']
+        self.goscr_result_paths   = paths_dict['open_result_goscr_paths']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    train_mode,
@@ -53,12 +53,16 @@ class Trainer(object):
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              trainset_info,
                                                              trainer_config)
-        self.eval_machine = eval_machine.get_eval_machine(open_set_method,
-                                                          self.trainer_machine,
-                                                          trainset_info,
-                                                          trainer_config,
-                                                          self.roc_result_path,
-                                                          self.goscr_result_path)
+        self.eval_machines = {}
+        for open_set_method in open_set_methods:
+            self.eval_machines[open_set_method] = eval_machine.get_eval_machine(
+                                                      open_set_method,
+                                                      self.trainer_machine,
+                                                      trainset_info,
+                                                      trainer_config,
+                                                      self.roc_result_paths[open_set_method],
+                                                      self.goscr_result_paths[open_set_method]
+                                                  )
 
     def train(self, discovered_samples, discovered_classes, verbose=False):
         """Performs training using discovered_samples
@@ -91,9 +95,11 @@ class Trainer(object):
                                                     verbose=verbose)
 
     def eval_open_set(self, discovered_samples, discovered_classes, test_dataset, verbose=False):
-        self.eval_machine.eval_open_set(discovered_samples,
-                                        discovered_classes,
-                                        test_dataset,
-                                        result_path=self.open_result_path,
-                                        verbose=verbose)
+        for open_set_method in self.open_result_paths:
+            eval_machine = self.eval_machines[open_set_method]
+            eval_machine.eval_open_set(discovered_samples,
+                                       discovered_classes,
+                                       test_dataset,
+                                       result_path=self.open_result_paths[open_set_method],
+                                       verbose=verbose)
         
