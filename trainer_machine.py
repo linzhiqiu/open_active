@@ -71,6 +71,9 @@ class TrainerMachine(object):
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
             self.ckpt_dict = torch.load(ckpt_path)
+            self.num_train = self.ckpt_dict['num_train']
+            self.centres = self.ckpt_dict['centres']
+            self.centre_labels = self.ckpt_dict['centre_labels']
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
@@ -516,7 +519,10 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
             'discovered_samples' : discovered_samples,
             'discovered_classes' : discovered_classes,
             'loss_curve' : avg_loss_per_epoch,
-            'acc_curve' : avg_acc_per_epoch
+            'acc_curve' : avg_acc_per_epoch,
+            'num_train' : self.num_train,
+            'centres' : self.centres,
+            'centre_labels': self.centre_labels
         }
         return ckpt_dict
 
