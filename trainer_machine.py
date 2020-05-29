@@ -70,9 +70,6 @@ class TrainerMachine(object):
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
             self.ckpt_dict = torch.load(ckpt_path)
-            self.num_train = self.ckpt_dict['num_train']
-            self.centres = self.ckpt_dict['centres']
-            self.centre_labels = self.ckpt_dict['centre_labels']
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
@@ -550,6 +547,14 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         kernel_classifier = kernel_classifier.to(self.device)
         return kernel_classifier
 
+    def _load_ckpt_dict(self, ckpt_dict):
+        self.num_train = ckpt_dict['num_train']
+        self.centres = ckpt_dict['centres']
+        self.centre_labels = ckpt_dict['centre_labels']
+
+        self.classifier = self._get_classifier(ckpt_dict['discovered_classes']).to(self.device)
+        self.classifier.load_state_dict(ckpt_dict['classifier'])
+        self.backbone.load_state_dict(ckpt_dict['backbone'])
 
 class SoftmaxNetwork(Network):
     def __init__(self, *args, **kwargs):
