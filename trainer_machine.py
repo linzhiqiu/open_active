@@ -375,6 +375,7 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         super(DeepMetricNetwork, self).__init__(*args, **kwargs)
         self.num_neighbours = self.trainer_config['num_neighbours']
         self.sigma = self.trainer_config['sigma']
+        self.interval = self.trainer_config['interval']
 
     def get_prob_scores(self, inputs):
         return self.get_class_scores(inputs)
@@ -448,7 +449,7 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
                 count = 0
 
                 # Update stored kernel centres
-                if (epoch % 5) == 0:
+                if (epoch % self.interval) == 0:
 
                     print("Updating kernel centres...")
                     self.centres = update_centres(self.backbone, self.centres, update_loader, self.batch, self.device)
@@ -504,6 +505,9 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
                 avg_loss_per_epoch.append(avg_loss)
                 avg_acc_per_epoch.append(avg_acc)
                 scheduler.step()
+            print("Updating kernel centres (final time)...")
+            self.centres = update_centres(self.backbone, self.centres, update_loader, self.batch, self.device)
+            self.classifier.centres = self.centres
             print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
         ckpt_dict = {
             'backbone' : self.backbone.state_dict(),
