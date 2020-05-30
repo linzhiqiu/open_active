@@ -52,39 +52,26 @@ DATASET_CONFIG_DICT = {
         },
 
     },
+
+    'Cars': {
+        'regular': {  # 160 closed, 36 hold out open
+            'num_init_classes': 80,  # Number of initial discovered classes
+            'sample_per_class': 20,  # Number of samples per discovered class
+            'num_open_classes': 36,  # Number of open classes hold out
+        },
+        'fewer_class': {  # Use 1/5 of discovered classes, but same number of samples per discovered class
+            'num_init_classes': 16,  # Number of initial discovered classes
+            'sample_per_class': 20,  # Number of samples per discovered class
+            'num_open_classes': 36,
+        },
+        'fewer_sample': {  # Use 1/5 of samples per discovered class, but keep 40 initial discovered classes
+            'num_init_classes': 80,  # Number of initial discovered classes
+            'sample_per_class': 4,  # Number of samples per discovered class
+            'num_open_classes': 36,
+        },
+
+    },
 }
 
 SUPPORTED_DATASETS = list(DATASET_CONFIG_DICT.keys())
 
-OPENMAX_META_LEARN = {
-    'default' : {
-        'weibull_tail_size' : [20],
-        'alpha_rank' : [2, 3, 5, 10],
-        'osdn_eval_threshold' : [0.05, 0.1, 0.15, 0.2],
-    },
-    'advanced' : {
-        'weibull_tail_size' : [10, 20],
-        'alpha_rank' : [2, 3, 4, 5, 6, 7, 8, 9, 10],
-        'osdn_eval_threshold' : [0.001, 0.01, 0.05, 0.1, 0.15, 0.2, 0.5]
-    },
-    'morealpha' : {
-        'weibull_tail_size' : [10, 20, 50],
-        'alpha_rank' : [2, 5, 10, 15, 20, 25, 30],
-        'osdn_eval_threshold' : [0.001, 0.01, 0.05, 0.1, 0.15, 0.2, 0.5]
-    },
-    'open_set' : {
-        'weibull_tail_size' : [10, 20, 50],
-        'alpha_rank' : [2, 3, 4, 5],
-        'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
-    },
-    'open_set_more' : {
-        'weibull_tail_size' : [10, 20, 50, 100],
-        'alpha_rank' : [2, 3, 4, 5, 10, 15, 20, 40],
-        'osdn_eval_threshold' : [0.01, 0.1, 0.2, 0.5]
-    },
-    'toy' : {
-        'weibull_tail_size' : [10],
-        'alpha_rank' : [2],
-        'osdn_eval_threshold' : [0.01]
-    },
-}
