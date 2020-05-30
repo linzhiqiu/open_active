@@ -51,6 +51,7 @@ class AnalysisMachine(object):
 
     def get_save_dir(self):
         return os.path.join(self.analysis_save_dir,
+                            self.data,
                             self.train_mode,
                             self.analysis_trainer,
                             self.budget_mode)
@@ -61,6 +62,7 @@ class AnalysisMachine(object):
     
     def get_plot_dir(self):
         return os.path.join(self.analysis_save_dir,
+                            self.data,
                             self.train_mode,
                             self.budget_mode)
     
@@ -636,7 +638,7 @@ class AnalysisMachine(object):
         trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
         total_query_sample_size = len(trainset_info.query_samples)
         
-        if self.data in ['CIFAR100', 'CUB200']:
+        if self.data in ['CIFAR100', 'CUB200', 'Cars']:
             regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['regular']['sample_per_class']
             fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_class']['sample_per_class']
             assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_sample']['sample_per_class']
@@ -654,7 +656,7 @@ class AnalysisMachine(object):
         trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
         total_query_sample_size = len(trainset_info.query_samples)
         
-        if self.data in ['CIFAR100', 'CUB200']:
+        if self.data in ['CIFAR100', 'CUB200', 'Cars']:
             regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['regular']['sample_per_class']
             fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_class']['sample_per_class']
             assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_sample']['sample_per_class']
