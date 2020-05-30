@@ -7,6 +7,32 @@ class TrainConfig(object):
     def __getattr__(self, name):
         return self.dict[name]
 
+CARS_DEFAULT_300EPS_CONFIG = {
+    'backbone' : 'ResNet18',
+    'feature_dim' : 512,
+    'batch' : 128,
+    'workers' : 4,
+    'device' : 'cuda',
+    'train' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        'epochs' : 300,
+        'decay_epochs': 100,
+        'decay_by' : 0.1,
+    }),
+    'finetune' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        'epochs' : 300,
+        'decay_epochs': 100,
+        'decay_by' : 0.1,
+    }),
+}
+
 CIFAR100_DEFAULT_CONFIG = {
     'backbone' : 'ResNet18',
     'feature_dim' : 512,
@@ -69,6 +95,34 @@ CUB200_DEFAULT_CONFIG = {
         'epochs' : 1200,
         'decay_epochs': 240,
         'decay_by' : 0.5,
+    }),
+}
+
+CUB200_FEWER_EPOCH_CONFIG = {
+    'backbone' : 'ResNet18HighRes',
+    'feature_dim' : 512,
+    'batch' : 128,
+    'workers' : 4,
+    'device' : 'cuda',
+    'train' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        # 'epochs' : 400,
+        'epochs' : 300,
+        'decay_epochs': 100,
+        'decay_by' : 0.1,
+    }),
+    'finetune' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 0.1,
+        # 'epochs' : 400,
+        'epochs' : 300,
+        'decay_epochs': 100,
+        'decay_by' : 0.1,
     }),
 }
 
@@ -156,15 +210,26 @@ TRAIN_CONFIG_DICT = {
     'CUB200' : {
         'softmax_network' : {
             'default' : CUB200_DEFAULT_CONFIG,
+            'default_300eps' : CUB200_FEWER_EPOCH_CONFIG,
         },
         'cosine_network' : {
             'default' : CUB200_DEFAULT_CONFIG,
+            'default_300eps' : CUB200_FEWER_EPOCH_CONFIG,
         },
         'sigmoid_network' : {
             'default' : CUB200_DEFAULT_CONFIG,
+            'default_300eps' : CUB200_FEWER_EPOCH_CONFIG,
         },
         'deep_metric' : {
             'default' : CUB200_DEFAULT_CONFIG_FOR_DEEPMETRIC,
+        },
+    },
+    'Cars' : {
+        'softmax_network' : {
+            'default_300eps' : CARS_DEFAULT_300EPS_CONFIG,
+        },
+        'cosine_network' : {
+            'default_300eps' : CARS_DEFAULT_300EPS_CONFIG,
         },
     }
 }

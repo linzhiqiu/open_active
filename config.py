@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Act
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", "CIFAR100", 'CUB200'],
+                          choices=["CIFAR10", "CIFAR100", 'CUB200', 'Cars'],
                           help='Choice of dataset + preprocessing method.')
 dataset_args.add_argument('--download_path', 
                           default="/scratch", metavar='PATH',
@@ -75,6 +75,7 @@ trainer_args.add_argument('--budget',
                           help='The budget to query from unlabeled pool.'
                           )
 
+# Warning not used anymore
 trainer_args.add_argument('--open_set_method',
                           default='entropy',
                           choices=['entropy',
@@ -177,7 +178,7 @@ disc_args.add_argument('--div_eu',
 
 training_arg = add_argument_group('Training and Finetuning Param.')
 training_arg.add_argument('--train_mode', type=str,
-                          choices=['default', 'no_finetune', 'default_lr01_200eps', 'fix_feature_extractor'], default='default',
+                          choices=['default', 'no_finetune', 'default_300eps', 'default_lr01_200eps', 'fix_feature_extractor'], default='default',
                           help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')

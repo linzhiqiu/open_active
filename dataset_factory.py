@@ -123,7 +123,7 @@ class DatasetFactory(object):
         init_conf = DATASET_CONFIG_DICT[data][init_mode]
         # Assert: num of class - num of open class - num of initial discovered classes >= 0
         assert len(classes) - init_conf['num_open_classes'] - init_conf['num_init_classes'] >= 0
-        if data not in ['CIFAR100', 'CUB200']:
+        if data not in ['CIFAR100', 'CUB200', 'Cars']:
             raise NotImplementedError()
         else:
             # class_to_indices[class_index] = list of sample indices (list of int)
@@ -166,7 +166,7 @@ def generate_dataset_info(data, dataset):
         samples = set(range(len(dataset)))
         labels = getattr(dataset, "targets")
         classes = set(labels)
-    elif data in ['CUB200']:
+    elif data in ['CUB200', 'Cars']:
         samples = set(range(len(dataset)))
         labels = getattr(dataset, "targets")
         classes = set(range(len(dataset.classes)))
@@ -187,6 +187,14 @@ def generate_dataset(data, download_path):
                             download=True,
                             transform=transforms_dict['test'])
     elif data in ['CUB200']:
+        ds_class = getattr(datasets, data)
+        train_set = ds_class(root=download_path,
+                             train=True,
+                             transform=transforms_dict['train'])
+        test_set = ds_class(root=download_path,
+                            train=False,
+                            transform=transforms_dict['test'])
+    elif data in ['Cars']:
         ds_class = getattr(datasets, data)
         train_set = ds_class(root=download_path,
                              train=True,

@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 def get_transform_dict(data):
     if data in ["CIFAR10", "CIFAR100"]:
         transform_train, transform_test = get_cifar_transform()
-    elif data in ['CUB200']:
+    elif data in ['CUB200', 'Cars']:
         transform_train, transform_test = get_ImageNet_transform()
     else:
         raise ValueError("Dataset not supported")
