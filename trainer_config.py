@@ -8,7 +8,7 @@ class TrainConfig(object):
         return self.dict[name]
 
 CARS_DEFAULT_300EPS_CONFIG = {
-    'backbone' : 'ResNet18',
+    'backbone' : 'ResNet18HighRes',
     'feature_dim' : 512,
     'batch' : 128,
     'workers' : 4,
@@ -139,19 +139,31 @@ CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
         'optim' : 'sgd',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
-        'lr' : 0.1,
-        'epochs' : 200,
-        'decay_epochs': 60,
+        'lr' : 1e-4,
+        'epochs' : 20,
+        'decay_epochs': 30,
         'decay_by' : 0.1,
+        'softmax_optim' : 'sgd',
+        'softmax_epochs': 0,
+        'softmax_lr': 1e-1,
+        'softmax_decay_epochs':0,
+        'softmax_decay_by': 0.1,
+        'softmax_weight_decay' : 0.0005,
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
-        'lr' : 0.1,
-        'epochs' : 200,
-        'decay_epochs': 60,
+        'lr' : 1e-4,
+        'epochs' : 20,
+        'decay_epochs': 30,
         'decay_by' : 0.1,
+        'softmax_optim' : 'sgd',
+        'softmax_epochs': 200,
+        'softmax_lr': 1e-1,
+        'softmax_decay_epochs':60,
+        'softmax_decay_by': 0.1,
+        'softmax_weight_decay' : 0.0005,
     }),
 }
 
@@ -204,7 +216,7 @@ TRAIN_CONFIG_DICT = {
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'deep_metric' : {
-            'default' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
+            'default_lr01_200eps' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
         },
     },
     'CUB200' : {

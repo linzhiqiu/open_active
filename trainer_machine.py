@@ -422,7 +422,141 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         
         return optimizer
     
+    def load_backbone(self, path):
+        print(f"loading pretrained softmax network from path {path}")
+        self.backbone.load_state_dict(torch.load(path))
+    
+    def _train_softmax_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
+        self.backbone.train()
+        self.classifier = torch.nn.Linear(self.feature_dim, len(discovered_classes)).to(self.device)
+        self.classifier.train()
+
+        optim_param = {"lr" : cfg.softmax_lr, 
+                        "momentum" : cfg.momentum,
+                        "weight_decay" : float(cfg.softmax_weight_decay)}
+        optimizer = torch.optim.SGD(
+                        [
+                            {'params': filter(lambda x : x.requires_grad, self.backbone.parameters())},
+                            {'params': filter(lambda x : x.requires_grad, self.classifier.parameters())}
+                        ],
+                        **optim_param
+                    )
+        if cfg.softmax_decay_epochs == None:
+            decay_step = cfg.softmax_epochs
+        else:
+            decay_step = cfg.softmax_decay_epochs
+        scheduler = lr_scheduler.StepLR(
+                        optimizer, 
+                        step_size=decay_step, 
+                        gamma=cfg.softmax_decay_by
+                    )
+        target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        trainloader = self.get_trainloader(discovered_samples)
+
+        criterion = torch.nn.NLLLoss(reduction='mean')
+
+        avg_loss_per_epoch = []
+        avg_acc_per_epoch = []
+        avg_loss = None
+        avg_acc = None
+        with SetPrintMode(hidden=not verbose):
+            for epoch in range(0, cfg.softmax_epochs):
+                running_loss = 0.0
+                running_corrects = 0.
+                count = 0
+
+                if verbose:
+                    pbar = tqdm(trainloader, ncols=80)
+                else:
+                    pbar = trainloader
+
+                for batch, data in enumerate(pbar):
+                    inputs, real_labels = data
+                    labels = target_mapping_func(real_labels)
+                    count += inputs.size(0)
+
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
+
+                    optimizer.zero_grad()
+
+                    features = self.backbone(inputs)
+                    outputs = self.classifier(features)
+                    _, preds = torch.max(outputs, 1)
+
+                    log_probability = F.log_softmax(outputs, dim=1)
+
+                    loss = criterion(log_probability, labels)
+
+                    loss.backward()
+                    optimizer.step()
+
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
+                    if verbose:
+                        pbar.set_postfix(loss=float(running_loss)/count, 
+                                         acc=float(running_corrects)/count,
+                                         epoch=epoch)
+
+                avg_loss = float(running_loss)/count
+                avg_acc = float(running_corrects)/count
+                avg_loss_per_epoch.append(avg_loss)
+                avg_acc_per_epoch.append(avg_acc)
+                scheduler.step()
+            print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
+
+    def compute_novel_distance(self, discovered_samples):
+        undiscovered_samples = list(self.trainset_info.query_samples.difference(discovered_samples))
+        open_loader = get_subset_loader(self.trainset_info.train_dataset,
+                                          list(self.trainset_info.open_samples),
+                                          None, # No target transform
+                                          batch_size=self.batch,
+                                          shuffle=False,
+                                          workers=self.workers)
+        undiscovered_loader = get_subset_loader(self.trainset_info.train_dataset,
+                                          undiscovered_samples,
+                                          None, # No target transform
+                                          batch_size=self.batch,
+                                          shuffle=False,
+                                          workers=self.workers)
+        discovered_loader = get_subset_loader(self.trainset_info.train_dataset,
+                                          discovered_samples,
+                                          None, # No target transform
+                                          batch_size=self.batch,
+                                          shuffle=False,
+                                          workers=self.workers)                                          
+        open_features = self.collect_features(open_loader, verbose=False).cpu()
+        undiscovered_features = self.collect_features(undiscovered_loader, verbose=False).cpu()
+        discovered_features = self.collect_features(discovered_loader, verbose=False).cpu()
+
+        from query_machine import distance_matrix
+        open_distance = distance_matrix(open_features, discovered_features)
+        undiscovered_distance = distance_matrix(undiscovered_features, discovered_features)
+
+        open_avg = float(open_distance.mean())
+        undiscovered_avg = float(undiscovered_distance.mean())
+        open_min_avg = float(open_distance.min(dim=1)[0].mean())
+        undiscovered_min_avg = float(undiscovered_distance.min(dim=1)[0].mean())
+        print(f"Open to discovered: Avg dist {open_avg}, Avg min dist {open_min_avg}")
+        print(f"Undiscovered to discovered: Avg dist {undiscovered_avg}, Avg min dist {undiscovered_min_avg}")
+    
+    def collect_features(self, dataloader, verbose=True):
+        features = torch.Tensor([]).to(self.device)
+        for batch, data in enumerate(dataloader):
+            inputs, _ = data
+            
+            with torch.no_grad():
+                cur_features = self.get_features(inputs.to(self.device))
+
+            features = torch.cat((features, cur_features),dim=0)
+
+        return features
+
+
     def _train_helper(self, cfg, discovered_samples, discovered_classes, verbose=True):
+        # No matter what, first trained a softmax network
+        self._train_softmax_helper(cfg, discovered_samples, discovered_classes, verbose=verbose)
         train_dataset_with_index = IndexDataset(self.trainset_info.train_dataset)
         update_loader = get_subset_loader(train_dataset_with_index,
                                           discovered_samples,
@@ -461,6 +595,8 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
         avg_acc_per_epoch = []
         with SetPrintMode(hidden=not verbose):
             for epoch in range(0, cfg.epochs):
+                print('Epoch' + str(epoch))
+                self.compute_novel_distance(discovered_samples)
                 running_loss = 0.0
                 running_corrects = 0.
                 count = 0

@@ -77,6 +77,10 @@ def main():
         paths_dict=paths_dict,
     )
 
+    if config.training_method == 'deep_metric':
+        print("Skip softmax network train phase, directly go to deep metric learning for train phase")
+        pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.init_mode+".pt")
+        trainer.trainer_machine.load_backbone(pretrained_softmax_path) 
     trainer.train(discovered_samples, discovered_classes, verbose=config.verbose)
 
     discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=config.verbose)

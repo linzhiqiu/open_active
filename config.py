@@ -92,17 +92,16 @@ trainer_args.add_argument('--open_set_method',
 analysis_arg = add_argument_group('Analysis.')
 analysis_arg.add_argument('--analysis_save_dir', default="/share/coecis/open_active/analysis",
                           help='The directory to save all the plots.')
-analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network'], default='same_sample',
+analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network', 'deep_metric'], default='same_sample',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 
 
-sigmoid_args = add_argument_group('Sigmoid Trainer Machine Param.')
-sigmoid_args.add_argument('--sigmoid_train_mode',
-                          default='mean',
-                          choices=['sum', 'mean'], 
-                          help="Sum is to add all class score (e.g. logsigmoid or 1-logsigmoid). Mean is to take average of all classes for each example")
+deepmetric_args = add_argument_group('Deep metric Trainer Machine Param.')
+deepmetric_args.add_argument('--deep_metric_softmax_pretrained_folder',
+                          default='/share/phoenix/nfs02/S2/localdisk/zhiqiu/open_active/pretrained_weight',
+                          help="Pretrained folder of softmax weight")
 
 # Need to clean out
 c2ae_args = add_argument_group('C2AE Trainer Machine Param.')

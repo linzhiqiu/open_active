@@ -23,6 +23,7 @@ class AnalysisMachine(object):
         self.analysis_trainer = analysis_trainer
         self.budget_mode = budget_mode
         self.train_mode = train_mode
+        self.data = data
         self.save_dir = self.get_save_dir()
         if not os.path.exists(self.save_dir):
             utils.makedirs(self.save_dir)
@@ -702,6 +703,10 @@ if __name__ == "__main__":
         # Cosine network
         TRAINING_METHODS = ['cosine_network']
         QUERY_METHODS = ['random', 'entropy', 'softmax', 'uldr_norm_cosine', 'coreset_norm_cosine']
+    elif config.analysis_trainer == 'deep_metric':
+        # Cosine network
+        TRAINING_METHODS = ['deep_metric']
+        QUERY_METHODS = ['random', 'entropy', 'softmax', 'uldr', 'coreset']
     
     if config.train_mode == 'no_finetune':
         print("No finetune experiments! Only test random query.")
