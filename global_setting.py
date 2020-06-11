@@ -30,9 +30,20 @@ DATASET_CONFIG_DICT = {
             'sample_per_class' : 50, # Number of samples per discovered class
             'num_open_classes' : 20, 
         },
-     
+        # For active learning closed set experiments
+        'active': {
+            'num_init_classes' : 100, # Number of initial discovered classes
+            'sample_per_class' : 10, # Number of samples per discovered class
+            'num_open_classes' : 0, 
+        },
     },
-    'CIFAR10' : {},
+    'CIFAR10' : {
+        'active': {
+            'num_init_classes' : 10, # Number of initial discovered classes
+            'sample_per_class' : 100, # Number of samples per discovered class
+            'num_open_classes' : 0, 
+        },
+    },
 
     'CUB200': {
         'regular': {  # The setup in ICRA deep metric learning paper. 80 closed classes, 20 open classes.

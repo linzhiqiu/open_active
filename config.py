@@ -56,6 +56,7 @@ trainer_args.add_argument('--trainer_save_dir', # The direction hierachy will be
                           default='/share/coecis/open_active/trainers',
                           help='path to where the trainer checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
 
+
 trainer_args.add_argument('--query_method',
                           default='entropy',
                           choices=['random', # random query
@@ -96,6 +97,10 @@ analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cos
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
+
+active_analysis_arg = add_argument_group('Active Learning Analysis.')
+active_analysis_arg.add_argument('--active_analysis_save_dir', default="/share/coecis/open_active/active_analysis",
+                                 help='The directory to save all the plots for closed set active learning')
 
 
 deepmetric_args = add_argument_group('Deep metric Trainer Machine Param.')
@@ -182,6 +187,32 @@ training_arg.add_argument('--train_mode', type=str,
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')
 training_arg.add_argument('--seed', type=int, default=31, help='random seed (default: 31)')
+
+
+active_arg = add_argument_group('Active Learning Param.')
+active_arg.add_argument('--active_save_path',
+                          default='/share/coecis/open_active/active_datasets',
+                          help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
+active_arg.add_argument('--active_query_scheme', type=str,
+                          choices=['sequential', 'independent'], default='sequential',
+                          help='How the query is selected etc.')
+active_arg.add_argument('--active_train_mode', type=str,
+                          choices=['retrain'], default='retrain',
+                          help='How many epochs etc.')
+active_arg.add_argument('--active_save_dir', # The direction hierachy will be: {dataset}/{active_init_mode}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
+                        default='/share/coecis/open_active/active_learners',
+                        help='path to where the active learning checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
+active_arg.add_argument('--active_init_mode',
+                         default='active',
+                         choices=['active', # the default. Detail in global_settings.py
+                                  ],
+                         help="How to select the initial training/hold-out open set")
+active_arg.add_argument('--active_budget_mode',
+                         default='default',
+                         choices=['default', # the default. Detail in global_settings.py
+                                  ],
+                         help="How to select the budget to query and evaluate")
+
 
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
 uncertainty_sampling_arg.add_argument('--uncertainty_measure',

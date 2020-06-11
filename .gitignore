@@ -28,3 +28,9 @@ temp_*/
 *.tar.gz
 cifar-100-python/
 trainers/
+active_analysis/
+analysis/
+trainers/
+active_learners/
+cifar-10-batches-py/
+.*/

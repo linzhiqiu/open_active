@@ -126,6 +126,47 @@ CUB200_FEWER_EPOCH_CONFIG = {
     }),
 }
 
+CIFAR100_FINETUNE_CONFIG_FOR_DEEPMETRIC = {
+    'backbone' : 'ResNet18',
+    'feature_dim' : 512,
+    'batch' : 128,
+    'workers' : 4,
+    'device' : 'cuda',
+    'num_neighbours': 200,
+    'sigma': 10,
+    'interval': 5,
+    'train' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 1e-4,
+        'epochs' : 20,
+        'decay_epochs': 30,
+        'decay_by' : 0.1,
+        'softmax_optim' : 'sgd',
+        'softmax_epochs': 0,
+        'softmax_lr': 1e-1,
+        'softmax_decay_epochs':0,
+        'softmax_decay_by': 0.1,
+        'softmax_weight_decay' : 0.0005,
+    }),
+    'finetune' : TrainConfig({
+        'optim' : 'sgd',
+        'weight_decay' : 0.0005,
+        'momentum' : 0.9,
+        'lr' : 1e-4,
+        'epochs' : 20,
+        'decay_epochs': 30,
+        'decay_by' : 0.1,
+        'softmax_optim' : 'sgd',
+        'softmax_epochs': 0,
+        'softmax_lr': 1e-1,
+        'softmax_decay_epochs':60,
+        'softmax_decay_by': 0.1,
+        'softmax_weight_decay' : 0.0005,
+    }),
+}
+
 CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
     'backbone' : 'ResNet18',
     'feature_dim' : 512,
@@ -217,6 +258,7 @@ TRAIN_CONFIG_DICT = {
         },
         'deep_metric' : {
             'default_lr01_200eps' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
+            'default' : CIFAR100_FINETUNE_CONFIG_FOR_DEEPMETRIC,
         },
     },
     'CUB200' : {

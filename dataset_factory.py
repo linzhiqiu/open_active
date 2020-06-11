@@ -123,7 +123,7 @@ class DatasetFactory(object):
         init_conf = DATASET_CONFIG_DICT[data][init_mode]
         # Assert: num of class - num of open class - num of initial discovered classes >= 0
         assert len(classes) - init_conf['num_open_classes'] - init_conf['num_init_classes'] >= 0
-        if data not in ['CIFAR100', 'CUB200', 'Cars']:
+        if data not in ['CIFAR100', 'CUB200', 'Cars', 'CIFAR10']:
             raise NotImplementedError()
         else:
             # class_to_indices[class_index] = list of sample indices (list of int)
@@ -139,13 +139,21 @@ class DatasetFactory(object):
                 open_classes = set(random.sample(remaining_classes, init_conf['num_open_classes']))
             else:
                 discovered_classes = set(range(init_conf['num_init_classes']))
-                open_classes = set(range(len(classes))[-init_conf['num_open_classes']:])
+                if init_conf['num_open_classes'] > 0:
+                    open_classes = set(range(len(classes))[-init_conf['num_open_classes']:])
+                else:
+                    open_classes = set()
             
             discovered_samples = []
-            for class_i in discovered_classes:
-                if dataset_rand_seed:
-                    discovered_samples += random.sample(class_to_indices[class_i], init_conf['sample_per_class'])
-                else:
+            if dataset_rand_seed:
+                all_samples = []
+                for class_i in discovered_classes:
+                    all_samples += class_to_indices[class_i]
+                
+                total_sample_size = init_conf['sample_per_class'] * len(discovered_classes)
+                discovered_samples = list(random.sample(all_samples, total_sample_size))
+            else:
+                for class_i in discovered_classes:
                     discovered_samples += class_to_indices[class_i][:init_conf['sample_per_class']]
 
             open_samples = []

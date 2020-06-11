@@ -251,6 +251,20 @@ def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, t
         makedirs(save_dir)
     return save_dir
 
+def get_active_save_dir(active_save_dir, data, active_init_mode, dataset_rand_seed, training_method, active_train_mode, active_query_scheme, makedir=True):
+    save_dir = os.path.join(active_save_dir,
+                            data,
+                            active_init_mode,
+                            "seed_"+str(dataset_rand_seed),
+                            training_method,
+                            active_train_mode,
+                            active_query_scheme)
+    if not os.path.exists(save_dir) and makedir:
+        print("Making a new directory to save checkpoints for active learning.")
+        print(f"Location {save_dir}")
+        makedirs(save_dir)
+    return save_dir
+
 def get_trainset_info_path(save_path, data):
     return os.path.join(get_dataset_dir(save_path, data), "trainset_info.pt")
 
@@ -337,4 +351,85 @@ def prepare_save_dir(save_path,
         paths_dict['open_result_paths'][key]       = os.path.join(paths_dict['test_dirs'][key],'open_result.pt')
         paths_dict['open_result_roc_paths'][key]   = os.path.join(paths_dict['test_dirs'][key],"roc.png")
         paths_dict['open_result_goscr_paths'][key] = os.path.join(paths_dict['test_dirs'][key],'goscr.png')
+    return paths_dict
+
+def get_budget_list_from_config(config, makedir=True):
+    return get_budget_list(config.data)
+
+def get_budget_list(data):
+    """Return the list of budget candidates for active learning experiments.
+        Args:
+            data (str) - dataset name
+        Returns:
+            budget_list (list) : List of int
+    """
+    if data in ['CIFAR100', 'CIFAR10']:
+        return [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
+    else:
+        raise NotImplementedError()
+                           
+def prepare_active_learning_dir_from_config(config, budget_list, makedir=True):
+    return prepare_active_learning_dir(budget_list,
+                                       config.active_save_path,
+                                       config.download_path,
+                                       config.active_save_dir,
+                                       config.data,
+                                       config.active_init_mode,
+                                       config.dataset_rand_seed,
+                                       config.training_method,
+                                       config.active_train_mode,
+                                       config.query_method,
+                                       config.active_query_scheme,
+                                       makedir=makedir)
+
+def prepare_active_learning_dir(budget_list,
+                                active_save_path,
+                                download_path,
+                                active_save_dir,
+                                data,
+                                active_init_mode,
+                                dataset_rand_seed,
+                                training_method,
+                                active_train_mode,
+                                query_method,
+                                active_query_scheme,
+                                makedir=True):
+    """Return a dictionary of save_paths for active learning
+    """
+    paths_dict = {}
+    paths_dict['data_download_path'] = download_path
+    paths_dict['dataset_dir'] = get_dataset_dir(active_save_path, data, makedir=makedir)
+    paths_dict['dataset_info_path'] = get_dataset_info_path(active_save_path,
+                                                            data,
+                                                            active_init_mode,
+                                                            dataset_rand_seed)
+    paths_dict['trainset_info_path'] = get_trainset_info_path(active_save_path, data)
+    
+    # Where the training/testing results will be saved
+    paths_dict['active_save_dir'] = get_active_save_dir(active_save_dir,
+                                                        data,
+                                                        active_init_mode,
+                                                        dataset_rand_seed,
+                                                        training_method,
+                                                        active_train_mode,
+                                                        active_query_scheme,
+                                                        makedir=makedir)
+
+    folder_path = paths_dict["active_save_dir"]
+    if not os.path.exists(folder_path) and makedir:
+        print(f"Make a new folder at: {folder_path}")
+        makedirs(folder_path)
+
+    paths_dict["active_query_results"] = {}
+    paths_dict["active_ckpt_results"] = {}
+    paths_dict["active_test_results"] = {}
+    for b in budget_list:
+        b_dir = os.path.join(folder_path, str(b), "active_"+query_method)
+        if not os.path.exists(b_dir) and makedir:
+            print(f"Make a new folder at: {b_dir}")
+            makedirs(b_dir)
+        paths_dict["active_query_results"][b] = os.path.join(b_dir, "query_result.pt")
+        paths_dict["active_ckpt_results"][b]  = os.path.join(b_dir, "ckpt.pt")
+        paths_dict["active_test_results"][b]  = os.path.join(b_dir, "test_result.pt")
+    
     return paths_dict

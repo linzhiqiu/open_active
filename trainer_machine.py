@@ -88,7 +88,7 @@ class TrainerMachine(object):
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
-            if self.train_mode == "no_finetune":
+            if self.train_mode in ["no_finetune",'retrain']:
                 print("Use a new backbone network without finetuning.")
                 self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
             elif self.train_mode == 'fix_feature_extractor':
@@ -507,6 +507,7 @@ class DeepMetricNetwork(Network): # Xiuyu : You may also inherit the Network cla
             print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
 
     def compute_novel_distance(self, discovered_samples):
+        return
         undiscovered_samples = list(self.trainset_info.query_samples.difference(discovered_samples))
         open_loader = get_subset_loader(self.trainset_info.train_dataset,
                                           list(self.trainset_info.open_samples),

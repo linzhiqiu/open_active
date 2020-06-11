@@ -103,3 +103,64 @@ class Trainer(object):
                                        result_path=self.open_result_paths[open_set_method],
                                        verbose=verbose)
         
+
+class ActiveTrainer(object):
+    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method):
+        """The main class for training/querying/finetuning
+            Args:
+                training_method (str) : The method for training the network
+                active_train_mode (str) : Specify the training details, such as lr, batchsize...
+                active_config (dict) : Dictionary that includes all training hyperparameters
+                trainset_info (TrainsetInfo) : The details about the training set
+                query_method (str) : The method for querying from the unlabeled pool
+        """
+        super(ActiveTrainer, self).__init__()
+        self.training_method = training_method
+        self.active_train_mode = active_train_mode
+        self.trainset_info = trainset_info
+        self.active_config = active_config
+        self.query_method = query_method
+       
+        self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
+                                                                   active_train_mode,
+                                                                   trainset_info,
+                                                                   active_config)
+        self.query_machine = query_machine.get_query_machine(query_method,
+                                                             trainset_info,
+                                                             active_config)
+
+    def train(self, discovered_samples, discovered_classes, trained_ckpt_path, verbose=False):
+        """Performs training using discovered_samples
+        """
+        self.trainer_machine.finetune(
+            discovered_samples,
+            discovered_classes,
+            ckpt_path=trained_ckpt_path,
+            verbose=verbose
+        )
+    
+    def query(self, b, discovered_samples, discovered_classes, query_result_path, verbose=False):
+        """Performs querying from unlabeled pool. discovered_samples is the already labaled samples
+        """
+        return self.query_machine.query(self.trainer_machine,
+                                        b,
+                                        discovered_samples,
+                                        discovered_classes,
+                                        query_result_path=query_result_path,
+                                        verbose=verbose)
+    
+    def eval_closed_set(self, discovered_classes, test_dataset, test_result_path, verbose=False):
+        return self.trainer_machine.eval_closed_set(discovered_classes,
+                                                    test_dataset,
+                                                    result_path=test_result_path,
+                                                    verbose=verbose)
+
+    # def eval_open_set(self, discovered_samples, discovered_classes, test_dataset, verbose=False):
+    #     for open_set_method in self.open_result_paths:
+    #         eval_machine = self.eval_machines[open_set_method]
+    #         eval_machine.eval_open_set(discovered_samples,
+    #                                    discovered_classes,
+    #                                    test_dataset,
+    #                                    result_path=self.open_result_paths[open_set_method],
+    #                                    verbose=verbose)
+     

@@ -127,6 +127,9 @@ class QueryMachine(object):
         unlabeled_pool = self.trainset_info.query_samples.difference(discovered_samples)
         unlabeled_pool = list(unlabeled_pool)
         unmapping = get_target_unmapping_dict(self.trainset_info.classes, discovered_classes)
+        if budget == 0:
+            print("Budget is 0. No querying.")
+            return discovered_samples, discovered_classes
         if len(unlabeled_pool) <= budget:
             print("Remaining data is fewer/ equal than the budget constraint. Label all.")
             return list(self.trainset_info.query_samples), self.trainset_info.query_classes
