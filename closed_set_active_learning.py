@@ -74,6 +74,7 @@ def main():
         active_config,
         trainset_info,
         config.query_method,
+        config.active_val_mode,
     )
 
     for i, b in enumerate(budget_list): 

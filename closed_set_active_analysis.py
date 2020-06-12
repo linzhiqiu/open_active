@@ -300,15 +300,15 @@ if __name__ == "__main__":
     from utils import prepare_save_dir
     config = get_config()
 
-    ACTIVE_QUERY_SCHEMES = ['sequential', 'independent']
-    # ACTIVE_QUERY_SCHEMES = ['sequential']
+    # ACTIVE_QUERY_SCHEMES = ['sequential', 'independent']
+    ACTIVE_QUERY_SCHEMES = ['sequential']
     ACTIVE_TRAIN_MODES = ['retrain']
     TRAINING_METHODS = ['softmax_network']
-    # QUERY_METHODS = ['uldr', 'coreset', 'random', 'softmax', 'entropy']
-    # QUERY_METHODS = ['softmax', 'random', 'entropy']
+    QUERY_METHODS = ['coreset', 'random', 'softmax', 'entropy']
+    # QUERY_METHODS = ['softmax', 'random']
     # QUERY_METHODS = ['softmax', 'coreset']
     # QUERY_METHODS = ['uldr', 'random']
-    QUERY_METHODS = ['coreset', 'random']
+    # QUERY_METHODS = ['coreset', 'random']
     RANDOM_SEEDS = [None, 1, 10, 100, 1000, 2000]
 
     budget_list = utils.get_budget_list_from_config(config)

@@ -105,7 +105,7 @@ class Trainer(object):
         
 
 class ActiveTrainer(object):
-    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method):
+    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, active_val_mode):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
@@ -113,6 +113,7 @@ class ActiveTrainer(object):
                 active_config (dict) : Dictionary that includes all training hyperparameters
                 trainset_info (TrainsetInfo) : The details about the training set
                 query_method (str) : The method for querying from the unlabeled pool
+                active_val_mode (str or None) : How to select the validation set
         """
         super(ActiveTrainer, self).__init__()
         self.training_method = training_method
@@ -120,11 +121,13 @@ class ActiveTrainer(object):
         self.trainset_info = trainset_info
         self.active_config = active_config
         self.query_method = query_method
+        self.active_val_mode = active_val_mode
        
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    active_train_mode,
                                                                    trainset_info,
-                                                                   active_config)
+                                                                   active_config,
+                                                                   val_mode=self.active_val_mode)
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              trainset_info,
                                                              active_config)

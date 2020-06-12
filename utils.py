@@ -251,12 +251,24 @@ def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, t
         makedirs(save_dir)
     return save_dir
 
-def get_active_save_dir(active_save_dir, data, active_init_mode, dataset_rand_seed, training_method, active_train_mode, active_query_scheme, makedir=True):
+def get_active_save_dir(active_save_dir,
+                        data,
+                        active_init_mode,
+                        dataset_rand_seed,
+                        training_method,
+                        active_train_mode,
+                        active_query_scheme,
+                        active_val_mode,
+                        makedir=True):
+    if active_val_mode == None:
+        training_method_str = training_method
+    else:
+        training_method_str = "_".join([training_method, "val", active_val_mode])
     save_dir = os.path.join(active_save_dir,
                             data,
                             active_init_mode,
                             "seed_"+str(dataset_rand_seed),
-                            training_method,
+                            training_method_str,
                             active_train_mode,
                             active_query_scheme)
     if not os.path.exists(save_dir) and makedir:
@@ -380,6 +392,7 @@ def prepare_active_learning_dir_from_config(config, budget_list, makedir=True):
                                        config.active_train_mode,
                                        config.query_method,
                                        config.active_query_scheme,
+                                       config.active_val_mode,
                                        makedir=makedir)
 
 def prepare_active_learning_dir(budget_list,
@@ -393,6 +406,7 @@ def prepare_active_learning_dir(budget_list,
                                 active_train_mode,
                                 query_method,
                                 active_query_scheme,
+                                active_val_mode,
                                 makedir=True):
     """Return a dictionary of save_paths for active learning
     """
@@ -413,6 +427,7 @@ def prepare_active_learning_dir(budget_list,
                                                         training_method,
                                                         active_train_mode,
                                                         active_query_scheme,
+                                                        active_val_mode,
                                                         makedir=makedir)
 
     folder_path = paths_dict["active_save_dir"]
@@ -431,5 +446,5 @@ def prepare_active_learning_dir(budget_list,
         paths_dict["active_query_results"][b] = os.path.join(b_dir, "query_result.pt")
         paths_dict["active_ckpt_results"][b]  = os.path.join(b_dir, "ckpt.pt")
         paths_dict["active_test_results"][b]  = os.path.join(b_dir, "test_result.pt")
-    
+        
     return paths_dict

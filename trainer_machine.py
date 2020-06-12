@@ -9,7 +9,7 @@ from collections import OrderedDict
 from tqdm import tqdm
 import copy
 
-import os
+import os, random
 
 import models
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list, get_index_mapping_func
@@ -22,13 +22,14 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINE
 import libmr
 import math
 
-def get_trainer_machine(training_method, train_mode, trainset_info, trainer_config):
+def get_trainer_machine(training_method, train_mode, trainset_info, trainer_config, val_mode=None):
     """Return a TrainerMachine object
         Args:
             training_method (str) : The training method
             train_mode (str) : The training mode (with/without finetune)
             trainset_info (TrainsetInfo) : The details about training set
             trainer_config (dict) : The details about hyperparameter and etc.
+            val_mode
     """
     if training_method == "softmax_network":
         trainer_machine_class = SoftmaxNetwork
@@ -41,11 +42,11 @@ def get_trainer_machine(training_method, train_mode, trainset_info, trainer_conf
     else:
         raise NotImplementedError()
     
-    return trainer_machine_class(train_mode, trainset_info, trainer_config)
+    return trainer_machine_class(train_mode, trainset_info, trainer_config, val_mode=val_mode)
 
 class TrainerMachine(object):
     """Abstract class"""
-    def __init__(self, train_mode, trainset_info, trainer_config):
+    def __init__(self, train_mode, trainset_info, trainer_config, val_mode=None):
         super(TrainerMachine, self).__init__()
         self.train_mode = train_mode
         self.trainset_info = trainset_info
@@ -189,13 +190,62 @@ class TrainerMachine(object):
             raise NotImplementedError()
         return backbone
 
-    def get_trainloader(self, discovered_samples, shuffle=True):
-        return get_subset_loader(self.trainset_info.train_dataset,
-                                 discovered_samples,
-                                 None, # No target transform
-                                 batch_size=self.batch,
-                                 shuffle=shuffle,
-                                 workers=self.workers)
+    def get_trainloaders(self, discovered_samples, shuffle=True):
+        if self.val_mode == None:
+            train_samples = discovered_samples
+            val_samples = []
+        else:
+            val_ratio = 0.05
+            print(f"Using validation set ratio {val_ratio}")
+            val_size = int(val_ratio * len(discovered_samples))
+            if self.val_mode == 'randomized':
+                print("Select the validation set randomly..")
+                discovered_samples_copy = discovered_samples.copy()
+                random.shuffle(discovered_samples_copy)
+                
+                train_samples = discovered_samples_copy[val_size:]
+                val_samples = discovered_samples_copy[:val_size]
+            elif self.val_mode == 'balanced':
+                print("Select the validation set to have a balanced distribution..")
+                class_to_indices = {}
+                for sample_i in discovered_samples:
+                    class_i = self.trainset_info.train_labels[sample_i]
+                    if not class_i in class_to_indices:
+                        class_to_indices[class_i] = []
+                    class_to_indices[class_i].append(sample_i)
+                num_classes = len(class_to_indices.keys())
+                
+                val_samples = []
+                if val_size < num_classes:
+                    print(f"Cannot afford to have more than one val sample per class, so we do it for {val_size} classes.")
+                    for class_i in classes_to_indices.keys():
+                        if len(val_samples) > val_size:
+                            break
+                        val_samples.append(classes_to_indices[class_i][0])
+                else:
+                    per_class = float(val_size)/num_classes
+                    print(f"We have on avg {int(per_class)} sample per class")
+                    for class_i in classes_to_indices.keys():
+                        val_samples.append(classes_to_indices[class_i][:int(per_class)])
+                    remaining_val_size = val_size - len(val_samples)
+                    print(f"We have remaining {remaining_val_size} samples, and we pick one sample from random {remaining_val_size} classes")
+                    for class_i in classes_to_indices.keys():
+                        if len(val_samples) > val_size:
+                            break
+                        if len(classes_to_indices[class_i]) > int(per_class):
+                            val_samples.append(classes_to_indices[class_i][int(per_class)])
+                
+                train_samples = list(set(discovered_samples).difference(set(val_samples)))
+            else:
+                raise NotImplementedError()
+            print(f"We have {len(train_samples)} train samples and {len(val_samples)} val samples.")
+        return get_subset_loaders(self.trainset_info.train_dataset,
+                                  train_samples,
+                                  val_samples,
+                                  None, # No target transform
+                                  batch_size=self.batch,
+                                  shuffle=shuffle,
+                                  workers=self.workers), train_samples, val_samples
         
     def _get_target_mapp_func(self, discovered_classes):
         return get_target_mapping_func_for_tensor(self.trainset_info.classes,
@@ -229,67 +279,114 @@ class Network(TrainerMachine):
         scheduler = self._get_scheduler(cfg, optimizer)
             
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
-        trainloader = self.get_trainloader(discovered_samples)
+        
+        trainloaders, train_samples, val_samples = self.get_trainloaders(discovered_samples)
 
         criterion = torch.nn.NLLLoss(reduction='mean')
 
         avg_loss_per_epoch = []
         avg_acc_per_epoch = []
+        avg_val_loss_per_epoch = []
+        avg_val_acc_per_epoch = []
+
+        if self.val_mode == None:
+            phases = ['train']
+        else:
+            phases = ['train', 'val']
+            best_val_acc = 0
+            best_val_epoch = None
+            
         with SetPrintMode(hidden=not verbose):
             for epoch in range(0, cfg.epochs):
-                running_loss = 0.0
-                running_corrects = 0.
-                count = 0
+                for phase in phases:
+                    running_loss = 0.0
+                    running_corrects = 0.
+                    count = 0
 
-                if verbose:
-                    pbar = tqdm(trainloader, ncols=80)
-                else:
-                    pbar = trainloader
-
-                for batch, data in enumerate(pbar):
-                    inputs, real_labels = data
-                    labels = target_mapping_func(real_labels)
-                    count += inputs.size(0)
-                    
-                    inputs = inputs.to(self.device)
-                    labels = labels.to(self.device)
-
-                    optimizer.zero_grad()
-
-                    features = self.backbone(inputs)
-                    outputs = self.classifier(features)
-                    _, preds = torch.max(outputs, 1)
-
-                    log_probability = F.log_softmax(outputs, dim=1)
-
-                    loss = criterion(log_probability, labels)
-
-                    loss.backward()
-                    optimizer.step()
-
-                    # statistics
-                    running_loss += loss.item() * inputs.size(0)
-                    running_corrects += torch.sum(preds == labels.data)
                     if verbose:
-                        pbar.set_postfix(loss=float(running_loss)/count, 
-                                         acc=float(running_corrects)/count,
-                                         epoch=epoch)
-                
-                avg_loss = float(running_loss)/count
-                avg_acc = float(running_corrects)/count
-                avg_loss_per_epoch.append(avg_loss)
-                avg_acc_per_epoch.append(avg_acc)
-                scheduler.step()
-            print(f"Average Loss {avg_loss}, Accuracy {avg_acc}")
-        ckpt_dict = {
-            'backbone' : self.backbone.state_dict(),
-            'classifier' : self.classifier.state_dict(),
-            'optimizer' : optimizer.state_dict(),
-            'discovered_samples' : discovered_samples,
-            'discovered_classes' : discovered_classes,
-            'loss_curve' : avg_loss_per_epoch,
-            'acc_curve' : avg_acc_per_epoch
-        }
+                        pbar = tqdm(trainloaders[phase], ncols=80)
+                    else:
+                        pbar = trainloaders[phase]
+
+                    for batch, data in enumerate(pbar):
+                        inputs, real_labels = data
+                        labels = target_mapping_func(real_labels)
+                        count += inputs.size(0)
+                        
+                        inputs = inputs.to(self.device)
+                        labels = labels.to(self.device)
+
+                        if phase == 'train': optimizer.zero_grad()
+
+                        with torch.set_grad_enabled(phase == 'train'):
+                            features = self.backbone(inputs)
+                            outputs = self.classifier(features)
+                            _, preds = torch.max(outputs, 1)
+
+                            log_probability = F.log_softmax(outputs, dim=1)
+
+                            loss = criterion(log_probability, labels)
+
+                        if phase == 'train':
+                            loss.backward()
+                            optimizer.step()
+
+                        # statistics
+                        running_loss += loss.item() * inputs.size(0)
+                        running_corrects += torch.sum(preds == labels.data)
+                        if verbose:
+                            pbar.set_postfix(loss=float(running_loss)/count, 
+                                             acc=float(running_corrects)/count,
+                                             epoch=epoch,
+                                             phase=phase)
+                    
+                    avg_loss = float(running_loss)/count
+                    avg_acc = float(running_corrects)/count
+                    if phase == 'train': 
+                        avg_loss_per_epoch.append(avg_loss)
+                        avg_acc_per_epoch.append(avg_acc)
+                        scheduler.step()
+                    elif phase == 'val':
+                        avg_val_loss_per_epoch.append(avg_loss)
+                        avg_val_acc_per_epoch.append(avg_acc)
+                        if avg_acc > best_val_acc:
+                            print("Best val accuracy at epoch {epoch} being {avg_acc}")
+                            best_val_epoch = epoch
+                            best_val_acc_backbone_state_dict = self.backbone.state_dict()
+                            best_val_acc_classifier_state_dict = self.classifier.state_dict()
+                print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
+        
+        if self.val_mode != None:
+            print("Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
+            self.backbone.load_state_dict(best_val_acc_backbone_state_dict)
+            self.classifier.load_state_dict(best_val_acc_classifier_state_dict)
+            ckpt_dict = {
+                'backbone' : self.backbone.state_dict(),
+                'classifier' : self.classifier.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+                'discovered_samples' : discovered_samples,
+                'discovered_classes' : discovered_classes,
+                'train_samples' : train_samples,
+                'val_samples' : val_samples,
+                'loss_curve' : avg_loss_per_epoch,
+                'acc_curve' : avg_acc_per_epoch,
+                'val_loss_curve' : avg_val_loss_per_epoch,
+                'val_acc_curve' : avg_val_acc_per_epoch,
+                'best_val_epoch' : best_val_epoch,
+                "best_val_acc" : best_val_acc,
+            }
+        else:
+            ckpt_dict = {
+                'backbone' : self.backbone.state_dict(),
+                'classifier' : self.classifier.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+                'discovered_samples' : discovered_samples,
+                'discovered_classes' : discovered_classes,
+                'train_samples' : train_samples,
+                'val_samples' : val_samples,
+                'loss_curve' : avg_loss_per_epoch,
+                'acc_curve' : avg_acc_per_epoch
+            }
         return ckpt_dict
     
     def _eval_closed_set_helper(self, discovered_classes, test_dataset, verbose=True):

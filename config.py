@@ -41,6 +41,11 @@ setting_arg.add_argument('--init_mode',
                          choices=['regular', 'fewer_class', 'fewer_sample',
                                   ],
                          help="How to select the initial training/hold-out open set")
+setting_arg.add_argument('--active_val_mode',
+                         default=None,
+                         choices=['randomized', 'balanced',
+                                  ],
+                         help="How to select the validation set")
 
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--training_method',
