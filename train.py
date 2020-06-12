@@ -24,9 +24,10 @@ def main():
     if config.use_random_seed:
         print("Using random random seed")
     else:
-        print("PyTorch use random seed 30")
-        torch.manual_seed(30)
-        torch.cuda.manual_seed(30)
+        print("PyTorch use random seed 1")
+        torch.manual_seed(1)
+        torch.cuda.manual_seed(1)
+        np.random.seed(1)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
