@@ -64,6 +64,7 @@ class TrainerMachine(object):
         self.classifier = None # Initialize per train()/finetune() call.
         
         self.ckpt_dict = None # A dictionary that holds all checkpoint information
+        self.val_mode = val_mode
 
     def train(self, discovered_samples, discovered_classes, ckpt_path=None, verbose=False):
         """Perform the train step
@@ -218,34 +219,33 @@ class TrainerMachine(object):
                 val_samples = []
                 if val_size < num_classes:
                     print(f"Cannot afford to have more than one val sample per class, so we do it for {val_size} classes.")
-                    for class_i in classes_to_indices.keys():
-                        if len(val_samples) > val_size:
+                    for class_i in class_to_indices.keys():
+                        if len(val_samples) >= val_size:
                             break
-                        val_samples.append(classes_to_indices[class_i][0])
+                        val_samples.append(class_to_indices[class_i][0])
                 else:
                     per_class = float(val_size)/num_classes
                     print(f"We have on avg {int(per_class)} sample per class")
-                    for class_i in classes_to_indices.keys():
-                        val_samples.append(classes_to_indices[class_i][:int(per_class)])
+                    for class_i in class_to_indices.keys():
+                        val_samples += class_to_indices[class_i][:int(per_class)]
                     remaining_val_size = val_size - len(val_samples)
                     print(f"We have remaining {remaining_val_size} samples, and we pick one sample from random {remaining_val_size} classes")
-                    for class_i in classes_to_indices.keys():
-                        if len(val_samples) > val_size:
+                    for class_i in class_to_indices.keys():
+                        if len(val_samples) >= val_size:
                             break
-                        if len(classes_to_indices[class_i]) > int(per_class):
-                            val_samples.append(classes_to_indices[class_i][int(per_class)])
-                
+                        if len(class_to_indices[class_i]) > int(per_class):
+                            val_samples.append(class_to_indices[class_i][int(per_class)])
                 train_samples = list(set(discovered_samples).difference(set(val_samples)))
             else:
                 raise NotImplementedError()
             print(f"We have {len(train_samples)} train samples and {len(val_samples)} val samples.")
-        return get_subset_loaders(self.trainset_info.train_dataset,
-                                  train_samples,
-                                  val_samples,
-                                  None, # No target transform
-                                  batch_size=self.batch,
-                                  shuffle=shuffle,
-                                  workers=self.workers), train_samples, val_samples
+        return get_subset_dataloaders(self.trainset_info.train_dataset,
+                                      train_samples,
+                                      val_samples,
+                                      None, # No target transform
+                                      batch_size=self.batch,
+                                      shuffle=shuffle,
+                                      workers=self.workers), train_samples, val_samples
         
     def _get_target_mapp_func(self, discovered_classes):
         return get_target_mapping_func_for_tensor(self.trainset_info.classes,
@@ -350,14 +350,15 @@ class Network(TrainerMachine):
                         avg_val_loss_per_epoch.append(avg_loss)
                         avg_val_acc_per_epoch.append(avg_acc)
                         if avg_acc > best_val_acc:
-                            print("Best val accuracy at epoch {epoch} being {avg_acc}")
+                            print(f"Best val accuracy at epoch {epoch} being {avg_acc}")
                             best_val_epoch = epoch
+                            best_val_acc = avg_acc
                             best_val_acc_backbone_state_dict = self.backbone.state_dict()
                             best_val_acc_classifier_state_dict = self.classifier.state_dict()
-                print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
-        
+                    print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
+                print()
         if self.val_mode != None:
-            print("Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
+            print(f"Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
             self.backbone.load_state_dict(best_val_acc_backbone_state_dict)
             self.classifier.load_state_dict(best_val_acc_classifier_state_dict)
             ckpt_dict = {
