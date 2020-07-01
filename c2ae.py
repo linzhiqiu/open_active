@@ -22,8 +22,46 @@ from instance_info import C2AEInfoCollector
 import models
 from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func
 from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
+from eval_machine import NetworkOpen
+
 # from vector import clamp_to_unit_sphere
 SAVE_FIG_EVERY_EPOCH = 500
+
+
+def save_reconstruction(inputs, matched_results, nonmatch_results, save_dir, epoch):
+    plt.figure(figsize=(25,25))
+    plt.subplot(1,3,1)
+    plt.axis("off")
+    plt.title("Original Images")
+    plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
+
+    plt.subplot(1,3,2)
+    plt.axis("off")
+    plt.title("Match Reconstruction")
+    plt.imshow(np.transpose(matched_results,(1,2,0)))
+
+    plt.subplot(1,3,3)
+    plt.axis("off")
+    plt.title("NonMatch Reconstruction")
+    plt.imshow(np.transpose(nonmatch_results,(1,2,0)))
+
+    plt.savefig(save_dir + os.sep + str(epoch) + ".png")
+
+
+def save_hist(match_scores, nonmatch_scores, save_dir):
+    max_score = max(match_scores + nonmatch_scores)
+    min_score = min(match_scores + nonmatch_scores)
+    bins = np.linspace(min_score, max_score, 100)
+    plt.figure(figsize=(10,10))
+    plt.hist(match_scores, bins, alpha=0.5, label='Matched')
+    plt.hist(nonmatch_scores, bins, alpha=0.5, label='Non Matched')
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+    histo_file = os.path.join(save_dir, "histo.png")
+    plt.savefig(histo_file)
+    print(f"Fig save to {histo_file}")
+
+
 def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_decoder, alpha, num_classes, train_mode='default', device="cuda", start_epoch=0, max_epochs=50, verbose=True, save_output=False, arch='classifier32', train_in_eval_mode=False):
     assert start_epoch < max_epochs
     avg_loss = 0.
@@ -34,10 +72,9 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
     #                       "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
     #                       'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder_bce',
     #                       'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']
-    if 'default' in train_mode:
-        nonmatch_ratio = 1.-alpha
-    else:
-        nonmatch_ratio = alpha-1.
+
+    # always use 1-aplha
+    nonmatch_ratio = 1.-alpha
 
     if "_mse" in train_mode:
         criterion = nn.MSELoss()
@@ -91,18 +128,6 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
                     matched_outputs = autoencoder(inputs, labels)
                     match_loss = criterion(matched_outputs, inputs)
-
-
-                    # if epoch==max_epochs-1:
-                    #     # Try batch size = 1. Train both train and eval
-                    #     k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, inputs.shape[0])
-                    #     for class_i in range(num_classes):
-                    #         reconstruction_i = autoencoder(inputs, k_labels[class_i]).cpu().detach()
-                    #         errors = torch.abs(inputs - reconstruction_i).view(inputs.shape[0], -1).mean(1)
-                    #         if class_i == 0:
-                    #             min_errors = errors
-                    #         else:
-                    #             min_errors = torch.min(min_errors, errors)
                     
                     if save_output:
                         save_dir = f"c2ae_results/reconstruction_{train_mode}_a_{alpha}_epoch_{max_epochs}_phase_{phase}_arch_{arch}_trainineval_{train_in_eval_mode}"
@@ -117,46 +142,14 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                             match_scores += (torch.abs(matched_outputs - inputs).view(inputs.shape[0],-1).mean(1).detach().cpu()).tolist()
                             nonmatch_scores += (torch.abs(nonmatch_outputs - inputs).view(inputs.shape[0],-1).mean(1).detach().cpu()).tolist()
 
-
                             if (batch == len(dataloaders[phase])-1):
-                                max_score = max(match_scores + nonmatch_scores)
-                                min_score = min(match_scores + nonmatch_scores)
-                                bins = np.linspace(min_score, max_score, 100)
-                                plt.figure(figsize=(10,10))
-                                plt.hist(match_scores, bins, alpha=0.5, label='Matched')
-                                plt.hist(nonmatch_scores, bins, alpha=0.5, label='Non Matched')
-                                plt.legend(loc='upper right')
-                                # plt.show()
-                                plt.tight_layout()
-                                histo_file = os.path.join(save_dir, "histo.png")
-                                plt.savefig(histo_file)
-                                print(f"Fig save to {histo_file}")
-
+                                save_hist(match_scores, nonmatch_scores, save_dir)
 
                         if (batch == len(dataloaders[phase])-1):
                             matched_results = vutils.make_grid(matched_outputs.detach().cpu(), padding=2, normalize=True)
                             nonmatch_results = vutils.make_grid(nonmatch_outputs.detach().cpu(), padding=2, normalize=True)
 
-                            # if (batch % SAVE_FIG_EVERY_EPOCH == 0) and ((epoch == max_epochs-1) and (batch == len(dataloader)-1)):
-                            
-                            plt.figure(figsize=(25,25))
-                            plt.subplot(1,3,1)
-                            plt.axis("off")
-                            plt.title("Original Images")
-                            plt.imshow(np.transpose(vutils.make_grid(inputs, padding=2, normalize=True).cpu(),(1,2,0)))
-                            
-                            plt.subplot(1,3,2)
-                            plt.axis("off")
-                            plt.title("Match Reconstruction")
-                            plt.imshow(np.transpose(matched_results,(1,2,0)))
-
-                            plt.subplot(1,3,3)
-                            plt.axis("off")
-                            plt.title("NonMatch Reconstruction")
-                            plt.imshow(np.transpose(nonmatch_results,(1,2,0)))
-
-                        
-                        plt.savefig(save_dir + os.sep + str(epoch) + ".png")
+                            save_reconstruction(inputs, matched_results, nonmatch_results, save_dir, epoch)                            
 
                     loss = alpha * match_loss + nonmatch_ratio * nonmatch_loss
                     if phase == 'train':
