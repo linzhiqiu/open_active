@@ -82,7 +82,6 @@ def save_scores(results, folder=None, sorted_key="final_acc"):
         for key in sorted_keys:
             file.write(f"{results[key][sorted_key]}|{key}\n")
 
-
 def parse_json(json_file, sorted_key='final_acc'):
     try:
         dictionary = json.load(open(json_file, "r"))

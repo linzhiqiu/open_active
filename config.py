@@ -41,11 +41,21 @@ setting_arg.add_argument('--init_mode',
                          choices=['regular', 'fewer_class', 'fewer_sample',
                                   ],
                          help="How to select the initial training/hold-out open set")
+setting_arg.add_argument('--val_mode',
+                         default=None,
+                         choices=['randomized', 'balanced',
+                                  ],
+                         help="How to select the validation set (for train.py)")
 setting_arg.add_argument('--active_val_mode',
                          default=None,
                          choices=['randomized', 'balanced',
                                   ],
-                         help="How to select the validation set")
+                         help="How to select the validation set (for closed_set_active_learning.py)")
+setting_arg.add_argument('--open_set_val_mode',
+                         default=None,
+                         choices=['randomized', 'balanced',
+                                  ],
+                         help="How to select the validation set (for open_set_learning.py)")
 
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--training_method',
@@ -217,6 +227,20 @@ active_arg.add_argument('--active_budget_mode',
                          choices=['default', # the default. Detail in global_settings.py
                                   ],
                          help="How to select the budget to query and evaluate")
+
+open_arg = add_argument_group("Open set Learning Param")
+open_arg.add_argument('--open_set_save_path',
+                      default='/share/coecis/open_active/open_datasets',
+                      help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
+open_arg.add_argument('--open_set_train_mode', type=str,
+                      choices=['default'], default='default',
+                      help='The training mode for open set recognition.')
+open_arg.add_argument('--open_set_init_mode', type=str,
+                      choices=['default'], default='default',
+                      help='The initial dataset labelling for open set recognition.')
+open_arg.add_argument('--open_set_save_dir', # The direction hierachy will be: {dataset}/{open_set_init_mode}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
+                      default='/share/coecis/open_active/open_learners',
+                      help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
 
 
 uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
