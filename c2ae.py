@@ -28,6 +28,42 @@ from eval_machine import NetworkOpen
 SAVE_FIG_EVERY_EPOCH = 500
 
 
+class NMPicker:
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self.iter_counter = iter(dataloader)
+        self.batch_data, self.batch_label = self._get_new_batch()
+        self.batch_index = 0
+        self.batch_size = dataloader.batch_size
+    
+    def _get_new_batch(self):
+        """
+        Get the next batch of data, start over from the begining if needed
+        """
+        try:
+            data, label = next(self.iter_counter)
+        except StopIteration:
+            self.iter_counter = iter(self.dataloader)
+            data, label = next(self.iter_counter)
+        return data.cuda(), label.cuda()
+
+    def get_non_match_images(self, labels):
+        """
+        Return a batch of images with different label in labels
+        returning dimension: N*C*H*W
+        """
+        results = []
+        result_labels = []
+        for cur_label in labels:
+            while cur_label == self.batch_label[self.batch_index]:  # See if the label matches
+                self.batch_index += 1
+                if self.batch_index >= self.batch_size:
+                    self.batch_index = 0
+                    self.batch_data, self.batch_label = self._get_new_batch()
+            results.append(self.batch_data[self.batch_index])
+            result_labels.append(self.batch_label[self.batch_index])
+        return torch.stack(results, dim=0).cuda()
+
 def save_reconstruction(inputs, matched_results, nonmatch_results, save_dir, epoch):
     plt.figure(figsize=(25,25))
     plt.subplot(1,3,1)
@@ -68,28 +104,10 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
     avg_match_loss = 0.
     avg_nonmatch_loss = 0.
 
-    # assert train_mode in ['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
-    #                       "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
-    #                       'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder_bce',
-    #                       'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']
-
     # always use 1-aplha
     nonmatch_ratio = 1.-alpha
 
-    if "_mse" in train_mode:
-        criterion = nn.MSELoss()
-    elif "_bce" in train_mode:
-        criterion = nn.BCEWithLogitsLoss()
-    else:
-        criterion = nn.L1Loss()
-
-    if 'not_frozen' in train_mode or 'simple_autoencoder' in train_mode or 'UNet' in train_mode:
-        optim_param = {"lr": 0.0003, 
-                       "weight_decay": 5e-4}          
-        optimizer_decoder = torch.optim.Adam(
-                                filter(lambda x : x.requires_grad, autoencoder.parameters()), 
-                                **optim_param
-                            )
+    criterion = nn.L1Loss()
 
     for epoch in range(start_epoch, max_epochs):
         for phase in dataloaders.keys():
@@ -109,6 +127,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
             else:
                 pbar = dataloaders[phase]
 
+            nmpicker = NMPicker(dataloaders[phase])
+
             for batch, data in enumerate(pbar):
                 inputs, labels = data
                 count += inputs.size(0)
@@ -124,7 +144,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
                     perm = torch.multinomial(dist,1).reshape(-1)
                     nm_labels = torch.remainder(labels + perm + 1, num_classes)
                     nonmatch_outputs = autoencoder(inputs, nm_labels)
-                    nonmatch_loss = criterion(nonmatch_outputs, inputs)
+                    nonmatch_target = nmpicker.get_non_match_images(labels)
+                    nonmatch_loss = criterion(nonmatch_outputs, nonmatch_target)
 
                     matched_outputs = autoencoder(inputs, labels)
                     match_loss = criterion(matched_outputs, inputs)
@@ -237,11 +258,8 @@ def train_autoencoder(autoencoder, dataloaders, optimizer_decoder, scheduler_dec
 
     return avg_match_loss, avg_nonmatch_loss
 
-def get_autoencoder(model, decoder, arch='classifier32'):
-    if 'resnet' in arch.lower():
-        return ResNetAutoEncoder(model, decoder)
-    elif arch in ['classifier32', 'classifier32_instancenorm']:
-        return Classifier32AutoEncoder(model, decoder)
+def get_autoencoder(model, decoder, arch='resnet'):
+    return ResNetAutoEncoder(model, decoder)
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -278,139 +296,6 @@ class Autoencoder(nn.Module):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
         return decoded
-
-class ConditionedAutoencoder(Autoencoder):
-    def __init__(self, num_classes=0, *args, **kwargs):
-        super(ConditionedAutoencoder, self).__init__()
-        self.num_classes = num_classes
-        self.h_y = torch.nn.Linear(num_classes, 768, bias=True)
-        self.h_b = torch.nn.Linear(num_classes, 768, bias=True)
-
-    def forward(self, x, labels):
-        encoded = self.encoder(x)
-        label_vectors = torch.zeros(x.shape[0], self.num_classes).to(x.device) - 1.
-        label_vectors[torch.arange(x.shape[0]), labels] = 1.
-        y = self.h_y(label_vectors)
-        b = self.h_b(label_vectors)
-        encoded_shape = encoded.shape
-        z = encoded.view(encoded.shape[0], -1)*y + b
-        z = z.view(encoded_shape)
-        decoded = self.decoder(z)
-        return decoded
-
-class dcgan_generator(nn.Module):
-    def __init__(self, latent_size=2048, ngf=64, *args, **kwargs):
-        super(dcgan_generator, self).__init__()
-        self.main = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(latent_size, ngf * 4, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(ngf * 4),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 4 x 4
-            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf * 2),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8
-            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf),
-            nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
-            nn.Tanh()
-            # state size. (nc) x 32 x 32
-        )
-
-    def forward(self, input):
-        input = input.unsqueeze(2).unsqueeze(3)
-        return self.main(input)
-
-class dcgan_generator_instancenorm(nn.Module):
-    def __init__(self, latent_size=2048, ngf=64, affine=False, *args, **kwargs):
-        super(dcgan_generator_instancenorm, self).__init__()
-        self.main = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(latent_size, ngf * 4, 4, 1, 0, bias=False),
-            nn.InstanceNorm2d(ngf * 4, affine=affine),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 4 x 4
-            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-            nn.InstanceNorm2d(ngf * 2, affine=affine),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8
-            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
-            nn.InstanceNorm2d(ngf, affine=affine),
-            nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
-            nn.Tanh()
-            # state size. (nc) x 32 x 32
-        )
-
-    def forward(self, input):
-        input = input.unsqueeze(2).unsqueeze(3)
-        return self.main(input)
-
-class UNet(nn.Module):
-    def __init__(self, latent_size=100, num_classes=0):
-        super(UNet, self).__init__()
-        assert num_classes > 0
-        assert latent_size > 0
-        self.dconv_down1 = self.double_conv(3, 64)
-        self.dconv_down2 = self.double_conv(64, 128)
-        self.dconv_down3 = self.double_conv(128, 256)
-
-        self.maxpool = nn.MaxPool2d(2)
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)        
-        
-        self.dconv_up2 = self.double_conv(128 + 256, 128)
-        self.dconv_up1 = self.double_conv(128 + 64, 64)
-        
-        self.conv_last = nn.Conv2d(64, 3, 1)
-
-        self.num_classes = num_classes
-        self.h_y = torch.nn.Linear(num_classes, latent_size, bias=True)
-        self.h_b = torch.nn.Linear(num_classes, latent_size, bias=True)
-    
-    def double_conv(self, in_channels, out_channels):
-        return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, padding=1),
-            nn.ReLU(inplace=True)
-        )   
-        
-    def forward(self, x, labels):
-        conv1 = self.dconv_down1(x)
-        x = self.maxpool(conv1)
-
-        conv2 = self.dconv_down2(x)
-        x = self.maxpool(conv2)
-        
-        x = self.dconv_down3(x)
-
-        x_size = x.shape
-        x = x.view(x.shape[0], -1)
-        # Now x is the feature vector
-        label_vectors = torch.zeros(x.shape[0], self.num_classes).to(x.device) - 1.
-        label_vectors[torch.arange(x.shape[0]), labels] = 1.
-        y = self.h_y(label_vectors)
-        b = self.h_b(label_vectors)
-        z = x*y + b
-
-        z = z.view(x_size)
-
-        x = self.upsample(z)        
-        x = torch.cat([x, conv2], dim=1)       
-
-        x = self.dconv_up2(x)
-        x = self.upsample(x)        
-        x = torch.cat([x, conv1], dim=1)   
-        
-        x = self.dconv_up1(x)
-        
-        out = self.conv_last(x)
-        
-        return out
 
 class generator32(nn.Module):
     def __init__(self, latent_size=100, batch_size=64, **kwargs):
@@ -493,19 +378,6 @@ class Decoder(nn.Module):
         out = self.generator(z)
         return out
 
-class DecoderNoLabel(nn.Module):
-    def __init__(self, latent_size=100, batch_size=64, num_classes=0, generator_class=generator32):
-        super(self.__class__, self).__init__()
-        assert num_classes > 0
-        self.num_classes = num_classes
-        self.latent_size = latent_size
-        self.batch_size = batch_size
-        self.generator = generator_class(latent_size=latent_size, batch_size=batch_size)
-
-    def forward(self, x, labels):
-        out = self.generator(x)
-        return out
-
 class ResNetAutoEncoder(nn.Module):
     def __init__(self, resnet_model, decoder):
         super(self.__class__, self).__init__()
@@ -520,17 +392,6 @@ class ResNetAutoEncoder(nn.Module):
         out = self.encoder.layer4(out)
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
-        out = self.decoder(out, labels)
-        return out
-
-class Classifier32AutoEncoder(nn.Module):
-    def __init__(self, encoder, decoder):
-        super(self.__class__, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-
-    def forward(self, x, labels):
-        out = self.encoder(x, return_features=True)
         out = self.decoder(out, labels)
         return out
 
@@ -610,19 +471,9 @@ class C2AE(Network):
             print(f"Encoder weights saved to {save_dir+os.sep}model.ckpt")
 
         decoder_params = {}
-        if 'no_label' in self.c2ae_train_mode:
-            decoder_class = DecoderNoLabel
-        else:
-            decoder_class = Decoder
+        decoder_class = Decoder
 
-        if 'dcgan' in self.c2ae_train_mode:
-            if "instancenorm" in self.c2ae_train_mode:
-                generator_class = dcgan_generator_instancenorm
-                decoder_params['affine'] = self.c2ae_instancenorm_affine
-            else:
-                generator_class = dcgan_generator
-        else:
-            generator_class = generator32
+        generator_class = generator32
         
         self.decoder = decoder_class(latent_size=2048,
                                      batch_size=self.config.batch,
@@ -633,17 +484,9 @@ class C2AE(Network):
 
         optimizer_decoder = self._get_network_optimizer(self.decoder)
         scheduler_decoder = self._get_network_scheduler(optimizer_decoder)
-        if self.c2ae_train_mode in ['debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce']:
-            self.autoencoder = Autoencoder().to(self.device)
-        elif self.c2ae_train_mode in ['debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder']:
-            self.autoencoder = ConditionedAutoencoder(latent_size=2048, num_classes=len(discovered_classes)).to(self.device)
-        elif self.c2ae_train_mode in ['UNet_mse', 'UNet']:
-            self.autoencoder = UNet(latent_size=16384, num_classes=len(discovered_classes)).to(self.device)
-        else:
-            self.autoencoder = get_autoencoder(model, self.decoder, arch=self.config.arch)
-        # criterion_autoencoder = torch.nn.L1Loss()
-        # criterion_autoencoder = torch.nn.MSELoss()
-        # criterion_autoencoder = torch.nn.BCELoss()
+
+        self.autoencoder = get_autoencoder(model, self.decoder, arch=self.config.arch)
+
         with SetPrintMode(hidden=not self.config.verbose):
             match_loss, nm_loss =   train_autoencoder(
                                         self.autoencoder,
