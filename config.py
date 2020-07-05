@@ -58,11 +58,6 @@ setting_arg.add_argument('--val_mode',
 setting_arg.add_argument('--active_test_val_diff',
                          default=False, type=str2bool,
                          help="Whether to test difference between test and val set")
-setting_arg.add_argument('--open_set_val_mode',
-                         default=None,
-                         choices=['randomized', 'balanced',
-                                  ],
-                         help="How to select the validation set (for open_set_learning.py)")
 
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--training_method',
@@ -243,7 +238,7 @@ open_arg.add_argument('--open_set_train_mode', type=str,
                       choices=['default'], default='default',
                       help='The training mode for open set recognition.')
 open_arg.add_argument('--open_set_init_mode', type=str,
-                      choices=['default'], default='default',
+                      choices=['default'], default='default_open_set',
                       help='The initial dataset labelling for open set recognition.')
 open_arg.add_argument('--open_set_save_dir', # The direction hierachy will be: {dataset}/{open_set_init_mode}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
                       default='/share/coecis/open_active/open_learners',

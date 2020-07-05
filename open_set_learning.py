@@ -18,6 +18,7 @@ import json
 import random
 
 from utils import prepare_open_set_learning_dir_from_config
+import global_setting
 
 def main():
     config = get_config()
@@ -48,6 +49,7 @@ def main():
 
     # Begin from scratch
     discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
+    val_samples = dataset_factory.get_val_samples() # Val samples is a subset of discovered_samples, and will be excluded in the network training.
     open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
     
     # The train set details
@@ -70,20 +72,21 @@ def main():
         config.open_set_train_mode,
         open_set_config,
         trainset_info,
-        config.open_set_val_mode,
+        global_setting.OPEN_SET_METHOD_DICT[config.training_method],
+        test_dataset,
+        val_samples,
+        paths_dict
     )
 
     trainer.train(discovered_samples,
                   discovered_classes,
-                  paths_dict['open_set_ckpt_results'],
                   verbose=config.verbose)
 
     closed_set_test_acc = trainer.eval_closed_set(discovered_classes,
-                                                  test_dataset,
-                                                  paths_dict['open_set_test_result'],
                                                   verbose=config.verbose)
     
-    trainer.eval_open_set(discovered_samples, discovered_classes, test_dataset, verbose=config.verbose)
+    # Evaluate on all open set methods
+    trainer.eval_open_set(discovered_samples, discovered_classes, verbose=config.verbose)
     
 
 if __name__ == '__main__':

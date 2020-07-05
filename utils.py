@@ -251,6 +251,25 @@ def get_trainer_save_dir(trainer_save_dir, data, init_mode, dataset_rand_seed, t
         makedirs(save_dir)
     return save_dir
 
+def get_open_set_save_dir(open_set_save_dir,
+                          data,
+                          open_set_init_mode,
+                          dataset_rand_seed,
+                          training_method,
+                          open_set_train_mode,
+                          makedir=makedir):
+    save_dir = os.path.join(open_set_save_dir,
+                            data,
+                            open_set_init_mode,
+                            "seed_"+str(dataset_rand_seed),
+                            training_method,
+                            open_set_train_mode)
+    if not os.path.exists(save_dir) and makedir:
+        print("Making a new directory to save checkpoints for open set learning.")
+        print(f"Location {save_dir}")
+        makedirs(save_dir)
+    return save_dir
+
 def get_active_save_dir(active_save_dir,
                         data,
                         active_init_mode,
@@ -281,12 +300,8 @@ def get_active_save_dir(active_save_dir,
 def get_trainset_info_path(save_path, data):
     return os.path.join(get_dataset_dir(save_path, data), "trainset_info.pt")
 
-def get_open_set_methods(training_method):
-    from global_setting import OPEN_SET_METHOD_DICT
-    return OPEN_SET_METHOD_DICT[training_method]
-
 def prepare_save_dir_from_config(config, makedir=True):
-    open_set_methods = get_open_set_methods(config.training_method)
+    open_set_methods = global_setting.OPEN_SET_METHOD_DICT[config.training_method]
     return prepare_save_dir(config.save_path,
                             config.download_path,
                             config.trainer_save_dir,
@@ -453,87 +468,75 @@ def prepare_active_learning_dir(budget_list,
     return paths_dict
 
 
+def prepare_open_set_learning_dir_from_config(config, makedir=True):
+    open_set_methods = global_setting.OPEN_SET_METHOD_DICT[config.training_method]
+    return prepare_open_set_learning_dir(config.open_set_save_path,
+                                         config.download_path,
+                                         config.open_set_save_dir,
+                                         config.data,
+                                         config.open_set_init_mode,
+                                         config.dataset_rand_seed,
+                                         config.training_method,
+                                         config.open_set_train_mode,
+                                         open_set_methods,
+                                         makedir=makedir)
 
-# def prepare_open_set_learning_dir_from_config(config, makedir=True):
-#     open_set_methods = get_open_set_methods(config.training_method)
-#     return prepare_open_set_learning_dir(config.open_set_save_path,
-#                                          config.download_path,
-#                                          config.open_set_save_dir,
-#                                          config.data,
-#                                          config.open_set_init_mode,
-#                                          config.dataset_rand_seed,
-#                                          config.training_method,
-#                                          config.open_set_train_mode,
-#                                          config.open_set_val_mode,
-#                                          open_set_methods,
-#                                          makedir=makedir)
-
-# def prepare_open_set_learning_dir(open_set_save_path,
-#                                   download_path,
-#                                   open_set_save_dir,
-#                                   data,
-#                                   open_set_init_mode,
-#                                   dataset_rand_seed,
-#                                   training_method,
-#                                   open_set_train_mode,
-#                                   open_set_val_mode,
-#                                   open_set_methods,
-#                                   makedir=True):
-#     """Return a dictionary of save_paths for open set learning
-#     """
-#     paths_dict = {}
-#     paths_dict['data_download_path'] = download_path
-#     paths_dict['dataset_dir'] = get_dataset_dir(open_set_save_path, data, makedir=makedir)
-#     paths_dict['dataset_info_path'] = get_dataset_info_path(open_set_save_path,
-#                                                             data,
-#                                                             open_set_init_mode,
-#                                                             dataset_rand_seed)
-#     paths_dict['trainset_info_path'] = get_trainset_info_path(open_set_save_path, data)
+def prepare_open_set_learning_dir(open_set_save_path,
+                                  download_path,
+                                  open_set_save_dir,
+                                  data,
+                                  open_set_init_mode,
+                                  dataset_rand_seed,
+                                  training_method,
+                                  open_set_train_mode,
+                                  open_set_methods,
+                                  makedir=True):
+    """Return a dictionary of save_paths for open set learning
+    """
+    paths_dict = {}
+    paths_dict['data_download_path'] = download_path
+    paths_dict['dataset_dir'] = get_dataset_dir(open_set_save_path, data, makedir=makedir)
+    paths_dict['dataset_info_path'] = get_dataset_info_path(open_set_save_path,
+                                                            data,
+                                                            open_set_init_mode,
+                                                            dataset_rand_seed)
+    paths_dict['trainset_info_path'] = get_trainset_info_path(open_set_save_path, data)
     
-#     # Where the training/testing results will be saved
-#     paths_dict['open_set_save_dir'] = get_open_set_save_dir(open_set_save_dir,
-#                                                             data,
-#                                                             open_set_init_mode,
-#                                                             dataset_rand_seed,
-#                                                             training_method,
-#                                                             open_set_train_mode,
-#                                                             open_set_val_mode,
-#                                                             makedir=makedir)
-
-#     folder_path = paths_dict["open_set_save_dir"]
-#     if not os.path.exists(folder_path) and makedir:
-#         print(f"Make a new folder at: {folder_path}")
-#         makedirs(folder_path)
-
-#     paths_dict['test_dirs'] = {}
-#     for open_set_method in open_set_methods:
-#         paths_dict['test_dirs'][open_set_method] = os.path.join(paths_dict['open_set_save_dir'],
-#                                                                 "_".join(["openset", open_set_method]))
-
-#     for folder in ["trainer_save_dir", "finetuned_dir"]:
-#         folder_path = paths_dict[folder]
-#         if not os.path.exists(folder_path) and makedir:
-#             print(f"Make a new folder at: {folder_path}")
-#             makedirs(folder_path)
-
-#     for key in paths_dict['test_dirs']:
-#         folder_path = paths_dict['test_dirs'][key]
-#         if not os.path.exists(folder_path) and makedir:
-#             print(f"Make a new folder at: {folder_path}")
-#             makedirs(folder_path)
     
-#     paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['trainer_save_dir'],'ckpt.pt')
-#     paths_dict['query_result_path']   = os.path.join(paths_dict['finetuned_dir']   ,'query_result.pt')
-#     paths_dict['finetuned_ckpt_path'] = os.path.join(paths_dict['finetuned_dir']   ,'ckpt.pt')
-#     paths_dict['test_result_path']    = os.path.join(paths_dict['finetuned_dir']   ,'test_result.pt')
-    
-#     paths_dict['open_result_paths'] = {}
-#     paths_dict['open_result_roc_paths'] = {}
-#     paths_dict['open_result_goscr_paths'] = {}
-#     for key in paths_dict['test_dirs']:
-#         paths_dict['open_result_paths'][key]       = os.path.join(paths_dict['test_dirs'][key],'open_result.pt')
-#         paths_dict['open_result_roc_paths'][key]   = os.path.join(paths_dict['test_dirs'][key],"roc.png")
-#         paths_dict['open_result_goscr_paths'][key] = os.path.join(paths_dict['test_dirs'][key],'goscr.png')
-#     return paths_dict
+    # Where the training/testing results will be saved
+    paths_dict['open_set_save_dir'] = get_open_set_save_dir(open_set_save_dir,
+                                                            data,
+                                                            open_set_init_mode,
+                                                            dataset_rand_seed,
+                                                            training_method,
+                                                            open_set_train_mode,
+                                                            makedir=makedir)
 
-#     return paths_dict
+    folder_path = paths_dict["open_set_save_dir"]
+    if not os.path.exists(folder_path) and makedir:
+        print(f"Make a new folder at: {folder_path}")
+        makedirs(folder_path)
+
+    paths_dict['trained_ckpt_path']   = os.path.join(paths_dict['open_set_save_dir']   ,'ckpt.pt')
+    paths_dict['test_result_path']    = os.path.join(paths_dict['open_set_save_dir']   ,'test_result.pt')
+    
+    paths_dict['test_dirs'] = {}
+    for open_set_method in open_set_methods:
+        paths_dict['test_dirs'][open_set_method] = os.path.join(paths_dict['open_set_save_dir'],
+                                                                "_".join(["openset", open_set_method]))
+
+    for key in paths_dict['test_dirs']:
+        folder_path = paths_dict['test_dirs'][key]
+        if not os.path.exists(folder_path) and makedir:
+            print(f"Make a new folder at: {folder_path}")
+            makedirs(folder_path)
+    
+    paths_dict['open_result_paths'] = {}
+    paths_dict['open_result_roc_paths'] = {}
+    paths_dict['open_result_goscr_paths'] = {}
+    for key in paths_dict['test_dirs']:
+        paths_dict['open_result_paths'][key]       = os.path.join(paths_dict['test_dirs'][key],'open_result.pt')
+        paths_dict['open_result_roc_paths'][key]   = os.path.join(paths_dict['test_dirs'][key],"roc.png")
+        paths_dict['open_result_goscr_paths'][key] = os.path.join(paths_dict['test_dirs'][key],'goscr.png')
+    return paths_dict
+

@@ -18,6 +18,7 @@ import json
 import random
 
 from utils import prepare_save_dir_from_config
+import global_setting
 
 def main():
     config = get_config()
@@ -74,7 +75,7 @@ def main():
         trainset_info,
         config.query_method,
         config.budget,
-        utils.get_open_set_methods(config.training_method),
+        global_setting.OPEN_SET_METHOD_DICT[config.training_method],
         paths_dict=paths_dict,
     )
 

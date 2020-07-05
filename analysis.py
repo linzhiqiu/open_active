@@ -12,6 +12,7 @@ import pickle
 import torch
 import random
 import utils
+import global_setting
 
 SMALL_SIZE = 8
 MEDIUM_SIZE = 15
@@ -187,7 +188,7 @@ class AnalysisMachine(object):
                                                             self.train_mode,
                                                             query_method,
                                                             b,
-                                                            utils.get_open_set_methods(training_method),
+                                                            global_setting.OPEN_SET_METHOD_DICT[training_method],
                                                             makedir=False)
                                 # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
                                     # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
@@ -196,7 +197,7 @@ class AnalysisMachine(object):
                                 for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_paths']:
                                     exp_finished = True
                                     if k == 'open_result_paths':
-                                        for o_method in utils.get_open_set_methods(training_method):
+                                        for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                             if not os.path.exists(paths_dict[k][o_method]):
                                                 exp_finished = False
                                     else:
@@ -263,24 +264,24 @@ class AnalysisMachine(object):
                         finished_exp[init_mode][b][training_method] = {}
                     for query_method in self.ALL_QUERY_METHODS:
                         paths_dict = prepare_save_dir(self.dataset_save_path,
-                                                        self.data_download_path,
-                                                        self.trainer_save_dir,
-                                                        self.data,
-                                                        init_mode,
-                                                        self.dataset_rand_seed,
-                                                        training_method,
-                                                        self.train_mode,
-                                                        query_method,
-                                                        b,
-                                                        utils.get_open_set_methods(training_method),
-                                                        makedir=False)
+                                                      self.data_download_path,
+                                                      self.trainer_save_dir,
+                                                      self.data,
+                                                      init_mode,
+                                                      self.dataset_rand_seed,
+                                                      training_method,
+                                                      self.train_mode,
+                                                      query_method,
+                                                      b,
+                                                      global_setting.OPEN_SET_METHOD_DICT[training_method],
+                                                      makedir=False)
                         if query_method in finished_exp[init_mode][b][training_method]:
                             import pdb; pdb.set_trace()
                         if os.path.exists(paths_dict['test_result_path']):
                             test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                             finished_exp[init_mode][b][training_method][query_method] = test_result
                             finished_exp[init_mode][b][training_method][query_method]['open_results'] = {}
-                            for o_method in utils.get_open_set_methods(training_method):
+                            for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                 if os.path.exists(paths_dict['open_result_paths'][o_method]):
                                         
                                     open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
@@ -356,13 +357,13 @@ class AnalysisMachine(object):
                                                             train_mode,
                                                             query_method,
                                                             b,
-                                                            utils.get_open_set_methods(training_method),
+                                                            global_setting.OPEN_SET_METHOD_DICT[training_method],
                                                             makedir=False)
                             if os.path.exists(paths_dict['test_result_path']):
                                 test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                                 finished_exp[init_mode][b][training_method][query_method] = test_result
                                 finished_exp[init_mode][b][training_method][query_method]['open_results'] = {}
-                                for o_method in utils.get_open_set_methods(training_method):
+                                for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                     if os.path.exists(paths_dict['open_result_paths'][o_method]):
                                             
                                         open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
@@ -758,7 +759,7 @@ class AnalysisMachine(object):
                             plt.xlabel("Number of budgets after initial round", fontsize=LABEL_SIZE)
                         elif key == 'combined':
                             plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
-                        for o_method in utils.get_open_set_methods(training_method):
+                        for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                             y = np.array([None for _ in x]).astype(np.double)
                             for idx, b in enumerate(budget_list):
                                 is_ready = False
@@ -856,7 +857,7 @@ class AnalysisMachine(object):
                             axes.set_ylim([0,1])
                             axes.set_xlim([0, 1])
 
-                            for o_method in utils.get_open_set_methods(training_method):
+                            for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                 is_ready = False
                                 if b in finished_exp[init_mode]:
                                     if training_method in finished_exp[init_mode][b]:
@@ -1270,7 +1271,7 @@ class AnalysisMachine(object):
                             plt.xlabel("Number of budgets after initial round", fontsize=LABEL_SIZE)
                         elif key == 'combined':
                             plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
-                        for o_method in utils.get_open_set_methods(training_method):
+                        for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                             y = np.array([None for _ in x]).astype(np.double)
                             for idx, b in enumerate(budget_list):
                                 is_ready = False
@@ -1368,7 +1369,7 @@ class AnalysisMachine(object):
                             axes.set_ylim([0,1])
                             axes.set_xlim([0, 1])
 
-                            for o_method in utils.get_open_set_methods(training_method):
+                            for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                 is_ready = False
                                 if b in finished_exp[init_mode]:
                                     if training_method in finished_exp[init_mode][b]:
