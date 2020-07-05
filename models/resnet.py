@@ -147,5 +147,9 @@ def test():
 
 # test()
 if __name__ == "__main__":
-    test()
+    # test()
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+    net = ResNet18(last_relu=False)
+    print(net.conv1.weight)
 

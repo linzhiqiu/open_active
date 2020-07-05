@@ -13,6 +13,8 @@ PRETRAINED_MODEL_PATH = {
     }
 }
 
+VAL_RATIO = 0.05 # 0.05 of each initial discovered class will be used for validation.
+
 DATASET_CONFIG_DICT = {
     'CIFAR100' : {
         'regular': { # The setup in ICRA deep metric learning paper. 80 closed classes, 20 open classes.
@@ -33,8 +35,8 @@ DATASET_CONFIG_DICT = {
         # For active learning closed set experiments
         'active': {
             'num_init_classes' : 100, # Number of initial discovered classes
-            'sample_per_class' : 10, # Number of samples per discovered class
-            'num_open_classes' : 0, 
+            'sample_per_class' : 30, # Number of samples per discovered class
+            'num_open_classes' : 0,
         },
     },
     'CIFAR10' : {

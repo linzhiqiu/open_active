@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data import SubsetRandomSampler
 import numpy as np
 import copy
-import random
+import random, math
 
-from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT
+from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT, VAL_RATIO
 
 class DatasetFactory(object):
     def __init__(self, data, download_path, dataset_info_path, init_mode, dataset_rand_seed=None):
@@ -88,10 +88,17 @@ class DatasetFactory(object):
     def get_init_train_set(self):
         '''Return the initial training set
             Returns:
-                discovered_samples (list of sample indices) : The initial labeled training set
+                discovered_samples (list of sample indices) : The initial labeled training set (including both train and val samples)
                 discovered_classes (set) : The initial discovered classes
         '''
         return self.dataset_info_dict['discovered_samples'], self.dataset_info_dict['discovered_classes']
+    
+    def get_val_samples(self):
+        '''Return the validation set
+            Returns:
+                val_samples (list of sample indices) : The validation set indices
+        '''
+        return self.dataset_info_dict['val_samples']
     
     def get_open_samples_in_trainset(self):
         '''Return the open samples/class indices in training set
@@ -159,11 +166,29 @@ class DatasetFactory(object):
             open_samples = []
             for open_class_i in open_classes:
                 open_samples += class_to_indices[open_class_i]
-            
+
+            val_samples = []
+            # VAL_RATIO of each discovered class, from smallest index
+            discovered_class_to_indices = {}
+            for sample_i in discovered_samples:
+                for class_i in discovered_classes:
+                    discovered_class_to_indices[class_i] = []
+                for idx in discovered_samples:
+                    label_i = labels[idx]
+                    discovered_class_to_indices[label_i].append(idx)
+            for class_i in discovered_classes:
+                sorted_indices_class_i = sorted(discovered_class_to_indices[class_i].copy())
+                if len(sorted_indices_class_i) <= 1:
+                    continue
+                class_i_size = math.ceil(len(sorted_indices_class_i) * VAL_RATIO)
+                val_samples += sorted_indices_class_i[:class_i_size]
+
             assert len(open_samples) == len(set(open_samples))
             assert len(discovered_samples) == len(set(discovered_samples))
+            assert len(val_samples) == len(set(val_samples))
             
             dataset_info['discovered_samples'] = discovered_samples
+            dataset_info['val_samples'] = val_samples
             dataset_info['open_samples'] = set(open_samples)
             dataset_info['discovered_classes'] = discovered_classes
             dataset_info['open_classes'] = open_classes

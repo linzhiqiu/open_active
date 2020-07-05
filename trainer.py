@@ -37,6 +37,7 @@ class Trainer(object):
         self.query_method = query_method
         self.budget = budget
         self.open_set_methods = open_set_methods
+        # self.test_dataset = test_dataset
        
         self.trained_ckpt_path   = paths_dict['trained_ckpt_path']
         self.query_result_path   = paths_dict['query_result_path']
@@ -105,7 +106,8 @@ class Trainer(object):
         
 
 class ActiveTrainer(object):
-    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, active_val_mode):
+    # def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, active_val_mode):
+    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, test_dataset, val_samples=None, active_test_val_diff=False):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
@@ -113,7 +115,8 @@ class ActiveTrainer(object):
                 active_config (dict) : Dictionary that includes all training hyperparameters
                 trainset_info (TrainsetInfo) : The details about the training set
                 query_method (str) : The method for querying from the unlabeled pool
-                active_val_mode (str or None) : How to select the validation set
+                # active_val_mode (str or None) : How to select the validation set
+                test_dataset (torch.nn.Dataset) : The test dataset
         """
         super(ActiveTrainer, self).__init__()
         self.training_method = training_method
@@ -121,13 +124,16 @@ class ActiveTrainer(object):
         self.trainset_info = trainset_info
         self.active_config = active_config
         self.query_method = query_method
-        self.active_val_mode = active_val_mode
-       
+        # self.active_val_mode = active_val_mode
+        self.val_samples = val_samples
+
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    active_train_mode,
                                                                    trainset_info,
                                                                    active_config,
-                                                                   val_mode=self.active_val_mode)
+                                                                   test_dataset,
+                                                                   val_samples=self.val_samples,
+                                                                   active_test_val_diff=active_test_val_diff)
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              trainset_info,
                                                              active_config)
@@ -135,7 +141,7 @@ class ActiveTrainer(object):
     def train(self, discovered_samples, discovered_classes, trained_ckpt_path, verbose=False):
         """Performs training using discovered_samples
         """
-        self.trainer_machine.finetune(
+        self.trainer_machine.train(
             discovered_samples,
             discovered_classes,
             ckpt_path=trained_ckpt_path,
@@ -152,9 +158,13 @@ class ActiveTrainer(object):
                                         query_result_path=query_result_path,
                                         verbose=verbose)
     
-    def eval_closed_set(self, discovered_classes, test_dataset, test_result_path, verbose=False):
+    # def eval_closed_set(self, discovered_classes, test_dataset, test_result_path, verbose=False):
+    #     return self.trainer_machine.eval_closed_set(discovered_classes,
+    #                                                 test_dataset,
+    #                                                 result_path=test_result_path,
+    #                                                 verbose=verbose)
+    def eval_closed_set(self, discovered_classes, test_result_path, verbose=False):
         return self.trainer_machine.eval_closed_set(discovered_classes,
-                                                    test_dataset,
                                                     result_path=test_result_path,
                                                     verbose=verbose)
 

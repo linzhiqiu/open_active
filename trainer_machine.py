@@ -22,14 +22,16 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINE
 import libmr
 import math
 
-def get_trainer_machine(training_method, train_mode, trainset_info, trainer_config, val_mode=None):
+def get_trainer_machine(training_method, train_mode, trainset_info, trainer_config, test_dataset, val_samples=None, active_test_val_diff=False):
     """Return a TrainerMachine object
         Args:
             training_method (str) : The training method
             train_mode (str) : The training mode (with/without finetune)
             trainset_info (TrainsetInfo) : The details about training set
             trainer_config (dict) : The details about hyperparameter and etc.
-            val_mode
+            test_dataset
+            val_samples
+            active_test_val_diff
     """
     if training_method == "softmax_network":
         trainer_machine_class = SoftmaxNetwork
@@ -42,11 +44,11 @@ def get_trainer_machine(training_method, train_mode, trainset_info, trainer_conf
     else:
         raise NotImplementedError()
     
-    return trainer_machine_class(train_mode, trainset_info, trainer_config, val_mode=val_mode)
+    return trainer_machine_class(train_mode, trainset_info, trainer_config, test_dataset, val_samples=val_samples, active_test_val_diff=active_test_val_diff)
 
 class TrainerMachine(object):
     """Abstract class"""
-    def __init__(self, train_mode, trainset_info, trainer_config, val_mode=None):
+    def __init__(self, train_mode, trainset_info, trainer_config, test_dataset, val_samples=None, active_test_val_diff=False):
         super(TrainerMachine, self).__init__()
         self.train_mode = train_mode
         self.trainset_info = trainset_info
@@ -59,22 +61,36 @@ class TrainerMachine(object):
         self.device = trainer_config['device']
         
         self.trainer_config  = trainer_config
-        self.backbone = self._get_backbone_network(trainer_config['backbone']).to(self.device)
+        self.backbone = None
         self.feature_dim = trainer_config['feature_dim']
         self.classifier = None # Initialize per train()/finetune() call.
         
         self.ckpt_dict = None # A dictionary that holds all checkpoint information
-        self.val_mode = val_mode
+        self.val_samples = val_samples
+        self.test_dataset = test_dataset
+        self.active_test_val_diff = active_test_val_diff # whether to compare val acc against test acc for every epochs
 
     def train(self, discovered_samples, discovered_classes, ckpt_path=None, verbose=False):
-        """Perform the train step
+        """Perform the train step (starting from a random initialization)
         """
         if os.path.exists(ckpt_path):
             print("Load from pre-existing ckpt. No training will be performed.")
             self.ckpt_dict = torch.load(ckpt_path)
             self._load_ckpt_dict(self.ckpt_dict)
         else:
-            print(f"First time training the model. Ckpt will be saved at {ckpt_path}")
+            print(f"Training the model from scratch. Ckpt will be saved at {ckpt_path}")
+            self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
+            if not self.train_config.random_restart:
+                # Load random weight from a checkpoint to ensure different round uses same initialization
+                random_model_weight_path = os.path.join(".", "weights", self.trainer_config['backbone']+".pt")
+                if not os.path.exists(random_model_weight_path):
+                    if not os.path.exists('./weights'): os.makedirs("./weights"); print("Make a new folder at ./weights/ to store random weights")
+                    print("Model {random_model_weight_path} doesn't exist. Generating a random model for the first time.")
+                    torch.save(self.backbone.state_dict(), random_model_weight_path)
+                self.backbone.load_state_dict(torch.load(random_model_weight_path))
+            else:
+                print("Using random initialization (Not loading from any checkpoint)")
+                pass # Not doing anything, just use a random initialization
             self.ckpt_dict = self._train_helper(self.train_config,
                                                 discovered_samples,
                                                 discovered_classes,
@@ -103,7 +119,8 @@ class TrainerMachine(object):
                                                 verbose=verbose)
             torch.save(self.ckpt_dict, ckpt_path)
     
-    def eval_closed_set(self, discovered_classes, test_dataset, result_path=None, verbose=True):
+    # def eval_closed_set(self, discovered_classes, test_dataset, result_path=None, verbose=True):
+    def eval_closed_set(self, discovered_classes, result_path=None, verbose=True):
         """ Performing closed set evaluation
         """
         if os.path.exists(result_path):
@@ -111,7 +128,7 @@ class TrainerMachine(object):
             self.closed_set_result = torch.load(result_path)
         else:
             self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
-                                                                  test_dataset,
+                                                                  self.test_dataset,
                                                                   verbose=verbose)
             torch.save(self.closed_set_result, result_path)
         return self.closed_set_result['acc']
@@ -160,6 +177,7 @@ class TrainerMachine(object):
 
     # Below are some helper functions shared by all subclasses
     def _load_ckpt_dict(self, ckpt_dict):
+        self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
         self.classifier = self._get_classifier(ckpt_dict['discovered_classes']).to(self.device)
         self.classifier.load_state_dict(ckpt_dict['classifier'])
         self.backbone.load_state_dict(ckpt_dict['backbone'])
@@ -192,60 +210,103 @@ class TrainerMachine(object):
         return backbone
 
     def get_trainloaders(self, discovered_samples, shuffle=True):
-        if self.val_mode == None:
-            train_samples = discovered_samples
-            val_samples = []
-        else:
-            val_ratio = 0.05
-            print(f"Using validation set ratio {val_ratio}")
-            val_size = int(val_ratio * len(discovered_samples))
-            if self.val_mode == 'randomized':
-                print("Select the validation set randomly..")
-                discovered_samples_copy = discovered_samples.copy()
-                random.shuffle(discovered_samples_copy)
-                
-                train_samples = discovered_samples_copy[val_size:]
-                val_samples = discovered_samples_copy[:val_size]
-            elif self.val_mode == 'balanced':
-                print("Select the validation set to have a balanced distribution..")
-                class_to_indices = {}
-                for sample_i in discovered_samples:
-                    class_i = self.trainset_info.train_labels[sample_i]
-                    if not class_i in class_to_indices:
-                        class_to_indices[class_i] = []
-                    class_to_indices[class_i].append(sample_i)
-                num_classes = len(class_to_indices.keys())
-                
-                val_samples = []
-                if val_size < num_classes:
-                    print(f"Cannot afford to have more than one val sample per class, so we do it for {val_size} classes.")
-                    for class_i in class_to_indices.keys():
-                        if len(val_samples) >= val_size:
-                            break
-                        val_samples.append(class_to_indices[class_i][0])
-                else:
-                    per_class = float(val_size)/num_classes
-                    print(f"We have on avg {int(per_class)} sample per class")
-                    for class_i in class_to_indices.keys():
-                        val_samples += class_to_indices[class_i][:int(per_class)]
-                    remaining_val_size = val_size - len(val_samples)
-                    print(f"We have remaining {remaining_val_size} samples, and we pick one sample from random {remaining_val_size} classes")
-                    for class_i in class_to_indices.keys():
-                        if len(val_samples) >= val_size:
-                            break
-                        if len(class_to_indices[class_i]) > int(per_class):
-                            val_samples.append(class_to_indices[class_i][int(per_class)])
-                train_samples = list(set(discovered_samples).difference(set(val_samples)))
-            else:
-                raise NotImplementedError()
-            print(f"We have {len(train_samples)} train samples and {len(val_samples)} val samples.")
+        # if self.val_mode == None:
+        #     train_samples = discovered_samples
+        #     val_samples = []
+        # else:
+        # val_ratio = 0.05
+        # print(f"Using validation set ratio {val_ratio}")
+        # val_size = int(val_ratio * len(discovered_samples))
+        # if self.val_mode == 'randomized':
+        #     print("Select the validation set randomly..")
+        #     discovered_samples_copy = discovered_samples.copy()
+        #     random.shuffle(discovered_samples_copy)
+            
+        #     train_samples = discovered_samples_copy[val_size:]
+        #     val_samples = discovered_samples_copy[:val_size]
+        # elif self.val_mode == 'balanced':
+        #     print("Select the validation set to have a balanced distribution..")
+        #     class_to_indices = {}
+        #     for sample_i in discovered_samples:
+        #         class_i = self.trainset_info.train_labels[sample_i]
+        #         if not class_i in class_to_indices:
+        #             class_to_indices[class_i] = []
+        #         class_to_indices[class_i].append(sample_i)
+        #     num_classes = len(class_to_indices.keys())
+            
+        #     val_samples = []
+        #     if val_size < num_classes:
+        #         print(f"Cannot afford to have more than one val sample per class, so we do it for {val_size} classes.")
+        #         for class_i in class_to_indices.keys():
+        #             if len(val_samples) >= val_size:
+        #                 break
+        #             val_samples.append(class_to_indices[class_i][0])
+        #     else:
+        #         per_class = float(val_size)/num_classes
+        #         print(f"We have on avg {int(per_class)} sample per class")
+        #         for class_i in class_to_indices.keys():
+        #             val_samples += class_to_indices[class_i][:int(per_class)]
+        #         remaining_val_size = val_size - len(val_samples)
+        #         print(f"We have remaining {remaining_val_size} samples, and we pick one sample from random {remaining_val_size} classes")
+        #         for class_i in class_to_indices.keys():
+        #             if len(val_samples) >= val_size:
+        #                 break
+        #             if len(class_to_indices[class_i]) > int(per_class):
+        #                 val_samples.append(class_to_indices[class_i][int(per_class)])
+        #     train_samples = list(set(discovered_samples).difference(set(val_samples)))
+        # elif self.val_mode == 'stratified':
+        #     import math
+        #     print(f"Select the validation set to be {val_ratio:.2%} of each discovered class. Ensure at least 1 training sample...")
+        #     class_to_indices = {}
+        #     for sample_i in discovered_samples:
+        #         class_i = self.trainset_info.train_labels[sample_i]
+        #         if not class_i in class_to_indices:
+        #             class_to_indices[class_i] = []
+        #         class_to_indices[class_i].append(sample_i)
+        #     num_classes = len(class_to_indices.keys())
+            
+        #     val_samples = []
+        #     for class_i in class_to_indices.keys():
+        #         if len(class_to_indices[class_i]) <= 1:
+        #             continue
+        #         else:
+        #             samples_in_class_i = class_to_indices[class_i].copy()
+        #             random.shuffle(samples_in_class_i)
+        #             class_i_size = math.ceil(len(samples_in_class_i) * val_ratio)
+        #             val_samples += samples_in_class_i[:class_i_size]
+        #     train_samples = list(set(discovered_samples).difference(set(val_samples)))
+        # elif self.val_mode == 'fixed_stratified':
+        #     import math
+        #     print(f"Select the validation set to be {val_ratio:.2%} of each discovered class. Ensure at least 1 training sample...")
+        #     class_to_indices = {}
+        #     for sample_i in discovered_samples:
+        #         class_i = self.trainset_info.train_labels[sample_i]
+        #         if not class_i in class_to_indices:
+        #             class_to_indices[class_i] = []
+        #         class_to_indices[class_i].append(sample_i)
+        #     num_classes = len(class_to_indices.keys())
+            
+        #     val_samples = []
+        #     for class_i in class_to_indices.keys():
+        #         if len(class_to_indices[class_i]) <= 1:
+        #             continue
+        #         else:
+        #             samples_in_class_i = class_to_indices[class_i].copy()
+        #             random.shuffle(samples_in_class_i)
+        #             class_i_size = math.ceil(len(samples_in_class_i) * val_ratio)
+        #             val_samples += samples_in_class_i[:class_i_size]
+        #     train_samples = list(set(discovered_samples).difference(set(val_samples)))
+        # else:
+        #     raise NotImplementedError()
+        train_samples = list(set(discovered_samples).difference(self.val_samples))
+        print(f"We have {len(train_samples)} train samples and {len(self.val_samples)} val samples.")
         return get_subset_dataloaders(self.trainset_info.train_dataset,
                                       train_samples,
-                                      val_samples,
+                                      self.val_samples,
                                       None, # No target transform
                                       batch_size=self.batch,
                                       shuffle=shuffle,
-                                      workers=self.workers), train_samples, val_samples
+                                      workers=self.workers), train_samples, self.val_samples
         
     def _get_target_mapp_func(self, discovered_classes):
         return get_target_mapping_func_for_tensor(self.trainset_info.classes,
@@ -289,16 +350,21 @@ class Network(TrainerMachine):
         avg_val_loss_per_epoch = []
         avg_val_acc_per_epoch = []
 
-        if self.val_mode == None:
-            phases = ['train']
-        else:
-            phases = ['train', 'val']
-            best_val_acc = 0
-            best_val_epoch = None
+        if self.active_test_val_diff: avg_test_acc_per_epoch = []
+
+        phases = ['train', 'val']
+        best_val_acc = 0
+        best_val_epoch = None
             
         with SetPrintMode(hidden=not verbose):
             for epoch in range(0, cfg.epochs):
+                # if epoch == 1:
+                #     import pdb; pdb.set_trace()
                 for phase in phases:
+                    if phase == 'train':
+                        # Important
+                        self.backbone.train()
+                        self.classifier.train()
                     running_loss = 0.0
                     running_corrects = 0.
                     count = 0
@@ -355,39 +421,35 @@ class Network(TrainerMachine):
                             best_val_acc = avg_acc
                             best_val_acc_backbone_state_dict = self.backbone.state_dict()
                             best_val_acc_classifier_state_dict = self.classifier.state_dict()
+                        if self.active_test_val_diff:
+                            # eval on test set as well
+                            test_acc = self._eval_closed_set_helper(discovered_classes,
+                                                                    self.test_dataset,
+                                                                    verbose=verbose)
+                            avg_test_acc_per_epoch.append(test_acc)
                     print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
                 print()
-        if self.val_mode != None:
-            print(f"Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
-            self.backbone.load_state_dict(best_val_acc_backbone_state_dict)
-            self.classifier.load_state_dict(best_val_acc_classifier_state_dict)
-            ckpt_dict = {
-                'backbone' : self.backbone.state_dict(),
-                'classifier' : self.classifier.state_dict(),
-                'optimizer' : optimizer.state_dict(),
-                'discovered_samples' : discovered_samples,
-                'discovered_classes' : discovered_classes,
-                'train_samples' : train_samples,
-                'val_samples' : val_samples,
-                'loss_curve' : avg_loss_per_epoch,
-                'acc_curve' : avg_acc_per_epoch,
-                'val_loss_curve' : avg_val_loss_per_epoch,
-                'val_acc_curve' : avg_val_acc_per_epoch,
-                'best_val_epoch' : best_val_epoch,
-                "best_val_acc" : best_val_acc,
-            }
-        else:
-            ckpt_dict = {
-                'backbone' : self.backbone.state_dict(),
-                'classifier' : self.classifier.state_dict(),
-                'optimizer' : optimizer.state_dict(),
-                'discovered_samples' : discovered_samples,
-                'discovered_classes' : discovered_classes,
-                'train_samples' : train_samples,
-                'val_samples' : val_samples,
-                'loss_curve' : avg_loss_per_epoch,
-                'acc_curve' : avg_acc_per_epoch
-            }
+        
+        print(f"Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
+        self.backbone.load_state_dict(best_val_acc_backbone_state_dict)
+        self.classifier.load_state_dict(best_val_acc_classifier_state_dict)
+        ckpt_dict = {
+            'backbone' : self.backbone.state_dict(),
+            'classifier' : self.classifier.state_dict(),
+            'optimizer' : optimizer.state_dict(),
+            'discovered_samples' : discovered_samples,
+            'discovered_classes' : discovered_classes,
+            'train_samples' : train_samples,
+            'val_samples' : val_samples,
+            'loss_curve' : avg_loss_per_epoch,
+            'acc_curve' : avg_acc_per_epoch,
+            'val_loss_curve' : avg_val_loss_per_epoch,
+            'val_acc_curve' : avg_val_acc_per_epoch,
+            'best_val_epoch' : best_val_epoch,
+            "best_val_acc" : best_val_acc,
+        }
+        if self.active_test_val_diff:
+            ckpt_dict['test_acc_curve'] = avg_test_acc_per_epoch
         return ckpt_dict
     
     def _eval_closed_set_helper(self, discovered_classes, test_dataset, verbose=True):
@@ -395,7 +457,7 @@ class Network(TrainerMachine):
         """
         self.backbone.eval()
         self.classifier.eval()
-        
+
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         dataloader = get_loader(test_dataset,
                                 None,

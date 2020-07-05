@@ -55,12 +55,6 @@ python closed_set_active_learning.py CIFAR100 --active_val_mode randomized --tra
 python closed_set_active_learning.py CIFAR100 --active_val_mode balanced --training_method softmax_network --active_init_mode active --active_query_scheme sequential --active_train_mode retrain --query_method coreset --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets  --active_save_dir ./active_learners --verbose True
 python closed_set_active_learning.py CIFAR100 --active_val_mode balanced --training_method softmax_network --active_init_mode active --active_query_scheme independent --active_train_mode retrain --query_method coreset --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets --active_save_dir ./active_learners --verbose True
 
-
-
-
-
-
-
 # Coreset Cosine query
     # CIFAR10
         # seed None
@@ -72,6 +66,9 @@ python closed_set_active_learning.py CIFAR100 --active_val_mode balanced --train
             # val balanced 
                 python closed_set_active_learning.py CIFAR10 --active_val_mode balanced --training_method softmax_network --active_init_mode active --active_query_scheme sequential --active_train_mode retrain --query_method coreset_norm_cosine --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets  --active_save_dir ./active_learners --verbose True
                 python closed_set_active_learning.py CIFAR10 --active_val_mode balanced --training_method softmax_network --active_init_mode active --active_query_scheme independent --active_train_mode retrain --query_method coreset_norm_cosine --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets --active_save_dir ./active_learners --verbose True
+            # val stratified 
+                python closed_set_active_learning.py CIFAR10 --active_val_mode stratified --training_method softmax_network --active_init_mode active --active_query_scheme sequential --active_train_mode retrain --query_method coreset_norm_cosine --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets  --active_save_dir ./active_learners --verbose True
+                python closed_set_active_learning.py CIFAR10 --active_val_mode stratified --training_method softmax_network --active_init_mode active --active_query_scheme independent --active_train_mode retrain --query_method coreset_norm_cosine --dataset_rand_seed None --download_path ./ --active_save_path ./active_datasets --active_save_dir ./active_learners --verbose True
 
         # seed 1
             python closed_set_active_learning.py CIFAR10 --training_method softmax_network --active_init_mode active --active_query_scheme sequential --active_train_mode retrain --query_method coreset_norm_cosine --dataset_rand_seed 1 --download_path ./ --active_save_path ./active_datasets  --active_save_dir ./active_learners --verbose True

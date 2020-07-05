@@ -14,7 +14,7 @@ CIFAR100_DEFAULT_CONFIG = {
     'batch' : 128,
     'workers' : 4,
     'device' : 'cuda',
-    'train' : TrainConfig({# Just a place holder. Won't be used.
+    'train' : TrainConfig({
         'optim' : 'sgd',
         'weight_decay' : 0.0005,
         'momentum' : 0.9,
@@ -22,16 +22,18 @@ CIFAR100_DEFAULT_CONFIG = {
         'epochs' : 200,
         'decay_epochs': 60,
         'decay_by' : 0.1,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
-    'finetune' : TrainConfig({ 
-        'optim' : 'sgd',
-        'weight_decay' : 0.0005,
-        'momentum' : 0.9,
-        'lr' : 0.1,
-        'epochs' : 200,
-        'decay_epochs': 60,
-        'decay_by' : 0.1,
+    'finetune' : TrainConfig({ # Just a place holder. Won't be used.
+        # 'optim' : 'sgd',
+        # 'weight_decay' : 0.0005,
+        # 'momentum' : 0.9,
+        # 'lr' : 0.1,
+        # 'epochs' : 200,
+        # 'decay_epochs': 60,
+        # 'decay_by' : 0.1,
     }),
+    
 }
 
 CIFAR10_DEFAULT_CONFIG = CIFAR100_DEFAULT_CONFIG.copy()

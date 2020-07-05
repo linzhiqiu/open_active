@@ -34,3 +34,4 @@ trainers/
 active_learners/
 cifar-10-batches-py/
 .*/
+weights/

@@ -46,11 +46,18 @@ setting_arg.add_argument('--val_mode',
                          choices=['randomized', 'balanced',
                                   ],
                          help="How to select the validation set (for train.py)")
-setting_arg.add_argument('--active_val_mode',
-                         default=None,
-                         choices=['randomized', 'balanced',
-                                  ],
-                         help="How to select the validation set (for closed_set_active_learning.py)")
+# setting_arg.add_argument('--active_val_mode',
+#                          default="fixed_stratified",
+#                          choices=[
+#                                 #   'randomized', # random 5% of labeled set
+#                                 #   'balanced', # 5% of labeled set. Each class has same number of sample
+#                                 #   'stratified', # 5% of each observed class
+#                                   'fixed_stratified', # 5% of observed class and fix the validation set to be the same across rounds
+#                                   ],
+#                          help="How to select the validation set (for closed_set_active_learning.py)")
+setting_arg.add_argument('--active_test_val_diff',
+                         default=False, type=str2bool,
+                         help="Whether to test difference between test and val set")
 setting_arg.add_argument('--open_set_val_mode',
                          default=None,
                          choices=['randomized', 'balanced',

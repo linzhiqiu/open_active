@@ -26,11 +26,9 @@ def main():
     else:
         print("Use random seed 1")
         torch.manual_seed(1)
-        torch.cuda.manual_seed(1)
         np.random.seed(1)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    
     
     # It contains all directory/save_paths that will be used
     budget_list = get_budget_list_from_config(config) 
@@ -49,6 +47,7 @@ def main():
 
     # Begin from scratch
     discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
+    val_samples = dataset_factory.get_val_samples() # Val samples is a subset of discovered_samples, and will be excluded in the network training.
     open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
     
     # The train set details
@@ -63,8 +62,8 @@ def main():
 
     # The training details including arch, lr, batch size..
     active_config = get_active_learning_config(config.data,
-                                                config.training_method,
-                                                config.active_train_mode)
+                                               config.training_method,
+                                               config.active_train_mode)
 
     # Trainer is the main class for training and querying
     # It contains train() query() finetune() functions
@@ -74,7 +73,9 @@ def main():
         active_config,
         trainset_info,
         config.query_method,
-        config.active_val_mode,
+        test_dataset,
+        val_samples=val_samples,
+        active_test_val_diff=config.active_test_val_diff
     )
 
     for i, b in enumerate(budget_list): 
@@ -86,6 +87,7 @@ def main():
                 budget = b
         else:
             budget = b
+        
         # if config.training_method == 'deep_metric':
         #     print("Skip softmax network train phase, directly go to deep metric learning for train phase")
         #     pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.init_mode+".pt")
@@ -108,10 +110,10 @@ def main():
                       verbose=config.verbose)
 
         closed_set_test_acc = trainer.eval_closed_set(new_discovered_classes,
-                                                      test_dataset,
+                                                    #   test_dataset,
                                                       paths_dict['active_test_results'][b],
                                                       verbose=config.verbose)
-        
+
         # trainer.eval_open_set(discovered_samples, discovered_classes, test_dataset, verbose=config.verbose)
     
 
