@@ -35,3 +35,5 @@ active_learners/
 cifar-10-batches-py/
 .*/
 weights/
+active_analysis_*/
+open_set_learners/

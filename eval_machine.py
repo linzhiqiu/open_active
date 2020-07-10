@@ -43,6 +43,8 @@ def get_eval_machine(open_set_method, trainer_machine, trainset_info, trainer_co
         eval_machine_class = NNOpen
     elif open_set_method == 'nn_cosine':
         eval_machine_class = NNCosineOpen
+    elif open_set_method == 'c2ae':
+        eval_machine_class = C2AE
     else:
         raise NotImplementedError()
     return eval_machine_class(trainer_machine, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path)
@@ -274,12 +276,14 @@ class OpenmaxOpen(NetworkOpen):
         # self.alpha_ranks = [20, 80]
         # self.div_eus = [1000] # EU distance will be divided by this number
         self.weibull_tail_size = 20
-        self.alpha_rank = 10
+        # self.alpha_rank = 10
+        self.alpha_rank = 5
         self.div_eu = 1000.
         self.mav_features_selection = "none_correct_then_all"
 
     def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
-        train_loader = self.trainer_machine.get_trainloader(discovered_samples, shuffle=False)
+        dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
+        train_loader = dataset_loaders['train']
         self.num_discovered_classes = len(discovered_classes)
 
         # all_open_set_results = []
@@ -428,7 +432,10 @@ class OpenmaxOpen(NetworkOpen):
             batch_i_rank = softmax_rank[batch_i]
             
             for i in range(len(alpha_weights)):
-                class_index = int(batch_i_rank[i])
+                try:
+                    class_index = int(batch_i_rank[i])
+                except:
+                    import pdb; pdb.set_trace()
                 alpha_i = alpha_weights[i]
                 distance = self.distance_func(self.weibull_distributions[class_index]['mav'], batch_i_output)
                 wscore = self.weibull_distributions[class_index]['weibull_model'].w_score(distance)
@@ -518,17 +525,18 @@ class NNOpen(NetworkOpen):
     def _get_features(self, dataloader, trainer_machine, verbose=True):
         features = torch.Tensor([]).to(self.device)
         for batch, data in enumerate(dataloader):
+            # import pdb; pdb.set_trace()
             inputs, _ = data
             
             with torch.no_grad():
                 cur_features = trainer_machine.get_features(inputs.to(self.device))
-
             features = torch.cat((features, cur_features),dim=0)
 
         return features
     
     def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
-        train_loader = self.trainer_machine.get_trainloader(discovered_samples, shuffle=False)
+        dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
+        train_loader = dataset_loaders['train']
         test_loader = get_loader(test_dataset,
                                  None,
                                  shuffle=False,
@@ -559,3 +567,93 @@ class NNCosineOpen(NNOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.distance_function = cosine_distance # Euclidean distance matrix
+
+from c2ae import Decoder, generator32, get_autoencoder, train_autoencoder
+class C2AE(NetworkOpen):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.c2ae_alpha = 0.9
+        self.autoencoder = None # init in _eval_open_set_helper()
+        self.max_epochs = 100
+        self.latent_size = self.trainer_machine.trainer_config['feature_dim']
+    
+    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+        dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
+        train_loader = dataset_loaders['train']
+        
+        decoder_params = {}
+        decoder_class = Decoder
+
+        generator_class = generator32
+
+        self.decoder = decoder_class(latent_size=self.latent_size,
+                                     batch_size=self.trainer_machine.batch,
+                                     num_classes=len(discovered_classes),
+                                     generator_class=generator_class,
+                                     **decoder_params).to(self.trainer_machine.device)
+
+        optim_param = {"lr": 0.0003, 
+                       "weight_decay": 5e-4}          
+        optimizer_decoder = torch.optim.Adam(
+                                filter(lambda x : x.requires_grad, self.decoder.parameters()), 
+                                **optim_param
+                            )
+        # scheduler_decoder = self.trainer_machine._get_network_scheduler(optimizer_decoder)
+
+        self.autoencoder = get_autoencoder(self.trainer_machine.backbone,
+                                           self.decoder,
+                                           arch=self.trainer_machine.trainer_config['backbone'] # name of backbone network
+                                           )
+
+        with SetPrintMode(hidden=not verbose):
+            match_loss, nm_loss =   train_autoencoder(
+                                        self.autoencoder,
+                                        train_loader,
+                                        optimizer_decoder,
+                                        # scheduler_decoder,
+                                        self.c2ae_alpha,
+                                        len(discovered_classes),
+                                        device=self.trainer_machine.device,
+                                        start_epoch=0,
+                                        max_epochs=self.max_epochs,
+                                        save_output=False,
+                                        verbose=verbose,
+                                        arch=self.trainer_machine.trainer_config['backbone'] # name of backbone network
+                                    )
+        print(f"C2AE "
+              f"Match Loss {match_loss}, Non-match Loss {nm_loss}")
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+        # self.num_discovered_classes = len(discovered_classes)
+
+        # self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
+        # features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
+        # self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
+        # return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+
+    def _get_open_set_pred_func(self):
+        def open_set_prediction(inputs):
+            outputs = self.trainer_machine.get_class_scores(inputs)
+            num_classes = outputs.shape[1]
+            k_labels = torch.arange(num_classes).unsqueeze(1).expand(-1, outputs.shape[0])
+
+            for class_i in range(num_classes):
+                errors = torch.abs(inputs - self.autoencoder(inputs, k_labels[class_i])).view(outputs.shape[0], -1).mean(1)
+                if class_i == 0:
+                    min_errors = errors
+                else:
+                    min_errors = torch.min(min_errors, errors)
+
+            scores = min_errors
+
+            softmax_outputs = F.softmax(outputs, dim=1)
+            softmax_max, softmax_preds = torch.max(softmax_outputs, 1)
+            
+            open_set_result_i = {}
+            open_set_result_i['open_set_score']     = scores.tolist()
+            open_set_result_i['closed_predicted']   = softmax_preds.tolist()
+            open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
+            open_set_result_i['open_predicted']     = softmax_preds.tolist()
+            open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
+            # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
+            return open_set_result_i
+        return open_set_prediction

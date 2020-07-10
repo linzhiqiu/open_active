@@ -71,9 +71,14 @@ def save_test_val_comparison_curve(ckpt_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ckpt_path', default='') 
+    parser.add_argument('--ckpt_path', default='./active_learners/CIFAR10/active/seed_None/softmax_network/retrain/sequential') 
     args = parser.parse_args()
-
-    save_loss_curve(args.ckpt_path)
-    save_acc_curve(args.ckpt_path)
-    save_test_val_comparison_curve(args.ckpt_path)
+    import numpy as np
+    b_list = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
+    method = "entropy"
+    for b in b_list:
+        ckpt_path_b = os.path.join(args.ckpt_path, f"{b}/active_{method}/ckpt.pt")
+        ckpt = torch.load(ckpt_path_b, map_location=torch.device('cpu'))
+        val_accs = np.array(ckpt['val_acc_curve'])
+        # import pdb; pdb.set_trace()
+        print(f"{b} query: Ckpt epoch is {np.argmax(val_accs)} with best val accuracy {np.max(val_accs)}")

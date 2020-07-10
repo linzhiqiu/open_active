@@ -342,7 +342,6 @@ class Network(TrainerMachine):
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         
         trainloaders, train_samples, val_samples = self.get_trainloaders(discovered_samples)
-
         criterion = torch.nn.NLLLoss(reduction='mean')
 
         avg_loss_per_epoch = []
@@ -352,7 +351,6 @@ class Network(TrainerMachine):
 
         if self.active_test_val_diff: avg_test_acc_per_epoch = []
 
-        phases = ['train', 'val']
         best_val_acc = 0
         best_val_epoch = None
             
@@ -360,11 +358,14 @@ class Network(TrainerMachine):
             for epoch in range(0, cfg.epochs):
                 # if epoch == 1:
                 #     import pdb; pdb.set_trace()
-                for phase in phases:
+                for phase in trainloaders.keys():
                     if phase == 'train':
                         # Important
                         self.backbone.train()
                         self.classifier.train()
+                    elif phase == 'val':
+                        self.backbone.eval()
+                        self.classifier.eval()
                     running_loss = 0.0
                     running_corrects = 0.
                     count = 0
@@ -412,6 +413,9 @@ class Network(TrainerMachine):
                         avg_loss_per_epoch.append(avg_loss)
                         avg_acc_per_epoch.append(avg_acc)
                         scheduler.step()
+                        if 'val' not in trainloaders.keys():
+                            best_val_acc_backbone_state_dict = self.backbone.state_dict()
+                            best_val_acc_classifier_state_dict = self.classifier.state_dict()
                     elif phase == 'val':
                         avg_val_loss_per_epoch.append(avg_loss)
                         avg_val_acc_per_epoch.append(avg_acc)
@@ -430,7 +434,10 @@ class Network(TrainerMachine):
                     print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
                 print()
         
-        print(f"Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
+        if 'val' in trainloaders.keys():
+            print(f"Load state dict of best val accuracy at epoch {best_val_epoch} being {best_val_acc}")
+        else:
+            print("Use the model checkpoint at last epoch")
         self.backbone.load_state_dict(best_val_acc_backbone_state_dict)
         self.classifier.load_state_dict(best_val_acc_classifier_state_dict)
         ckpt_dict = {
@@ -443,11 +450,12 @@ class Network(TrainerMachine):
             'val_samples' : val_samples,
             'loss_curve' : avg_loss_per_epoch,
             'acc_curve' : avg_acc_per_epoch,
-            'val_loss_curve' : avg_val_loss_per_epoch,
-            'val_acc_curve' : avg_val_acc_per_epoch,
-            'best_val_epoch' : best_val_epoch,
-            "best_val_acc" : best_val_acc,
         }
+        if 'val' in trainloaders.keys():
+            ckpt_dict['val_loss_curve'] = avg_val_loss_per_epoch
+            ckpt_dict['val_acc_curve'] = avg_val_acc_per_epoch
+            ckpt_dict['best_val_epoch'] = best_val_epoch
+            ckpt_dict['best_val_acc'] = best_val_acc
         if self.active_test_val_diff:
             ckpt_dict['test_acc_curve'] = avg_test_acc_per_epoch
         return ckpt_dict

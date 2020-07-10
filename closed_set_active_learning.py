@@ -38,7 +38,8 @@ def main():
                                      paths_dict['data_download_path'], # Where to download the images
                                      paths_dict['dataset_info_path'], # Where to save the dataset information
                                      config.active_init_mode,
-                                     dataset_rand_seed=config.dataset_rand_seed)
+                                     dataset_rand_seed=config.dataset_rand_seed,
+                                     use_val_set=config.use_val_set)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
     classes, open_classes = dataset_factory.get_class_info() # Set of indices

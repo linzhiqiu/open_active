@@ -257,7 +257,7 @@ def get_open_set_save_dir(open_set_save_dir,
                           dataset_rand_seed,
                           training_method,
                           open_set_train_mode,
-                          makedir=makedir):
+                          makedir=True):
     save_dir = os.path.join(open_set_save_dir,
                             data,
                             open_set_init_mode,

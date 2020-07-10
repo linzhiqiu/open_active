@@ -2,10 +2,10 @@ OPEN_CLASS_INDEX = -2 # The index for hold out open set class examples
 UNDISCOVERED_CLASS_INDEX = -1 # The index for unseen open set class examples
 
 OPEN_SET_METHOD_DICT = {
-    # 'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
-    # 'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
-    'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
-    'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
+    'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
+    'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
+    # 'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
+    # 'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
     'deep_metric' : ['nn','nn_cosine', 'softmax', 'entropy'],
 }
 
@@ -15,7 +15,7 @@ PRETRAINED_MODEL_PATH = {
     }
 }
 
-VAL_RATIO = 0.05 # 0.05 of each initial discovered class will be used for validation.
+VAL_RATIO = 0.2 # 0.2 of each initial discovered class will be used for validation.
 
 DATASET_CONFIG_DICT = {
     'CIFAR100' : {
@@ -58,6 +58,11 @@ DATASET_CONFIG_DICT = {
             'num_init_classes' : 5,
             'sample_per_class' : 5000,
             'num_open_classes' : 5
+        },
+        'default_open_set_1' : {
+            'num_init_classes' : 6,
+            'sample_per_class' : 5000,
+            'num_open_classes' : 4
         },
     },
 

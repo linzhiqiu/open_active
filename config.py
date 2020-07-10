@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Act
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", "CIFAR100", 'CUB200', 'Cars'],
+                          choices=["CIFAR10", "OPEN_CIFAR10", "CIFAR100", 'CUB200', 'Cars'],
                           help='Choice of dataset + preprocessing method.')
 dataset_args.add_argument('--download_path', 
                           default="/scratch", metavar='PATH',
@@ -34,6 +34,11 @@ dataset_args.add_argument('--dataset_rand_seed',
                           type=str2NoneInt,
                           default=None,
                           help='None then use first nth classes nth samples. Otherwise use the rand seed to select random classes and random samples.')
+dataset_args.add_argument('--use_val_set',
+                          type=str2bool,
+                          default=False,
+                          help='None then not using val set.')
+
 
 setting_arg = add_argument_group('Setting Param.')
 setting_arg.add_argument('--init_mode',
@@ -238,7 +243,7 @@ open_arg.add_argument('--open_set_train_mode', type=str,
                       choices=['default'], default='default',
                       help='The training mode for open set recognition.')
 open_arg.add_argument('--open_set_init_mode', type=str,
-                      choices=['default'], default='default_open_set',
+                      choices=['default_open_set', 'default_open_set_1'], default='default_open_set',
                       help='The initial dataset labelling for open set recognition.')
 open_arg.add_argument('--open_set_save_dir', # The direction hierachy will be: {dataset}/{open_set_init_mode}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
                       default='/share/coecis/open_active/open_learners',

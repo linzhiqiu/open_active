@@ -16,7 +16,7 @@ import random, math
 from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT, VAL_RATIO
 
 class DatasetFactory(object):
-    def __init__(self, data, download_path, dataset_info_path, init_mode, dataset_rand_seed=None):
+    def __init__(self, data, download_path, dataset_info_path, init_mode, dataset_rand_seed=None, use_val_set=False):
         """Constructor of a facotry of pytorch dataset
             Args:
                 data (str) : Name of datasets
@@ -35,6 +35,7 @@ class DatasetFactory(object):
         self.dataset_info_path = dataset_info_path
         self.init_mode = init_mode
         self.dataset_rand_seed = dataset_rand_seed
+        self.use_val_set = use_val_set
 
         # Sanity Check
         assert data in SUPPORTED_DATASETS
@@ -56,7 +57,8 @@ class DatasetFactory(object):
                                                            self.init_mode,
                                                            self.classes,
                                                            self.train_labels,
-                                                           self.dataset_rand_seed)
+                                                           self.dataset_rand_seed,
+                                                           use_val_set=self.use_val_set)
             torch.save(self.dataset_info_dict, self.dataset_info_path)
 
     def get_dataset(self):
@@ -107,7 +109,7 @@ class DatasetFactory(object):
         '''
         return self.dataset_info_dict['open_samples']
     
-    def _split_train_set(self, data, init_mode, classes, labels, dataset_rand_seed):
+    def _split_train_set(self, data, init_mode, classes, labels, dataset_rand_seed, use_val_set=False):
         """Split the training set, and prepare the following class variables
             Returns:
                 dataset_info (dict) : Contains the below key/values
@@ -167,21 +169,25 @@ class DatasetFactory(object):
             for open_class_i in open_classes:
                 open_samples += class_to_indices[open_class_i]
 
-            val_samples = []
-            # VAL_RATIO of each discovered class, from smallest index
-            discovered_class_to_indices = {}
-            for sample_i in discovered_samples:
+            if use_val_set:
+                print("Using a validation set")
+                val_samples = []
+                # VAL_RATIO of each discovered class, from smallest index
+                discovered_class_to_indices = {}
+                for sample_i in discovered_samples:
+                    for class_i in discovered_classes:
+                        discovered_class_to_indices[class_i] = []
+                    for idx in discovered_samples:
+                        label_i = labels[idx]
+                        discovered_class_to_indices[label_i].append(idx)
                 for class_i in discovered_classes:
-                    discovered_class_to_indices[class_i] = []
-                for idx in discovered_samples:
-                    label_i = labels[idx]
-                    discovered_class_to_indices[label_i].append(idx)
-            for class_i in discovered_classes:
-                sorted_indices_class_i = sorted(discovered_class_to_indices[class_i].copy())
-                if len(sorted_indices_class_i) <= 1:
-                    continue
-                class_i_size = math.ceil(len(sorted_indices_class_i) * VAL_RATIO)
-                val_samples += sorted_indices_class_i[:class_i_size]
+                    sorted_indices_class_i = sorted(discovered_class_to_indices[class_i].copy())
+                    if len(sorted_indices_class_i) <= 1:
+                        continue
+                    class_i_size = math.ceil(len(sorted_indices_class_i) * VAL_RATIO)
+                    val_samples += sorted_indices_class_i[:class_i_size]
+            else:
+                val_samples = []
 
             assert len(open_samples) == len(set(open_samples))
             assert len(discovered_samples) == len(set(discovered_samples))

@@ -35,24 +35,24 @@ CIFAR10_DEFAULT_CONFIG = CIFAR100_DEFAULT_CONFIG.copy()
 TRAIN_CONFIG_DICT = {
     'CIFAR100' : {
         'softmax_network' : {
-            'retrain' : CIFAR100_DEFAULT_CONFIG,
+            'default' : CIFAR100_DEFAULT_CONFIG,
         },
         'cosine_network' : {
-            'retrain' : CIFAR100_DEFAULT_CONFIG,
+            'default' : CIFAR100_DEFAULT_CONFIG,
         },
         'deep_metric' : {
-            'retrain' : None,
+            'default' : None,
         },
     },
     'CIFAR10' : {
         'softmax_network' : {
-            'retrain' : CIFAR10_DEFAULT_CONFIG,
+            'default' : CIFAR10_DEFAULT_CONFIG,
         },
         'cosine_network' : {
-            'retrain' : CIFAR10_DEFAULT_CONFIG,
+            'default' : CIFAR10_DEFAULT_CONFIG,
         },
         'deep_metric' : {
-            'retrain' : None,
+            'default' : None,
         },
     },
 }

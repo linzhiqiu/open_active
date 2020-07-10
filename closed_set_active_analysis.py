@@ -110,7 +110,7 @@ class ActiveAnalysisMachine(object):
                  QUERY_METHODS,
                  ACTIVE_QUERY_SCHEMES,
                  RANDOM_SEEDS,
-                 VAL_MODES,
+                #  VAL_MODES,
                  silent_mode=False):
         super().__init__()
         self.active_analysis_save_dir = active_analysis_save_dir
@@ -128,7 +128,7 @@ class ActiveAnalysisMachine(object):
         self.QUERY_METHODS = QUERY_METHODS
         self.ACTIVE_QUERY_SCHEMES = ACTIVE_QUERY_SCHEMES
         self.RANDOM_SEEDS = RANDOM_SEEDS
-        self.VAL_MODES = VAL_MODES
+        # self.VAL_MODES = VAL_MODES
 
     def gather_results(self, draw_open=True):
         finished_exp_dict = {}
@@ -332,10 +332,6 @@ if __name__ == "__main__":
     ACTIVE_TRAIN_MODES = ['retrain']
     TRAINING_METHODS = ['softmax_network']
     QUERY_METHODS = ['coreset', 'random', 'softmax', 'entropy']
-    VAL_MODES = [None, 'randomized', 'balanced', 'stratified']
-    # VAL_MODES = [None]
-    # VAL_MODES = ['randomized']
-    # VAL_MODES = ['balanced']
     # QUERY_METHODS = ['softmax', 'random']
     # QUERY_METHODS = ['softmax', 'coreset']
     # QUERY_METHODS = ['uldr', 'random']
@@ -356,8 +352,7 @@ if __name__ == "__main__":
                                              ACTIVE_TRAIN_MODES,
                                              QUERY_METHODS,
                                              ACTIVE_QUERY_SCHEMES,
-                                             RANDOM_SEEDS,
-                                             VAL_MODES)
+                                             RANDOM_SEEDS)
 
     #### 
     # Check all checkpoint files exist

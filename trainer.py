@@ -179,7 +179,15 @@ class ActiveTrainer(object):
 
 
 class OpenTrainer(object):
-    def __init__(self, training_method, open_set_train_mode, open_set_config, trainset_info, open_set_methods, test_dataset, val_samples=None):
+    def __init__(self,
+                 training_method,
+                 open_set_train_mode,
+                 open_set_config,
+                 trainset_info,
+                 open_set_methods,
+                 test_dataset,
+                 val_samples,
+                 paths_dict):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
