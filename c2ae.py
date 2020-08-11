@@ -152,7 +152,7 @@ class NMPicker:
         for cur_label in labels:
             while cur_label == self.batch_label[self.batch_index]:  # See if the label matches
                 self.batch_index += 1
-                if self.batch_index >= self.batch_size:
+                if self.batch_index >= len(self.batch_label):
                     self.batch_index = 0
                     self.batch_data, self.batch_label = self._get_new_batch()
             results.append(self.batch_data[self.batch_index])
