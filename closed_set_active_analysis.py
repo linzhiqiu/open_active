@@ -12,6 +12,8 @@ import pickle
 import torch
 import random
 import utils
+from tabulate import tabulate
+from dataset_factory import DatasetFactory
 
 SMALL_SIZE = 8
 MEDIUM_SIZE = 15
@@ -174,6 +176,224 @@ class ActiveAnalysisMachine(object):
                                         finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][b] = res
         return finished_exp_dict
     
+    def gather_query_results(self):
+        self.query_result_path = os.path.join(self.active_analysis_save_dir,
+                                              self.data,
+                                              'query_result_analysis')
+        for active_train_mode in self.ACTIVE_TRAIN_MODES:
+            for training_method in self.TRAINING_METHODS:
+                for query_method in self.QUERY_METHODS:
+                    for active_query_scheme in self.ACTIVE_QUERY_SCHEMES:
+                        for dataset_rand_seed in self.RANDOM_SEEDS:
+                            paths_dict = utils.prepare_active_learning_dir(self.budget_list,
+                                                                            self.active_save_path,
+                                                                            self.data_download_path,
+                                                                            self.active_save_dir,
+                                                                            self.data,
+                                                                            self.active_init_mode,
+                                                                            dataset_rand_seed,
+                                                                            training_method,
+                                                                            active_train_mode,
+                                                                            query_method,
+                                                                            active_query_scheme,
+                                                                        #    active_val_mode,
+                                                                            makedir=False)
+                            # dataset_factory = DatasetFactory(self.data,
+                            #                                  paths_dict['data_download_path'], # Where to download the images
+                            #                                  paths_dict['dataset_info_path'], # Where to save the dataset information
+                            #                                  self.active_init_mode,
+                            #                                  dataset_rand_seed=None,
+                            #                                  use_val_set=False)
+                            # _, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
+
+                            curr_discovered_samples = []
+                            for b in self.budget_list:
+                                if os.path.exists(paths_dict['active_query_results'][b]):
+                                    test_result = torch.load(paths_dict['active_query_results'][b],
+                                                             map_location=torch.device('cpu'))
+                                    all_result = torch.load(paths_dict['active_test_results'][b],
+                                                            map_location=torch.device('cpu'))['closed_set_result']
+                                    
+
+                                    trainset_info = torch.load(paths_dict['trainset_info_path'],
+                                                            map_location=torch.device('cpu'))
+                                    query_samples = np.array(list(set(test_result['new_discovered_samples']).difference(list(curr_discovered_samples))))
+                                    curr_discovered_samples = np.array(test_result['new_discovered_samples'])
+
+                                    # Need to plot both query sample and total labeled samples distribution
+                                    curr_query_result_path = os.path.join(self.query_result_path,
+                                                                          active_train_mode,
+                                                                          training_method,
+                                                                          "active_"+query_method,
+                                                                          active_query_scheme,
+                                                                          f'seed_{dataset_rand_seed}',
+                                                                          f'budget_{b}')
+                                    if not os.path.exists(curr_query_result_path):
+                                        os.makedirs(curr_query_result_path)
+
+                                    for pool_name, samples in [('query_sample', query_samples), ('labeled_pool', curr_discovered_samples)]:
+                                        # import pdb; pdb.set_trace()
+                                        if len(samples) == 0:
+                                            continue
+                                        # First calculate the labels and save them in a text file
+                                        curr_labels = np.array(trainset_info.train_labels)[samples]
+                                        counts_per_class = {}
+                                        for l in curr_labels:
+                                            if not l in counts_per_class:
+                                                counts_per_class[l] = 1
+                                            else:
+                                                counts_per_class[l] = counts_per_class[l] + 1
+                                        with open(os.path.join(curr_query_result_path, pool_name+"_result.txt"), "w+") as file:
+                                            result_lists = []
+                                            for class_i in sorted(list(counts_per_class.keys())):
+                                                result_lists.append([f"{class_i}", f"{counts_per_class[class_i]}"])
+                                            file.write(tabulate(result_lists, headers=['Class Index', 'Number of Samples'], tablefmt='orgtbl'))
+                                        
+                                        # Then plot it as bar charts
+                                        plt.figure(figsize=(20,12))
+                                        axes = plt.gca()
+                                        # axes.set_ylim([-1,1])
+                                        plt.title(f'Number of samples in {pool_name} for budget {b}.')
+                                        classes = sorted(list(counts_per_class.keys()))
+                                        samples_in_classes = [counts_per_class[i] for i in classes]
+                                        plt.bar(classes, samples_in_classes, align='center')
+                                        # plt.axhline(y=mean_delta, label=f"Mean Accuracy Delta {mean_delta}", linestyle='--', color='black')
+                                        classes_tick = [str(i) for i in classes]
+                                        plt.xticks(classes, classes_tick)
+                                        plt.xlabel('Class label')
+                                        plt.ylabel('Number of samples for each class')
+                                        plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+                                        # plt.legend()
+                                        plt.savefig(os.path.join(curr_query_result_path, pool_name+"_result.png"))
+                                        plt.close('all')
+
+                                        # Now re-evaluate on test set to see per-sample accuracy
+                                        # self.eval_closed_set(test_result, trainset_info, dataset_factory)
+                                    
+                                    # Calculate the per-class accuracy (recall: pred as cars/all cars)
+                                    gt = np.array(all_result['real_labels'])
+                                    pred = np.array(all_result['closed_predicted_real'])
+                                    overall_acc = float((gt == pred).sum()/pred.shape[0])
+                                    all_test_classes_acc = {i : None for i in set(gt) }
+                                    for class_i in all_test_classes_acc:
+                                        class_i_acc = (gt == pred)[gt == class_i].sum() / (gt == class_i).sum()
+                                        all_test_classes_acc[class_i] = class_i_acc
+                                    avg_per_class_acc = float(np.array([all_test_classes_acc[i] for i in all_test_classes_acc]).mean())
+                                    plt.figure(figsize=(20,12))
+                                    axes = plt.gca()
+                                    # axes.set_ylim([-1,1])
+                                    plt.title(f'Per-class accuracy for budget {b}.')
+                                    classes = sorted(list(all_test_classes_acc.keys()))
+                                    classes_acc = [all_test_classes_acc[i] for i in all_test_classes_acc]
+                                    plt.bar(classes, classes_acc, align='center')
+                                    plt.axhline(y=overall_acc, label=f"Overall Test Accuracy {overall_acc}", linestyle='--', color='black')
+                                    plt.axhline(y=avg_per_class_acc, label=f"Avg Per-Class Accuracy {avg_per_class_acc}", linestyle='-', color='green')
+                                    classes_tick = [str(i) for i in classes]
+                                    plt.xticks(classes, classes_tick)
+                                    plt.xlabel('Class label')
+                                    plt.ylabel('Per-class Accuracy')
+                                    plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+                                    plt.legend()
+                                    plt.savefig(os.path.join(curr_query_result_path, "per_class_acc.png"))
+                                    plt.close('all')
+
+                                    with open(os.path.join(curr_query_result_path, "per_class_acc.txt"), "w+") as file:
+                                        result_lists = []
+                                        for class_i in classes:
+                                            result_lists.append([f"{class_i}", f"{all_test_classes_acc[class_i]}"])
+                                        file.write(tabulate(result_lists, headers=['Class Index', 'Per-Class Accuracy/Recall'], tablefmt='orgtbl'))
+
+                                    # Calculate the per-class precision (: pred as car & real car/pred as cars)
+                                    all_test_classes_precision = {i : None for i in set(gt) }
+                                    for class_i in all_test_classes_precision:
+                                        class_i_precision = (gt == class_i)[pred == class_i].sum() / (pred == class_i).sum()
+                                        all_test_classes_precision[class_i] = class_i_precision
+                                    avg_per_class_precision = float(np.array([all_test_classes_precision[i] for i in all_test_classes_precision]).mean())
+                                    plt.figure(figsize=(20,12))
+                                    axes = plt.gca()
+                                    # axes.set_ylim([-1,1])
+                                    plt.title(f'Per-class precision (i.e. (Pred as car && is car)/(Pred as car)) for budget {b}.')
+                                    classes = sorted(list(all_test_classes_precision.keys()))
+                                    classes_precision = [all_test_classes_precision[i] for i in all_test_classes_precision]
+                                    plt.bar(classes, classes_precision, align='center')
+                                    plt.axhline(y=avg_per_class_precision, label=f"Avg Per-Class Precision {avg_per_class_precision}", linestyle='-', color='green')
+                                    classes_tick = [str(i) for i in classes]
+                                    plt.xticks(classes, classes_tick)
+                                    plt.xlabel('Class label')
+                                    plt.ylabel('Per-class Precision')
+                                    plt.setp(axes.get_xticklabels(), rotation=90, horizontalalignment='right', fontsize='xx-small')
+                                    plt.legend()
+                                    plt.savefig(os.path.join(curr_query_result_path, "per_class_precision.png"))
+                                    plt.close('all')
+
+                                    with open(os.path.join(curr_query_result_path, "per_class_precision.txt"), "w+") as file:
+                                        result_lists = []
+                                        for class_i in classes:
+                                            result_lists.append([f"{class_i}", f"{all_test_classes_precision[class_i]}"])
+                                        file.write(tabulate(result_lists, headers=['Class Index', 'Per-Class Precision'], tablefmt='orgtbl'))
+                                        
+
+    # def eval_closed_set(self, test_result, trainset_info, dataset_factory):
+    #     """Test the model/classifier and return the acc in ckpt_dict
+    #     """
+    #     backbone = 
+    #     backbone.eval()
+    #     classifier.eval()
+        
+    #     target_mapping_func = get_target_mapping_func_for_tensor(trainset_info.classes,
+    #                                               test_result['new_discovered_classes'],
+    #                                               trainset_info.open_classes,
+    #                                               device='cuda')
+    #     dataloader = get_loader(test_dataset,
+    #                             None,
+    #                             shuffle=False,
+    #                             batch_size=128,
+    #                             workers=4)
+        
+    #     pbar = tqdm(dataloader, ncols=80)
+
+    #     performance_dict = {'corrects' : 0., 'not_seen' : 0., 'count' : 0.} # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
+                
+    #     with torch.no_grad():
+    #         for batch, data in enumerate(pbar):
+    #             inputs, real_labels = data
+
+    #             inputs = inputs.to(self.device)
+    #             labels = target_mapping_func(real_labels.to(self.device))
+
+    #             outputs = classifier(backbone(inputs))
+    #             _, preds = torch.max(outputs, 1)
+
+    #             undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
+    #             discovered_closed_indices = labels >= 0
+    #             hold_out_open_indices = labels == OPEN_CLASS_INDEX
+    #             unlabeled_pool_class_indices = undiscovered_open_indices | discovered_closed_indices
+    #             assert torch.sum(undiscovered_open_indices & discovered_closed_indices & hold_out_open_indices) == 0
+
+    #             performance_dict['count'] += float(torch.sum(unlabeled_pool_class_indices))
+
+    #             performance_dict['not_seen'] += torch.sum(undiscovered_open_indices).float()
+    #             performance_dict['corrects'] += torch.sum(
+    #                                                             torch.masked_select(
+    #                                                                 (preds==labels.data),
+    #                                                                 discovered_closed_indices
+    #                                                             )
+    #                                                         ).float()
+    #     test_acc = performance_dict['corrects'] / performance_dict['count']
+    #     seen_rate = 1. - performance_dict['not_seen'] / performance_dict['count']
+        
+        
+    #     print(f"Test => "
+    #             f"Closed set test Acc {test_acc}, "
+    #             f"Discovered precentage {seen_rate}")
+
+    #     print(f"Test Accuracy {test_acc}.")
+    #     test_dict = {
+    #         'acc' : test_acc,
+    #         'seen' : seen_rate
+    #     }
+    #     return test_dict                                    
+    
     def plot_results(self, finished_exp_dict, plot_mode=None):
         if plot_mode == None:
             # Plot the balanced mode, and the random seed mode with error bars
@@ -290,9 +510,8 @@ class ActiveAnalysisMachine(object):
                                            self.data,
                                            "results.txt")
             print("Print all results to " + self.print_path)
-            if os.path.exists(self.print_path):
-                input(f"{self.print_path} already exists. Overwrite it? >> ")
-            from tabulate import tabulate
+            # if os.path.exists(self.print_path):
+            #     input(f"{self.print_path} already exists. Overwrite it? >> ")
             with open(self.print_path, "w+") as file:
                 for active_train_mode in finished_exp_dict.keys():
                     file.write(f"#####Start Train mode {active_train_mode}######\n")
@@ -327,15 +546,17 @@ if __name__ == "__main__":
     from utils import prepare_save_dir
     config = get_config()
 
-    # ACTIVE_QUERY_SCHEMES = ['sequential', 'independent']
     ACTIVE_QUERY_SCHEMES = ['sequential']
+    # ACTIVE_QUERY_SCHEMES = ['independent']
+    # ACTIVE_QUERY_SCHEMES = ['sequential']
     ACTIVE_TRAIN_MODES = ['retrain']
     TRAINING_METHODS = ['softmax_network']
     QUERY_METHODS = ['coreset', 'random', 'softmax', 'entropy']
-    # QUERY_METHODS = ['softmax', 'random']
-    # QUERY_METHODS = ['softmax', 'coreset']
+    # QUERY_METHODS = ['coreset', 'random', 'softmax']
+    # QUERY_METHODS = ['random']
+    # QUERY_METHODS = ['softmax']
     # QUERY_METHODS = ['uldr', 'random']
-    # QUERY_METHODS = ['coreset', 'random']
+    # QUERY_METHODS = ['coreset']
     RANDOM_SEEDS = [None, 1, 10, 100, 1000, 2000]
 
     budget_list = utils.get_budget_list_from_config(config)
@@ -359,6 +580,8 @@ if __name__ == "__main__":
     results = analysis_machine.gather_results()
     analysis_machine.print_results(results, print_mode=None)
     analysis_machine.plot_results(results, plot_mode=None)
+
+    analysis_machine.gather_query_results() # then plot them
     # analysis_machine.draw_closed_set(draw_open=True)
     
     

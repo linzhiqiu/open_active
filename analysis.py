@@ -1490,11 +1490,6 @@ if __name__ == "__main__":
         TRAINING_METHODS = ['deep_metric']
         QUERY_METHODS = ['random', 'entropy', 'softmax', 'uldr', 'coreset']
     
-    if config.train_mode == 'no_finetune':
-        print("No finetune experiments! Only test random query.")
-        import pdb; pdb.set_trace()
-        QUERY_METHODS = ['random']
-
     # QUERY_METHODS = ['uldr', 'coreset']
     analysis_machine = AnalysisMachine(config.analysis_save_dir,
                                        config.analysis_trainer,
@@ -1507,6 +1502,9 @@ if __name__ == "__main__":
                                        TRAINING_METHODS,
                                        config.train_mode,
                                        QUERY_METHODS)
+    
+    #### Comment out if not running for retraining mode
+    analysis_machine.ALL_TRAIN_MODES = ['retrain']
     
     #### Comment out if not answering basic question
     # analysis_machine.ALL_TRAIN_METHODS = ['softmax_network']
@@ -1533,11 +1531,11 @@ if __name__ == "__main__":
     # analysis_machine.draw_closed_set(draw_open=True)
 
     #### Comment out if not answering of update rule for deep metric
-    analysis_machine.ALL_TRAIN_METHODS = ['deep_metric']
-    analysis_machine.ALL_INIT_MODES = ['regular']
-    analysis_machine.ALL_TRAIN_MODES = ['default', 'default_lr01_200eps']
-    analysis_machine.PLOT_MODE = ['compare_active']
-    analysis_machine.draw_train_mode(draw_open=True)
+    # analysis_machine.ALL_TRAIN_METHODS = ['deep_metric']
+    # analysis_machine.ALL_INIT_MODES = ['regular']
+    # analysis_machine.ALL_TRAIN_MODES = ['default', 'default_lr01_200eps']
+    # analysis_machine.PLOT_MODE = ['compare_active']
+    # analysis_machine.draw_train_mode(draw_open=True)
 
     #### 
     # Check all checkpoint files exist

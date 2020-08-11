@@ -3,5 +3,13 @@
         "Python"
     ],
     "python.pythonPath": "/usr/bin/python3",
-    "python.formatting.provider": "yapf"
+    "python.formatting.provider": "yapf",
+    "files.watcherExclude": {
+        "**/*analysis*/**": true,
+        "**/*learners*/**": true,
+        "**/*plots*/**": true,
+        "**/*results*/**": true,
+        "**/first_round*/**": true,
+        "**/trainers/**": true
+    }
 }

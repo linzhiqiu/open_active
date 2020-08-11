@@ -106,7 +106,7 @@ class TrainerMachine(object):
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
-            if self.train_mode in ["no_finetune",'retrain']:
+            if self.train_mode in ['retrain']:
                 print("Use a new backbone network without finetuning.")
                 self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
             elif self.train_mode == 'fix_feature_extractor':
@@ -126,6 +126,12 @@ class TrainerMachine(object):
         if os.path.exists(result_path):
             print("Closed set result already saved.")
             self.closed_set_result = torch.load(result_path)
+            if not 'closed_set_result' in self.closed_set_result.keys():
+                print("Closed set result incomplete. We will do it once again")
+                self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
+                                                                      self.test_dataset,
+                                                                      verbose=verbose)
+                torch.save(self.closed_set_result, result_path)
         else:
             self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
                                                                   self.test_dataset,
@@ -313,6 +319,9 @@ class TrainerMachine(object):
                                                   discovered_classes,
                                                   self.trainset_info.open_classes,
                                                   device=self.device)
+    
+    def _get_target_unmapping_func_for_list(self, discovered_classes):
+        return get_target_unmapping_func_for_list(self.trainset_info.classes, discovered_classes)
 
     def _get_index_mapp_func(self, discovered_samples):
         return get_index_mapping_func(discovered_samples)
@@ -460,6 +469,8 @@ class Network(TrainerMachine):
             ckpt_dict['test_acc_curve'] = avg_test_acc_per_epoch
         return ckpt_dict
     
+    
+    
     def _eval_closed_set_helper(self, discovered_classes, test_dataset, verbose=True):
         """Test the model/classifier and return the acc in ckpt_dict
         """
@@ -467,6 +478,7 @@ class Network(TrainerMachine):
         self.classifier.eval()
 
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
         dataloader = get_loader(test_dataset,
                                 None,
                                 shuffle=False,
@@ -480,7 +492,13 @@ class Network(TrainerMachine):
                 pbar = dataloader
 
             performance_dict = {'corrects' : 0., 'not_seen' : 0., 'count' : 0.} # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
-                
+            closed_set_result = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+                                 'real_labels' : [], # The real labels for CIFAR100 or other datasets.
+                                 'closed_predicted' : [], # The predicted closed set label (indices in network output)
+                                 'closed_predicted_real' : [], # The predicted closed set label (real labels)
+                                 'closed_argmax_prob' : [], # The probability for predicted closed set class
+                                 } # A list of dictionary
+
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
                     inputs, real_labels = data
@@ -489,7 +507,7 @@ class Network(TrainerMachine):
                     labels = target_mapping_func(real_labels.to(self.device))
 
                     outputs = self.classifier(self.backbone(inputs))
-                    _, preds = torch.max(outputs, 1)
+                    softmax_max, preds = torch.max(outputs, 1)
 
                     undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
                     discovered_closed_indices = labels >= 0
@@ -506,6 +524,13 @@ class Network(TrainerMachine):
                                                                      discovered_closed_indices
                                                                  )
                                                              ).float()
+                    
+                    closed_set_result['ground_truth'] += labels.tolist()
+                    closed_set_result['real_labels'] += real_labels.tolist()
+                    closed_set_result['closed_predicted'] += preds.tolist()
+                    closed_set_result['closed_predicted_real'] += target_unmapping_func_for_list(preds.tolist())
+                    closed_set_result['closed_argmax_prob'] += softmax_max.tolist()
+
             test_acc = performance_dict['corrects'] / performance_dict['count']
             seen_rate = 1. - performance_dict['not_seen'] / performance_dict['count']
             
@@ -517,7 +542,8 @@ class Network(TrainerMachine):
             print(f"Test Accuracy {test_acc}.")
         test_dict = {
             'acc' : test_acc,
-            'seen' : seen_rate
+            'seen' : seen_rate,
+            'closed_set_result' : closed_set_result
         }
         return test_dict
     

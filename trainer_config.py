@@ -21,6 +21,7 @@ CARS_DEFAULT_300EPS_CONFIG = {
         'epochs' : 300,
         'decay_epochs': 100,
         'decay_by' : 0.1,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -47,6 +48,7 @@ CIFAR100_DEFAULT_CONFIG = {
         'epochs' : 200,
         'decay_epochs': 60,
         'decay_by' : 0.1,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -69,6 +71,8 @@ CIFAR100_NO_FINETUNE_CONFIG['finetune'] = TrainConfig({
                                               'decay_epochs' : 60,
                                               'decay_by' : 0.1
                                           })
+
+CIFAR10_NO_FINETUNE_CONFIG = CIFAR100_NO_FINETUNE_CONFIG.copy()
 
 CUB200_DEFAULT_CONFIG = {
     'backbone' : 'ResNet18HighRes',
@@ -113,6 +117,7 @@ CUB200_FEWER_EPOCH_CONFIG = {
         'epochs' : 300,
         'decay_epochs': 100,
         'decay_by' : 0.1,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -149,6 +154,7 @@ CIFAR100_FINETUNE_CONFIG_FOR_DEEPMETRIC = {
         'softmax_decay_epochs':0,
         'softmax_decay_by': 0.1,
         'softmax_weight_decay' : 0.0005,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -190,6 +196,7 @@ CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
         'softmax_decay_epochs':0,
         'softmax_decay_by': 0.1,
         'softmax_weight_decay' : 0.0005,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'sgd',
@@ -225,6 +232,7 @@ CUB200_DEFAULT_CONFIG_FOR_DEEPMETRIC = {
         'epochs' : 400,
         'decay_epochs': 120,
         'decay_by' : 0.1,
+        'random_restart' : False, # For each retrain round, whether or not to use a fresh random initialization. If False, then use the same initialization each round (loading from the same checkpoint location).
     }),
     'finetune' : TrainConfig({
         'optim' : 'adam',
@@ -241,25 +249,40 @@ TRAIN_CONFIG_DICT = {
     'CIFAR100' : {
         'softmax_network' : {
             'default' : CIFAR100_DEFAULT_CONFIG,
-            'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
+            'retrain': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
             'fix_feature_extractor' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'cosine_network' : {
             'default' : CIFAR100_DEFAULT_CONFIG,
-            'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
+            'retrain': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
             'fix_feature_extractor' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'sigmoid_network' : {
             'default' : CIFAR100_DEFAULT_CONFIG,
-            'no_finetune': CIFAR100_NO_FINETUNE_CONFIG,
+            'retrain': CIFAR100_NO_FINETUNE_CONFIG,
             'default_lr01_200eps' : CIFAR100_NO_FINETUNE_CONFIG,
         },
         'deep_metric' : {
             'default_lr01_200eps' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
             'default' : CIFAR100_FINETUNE_CONFIG_FOR_DEEPMETRIC,
         },
+    },
+    'CIFAR10' : {
+        'softmax_network' : {
+            'retrain': CIFAR10_NO_FINETUNE_CONFIG,
+        },
+        'cosine_network' : {
+            'retrain': CIFAR10_NO_FINETUNE_CONFIG,
+        },
+        'sigmoid_network' : {
+            'retrain': CIFAR10_NO_FINETUNE_CONFIG,
+        },
+        # 'deep_metric' : {
+        #     'default_lr01_200eps' : CIFAR100_DEFAULT_CONFIG_FOR_DEEPMETRIC,
+        #     'default' : CIFAR100_FINETUNE_CONFIG_FOR_DEEPMETRIC,
+        # },
     },
     'CUB200' : {
         'softmax_network' : {

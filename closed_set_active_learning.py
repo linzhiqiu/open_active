@@ -43,7 +43,6 @@ def main():
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
     classes, open_classes = dataset_factory.get_class_info() # Set of indices
-    
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
     # Begin from scratch

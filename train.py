@@ -40,7 +40,8 @@ def main():
                                      paths_dict['data_download_path'], # Where to download the images
                                      paths_dict['dataset_info_path'], # Where to save the dataset information
                                      config.init_mode,
-                                     dataset_rand_seed=config.dataset_rand_seed)
+                                     dataset_rand_seed=config.dataset_rand_seed,
+                                     use_val_set=False)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
     classes, open_classes = dataset_factory.get_class_info() # Set of indices
@@ -49,6 +50,7 @@ def main():
 
     # Begin from scratch
     discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
+    val_samples = dataset_factory.get_val_samples() # Val samples is a subset of discovered_samples, and will be excluded in the network training.
     open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
     
     # The train set details
@@ -76,7 +78,9 @@ def main():
         config.query_method,
         config.budget,
         global_setting.OPEN_SET_METHOD_DICT[config.training_method],
-        paths_dict=paths_dict,
+        paths_dict,
+        test_dataset,
+        val_samples=val_samples
     )
 
     if config.training_method == 'deep_metric':
@@ -89,10 +93,9 @@ def main():
     
     trainer.finetune(discovered_samples, discovered_classes, verbose=config.verbose)
     
-
-    closed_set_test_acc = trainer.eval_closed_set(discovered_classes, test_dataset, verbose=config.verbose)
+    closed_set_test_acc = trainer.eval_closed_set(discovered_classes, verbose=config.verbose)
     
-    trainer.eval_open_set(discovered_samples, discovered_classes, test_dataset, verbose=config.verbose)
+    trainer.eval_open_set(discovered_samples, discovered_classes, verbose=config.verbose)
     
 
 if __name__ == '__main__':

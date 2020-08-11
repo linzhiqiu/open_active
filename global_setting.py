@@ -2,10 +2,10 @@ OPEN_CLASS_INDEX = -2 # The index for hold out open set class examples
 UNDISCOVERED_CLASS_INDEX = -1 # The index for unseen open set class examples
 
 OPEN_SET_METHOD_DICT = {
-    'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
-    'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
-    # 'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
-    # 'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
+    # 'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
+    # 'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax', 'c2ae'],
+    'softmax_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
+    'cosine_network' : ['nn','nn_cosine', 'softmax', 'entropy', 'openmax'],
     'deep_metric' : ['nn','nn_cosine', 'softmax', 'entropy'],
 }
 
@@ -48,6 +48,21 @@ DATASET_CONFIG_DICT = {
         },
     },
     'CIFAR10' : {
+        'regular': { # The setup in ICRA deep metric learning paper. 8 closed classes, 2 open classes.
+            'num_init_classes' : 4, # Number of initial discovered classes
+            'sample_per_class' : 500, # Number of samples per discovered class
+            'num_open_classes' : 2, # Number of open classes hold out
+        },
+        'fewer_class': { # Use 1/2 of discovered classes, but same number of samples per discovered class
+            'num_init_classes' : 2, # Number of initial discovered classes
+            'sample_per_class' : 500, # Number of samples per discovered class
+            'num_open_classes' : 2, 
+        },
+        'fewer_sample': { # Use 1/2 of samples per discovered class, but keep 40 initial discovered classes
+            'num_init_classes' : 4, # Number of initial discovered classes
+            'sample_per_class' : 250, # Number of samples per discovered class
+            'num_open_classes' : 2, 
+        },
         'active': {
             'num_init_classes' : 10, # Number of initial discovered classes
             'sample_per_class' : 100, # Number of samples per discovered class
