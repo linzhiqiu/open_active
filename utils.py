@@ -224,7 +224,7 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
 def get_dataset_dir(save_path, data, makedir=True):
     dataset_dir = os.path.join(save_path, data)
     if not os.path.exists(dataset_dir) and makedir:
-        print(f"{dataset_dir} does not exists. Press anything to create it >> ")
+        print(f"{dataset_dir} does not exists.")
         makedirs(dataset_dir)
     return dataset_dir
 
@@ -234,7 +234,7 @@ def get_dataset_info_path(save_path, data, init_mode, dataset_rand_seed):
                             init_mode,
                         )
     if not os.path.exists(dataset_info_dir):
-        print(f"{dataset_info_dir} does not exists. Press anything to create it >> ")
+        print(f"{dataset_info_dir} does not exists.")
         makedirs(dataset_info_dir)
     dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
     return dataset_info_path

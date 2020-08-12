@@ -17,18 +17,19 @@ from global_setting import SUPPORTED_DATASETS, DATASET_CONFIG_DICT, VAL_RATIO
 
 class DatasetFactory(object):
     def __init__(self, data, download_path, dataset_info_path, init_mode, dataset_rand_seed=None, use_val_set=False):
-        """Constructor of a facotry of pytorch dataset
-            Args:
-                data (str) : Name of datasets
-                download_path (str) : Path where the dataset will be downloaded
-                dataset_info_path (str) : Path will the dataset split information will be downloaded
-                init_mode (str) : How the dataset will be splitted, including information about
-                                      - Number of initial seen classes
-                                      - Number of samples per seen classes
-                                      - Number of open classes hold out of the unlabeled pool
-                dataset_rand_seed (int or None) : If None, use first nth class's first nth samples.
-                                                  Otherwise, use the random seed to select random classes + random samples per class.
-        """
+        """Constructor of a factory of pytorch datasets
+
+        Args:
+            data (str): Name of dataset
+            download_path (str): Path where the dataset will be downloaded
+            dataset_info_path (str): Path where the dataset split information will be downloaded
+            init_mode (str): How the dataset will be splitted, including information about
+                             - Number of initial seen classes
+                             - Number of samples per seen classes
+                             - Number of open classes hold out of the unlabeled pool
+            dataset_rand_seed (int, optional): Random seed for selecting random classes + random samples per class. Defaults to None, if using first nth classes' first nth sample.
+            use_val_set (bool, optional): Whether to include a validation set. Defaults to False.
+        """        
         super(DatasetFactory, self).__init__()
         self.data = data
         self.download_path = download_path
@@ -44,14 +45,12 @@ class DatasetFactory(object):
         self.train_samples, self.train_labels, self.classes = generate_dataset_info(self.data, 
                                                                                     self.train_dataset)
 
-        from utils import get_dataset_info_path
-
         # Load the dataset split information, or generate a new split and save it
         if os.path.exists(self.dataset_info_path):
             print(f"Dataset file already generated at {self.dataset_info_path}.")
             self.dataset_info_dict = torch.load(self.dataset_info_path)
         else:
-            print(f"Dataset file does not exist. Will be created at {self.dataset_info_path} (press to continue) >> ")
+            print(f"Dataset file does not exist. Will be created at {self.dataset_info_path}")
             # Split the training set using the config
             self.dataset_info_dict = self._split_train_set(self.data,
                                                            self.init_mode,

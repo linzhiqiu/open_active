@@ -2,8 +2,8 @@
     "remote.SSH.defaultExtensions": [
         "Python"
     ],
-    "python.pythonPath": "/usr/bin/python3",
-    "python.formatting.provider": "yapf",
+    "python.pythonPath": "/home/zl279/.conda/envs/zhiqiu/bin/python",
+    "python.formatting.provider": "autopep8",
     "files.watcherExclude": {
         "**/*analysis*/**": true,
         "**/*learners*/**": true,

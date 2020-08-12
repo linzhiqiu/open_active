@@ -22,11 +22,16 @@ parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Act
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", "OPEN_CIFAR10", "CIFAR100", 'CUB200', 'Cars'],
-                          help='Choice of dataset + preprocessing method.')
+                          choices=["CIFAR10", "OPEN_CIFAR10",
+                                   "CIFAR100", 'CUB200', 'Cars'],
+                          help='Dataset for training and testing. Dataset details can be found in dataset_factory.py')
+dataset_args.add_argument('--init_mode',
+                          default='regular',
+                          choices=['regular', 'fewer_class', 'fewer_sample'],
+                          help="This parameter decides how to select the initial labeled set and hold-out open set classes on given dataset")
 dataset_args.add_argument('--download_path', 
-                          default="/scratch", metavar='PATH',
-                          help='path to datasets download location default :%(default)')
+                          default="/scratch",
+                          help='The dataset (all the images) download location.')
 dataset_args.add_argument('--save_path',
                           default='/share/coecis/open_active/datasets',
                           help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')

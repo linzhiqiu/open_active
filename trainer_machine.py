@@ -85,7 +85,7 @@ class TrainerMachine(object):
                 random_model_weight_path = os.path.join(".", "weights", self.trainer_config['backbone']+".pt")
                 if not os.path.exists(random_model_weight_path):
                     if not os.path.exists('./weights'): os.makedirs("./weights"); print("Make a new folder at ./weights/ to store random weights")
-                    print("Model {random_model_weight_path} doesn't exist. Generating a random model for the first time.")
+                    print(f"Model {random_model_weight_path} doesn't exist. Generating a random model for the first time.")
                     torch.save(self.backbone.state_dict(), random_model_weight_path)
                 self.backbone.load_state_dict(torch.load(random_model_weight_path))
             else:
