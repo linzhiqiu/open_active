@@ -6,7 +6,7 @@ python classification.py \
 --dir temp_CUB \
 --download_path /media/cheng/Samsung_T5/cub_200_2011/CUB_200_2011 \
 --data CUB200 \
---init_mode regular \
+--data_config regular \
 --bsize 64 \
 --wd=3e-3 \
 --fail_epoch=5 \

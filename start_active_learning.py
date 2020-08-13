@@ -1,5 +1,10 @@
+"""Start a closed set active learning experiment (no open set classes)
+The network is first trained on initial labeled set, then an active learning method will be used to
+query (i.e., select) new samples to label. The network will then be trained on the new labeled set.
+This process will repeat for different numbers of query.
+"""
 import torch
-import numpy as np 
+import numpy as np
 
 import time
 import os
@@ -19,6 +24,7 @@ import random
 
 from utils import prepare_active_learning_dir_from_config, get_budget_list_from_config
 
+
 def main():
     config = get_config()
     if config.use_random_seed:
@@ -29,27 +35,33 @@ def main():
         np.random.seed(1)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    
+
     # It contains all directory/save_paths that will be used
-    budget_list = get_budget_list_from_config(config) 
+    budget_list = get_budget_list_from_config(config)
     paths_dict = prepare_active_learning_dir_from_config(config, budget_list)
-    
+
     dataset_factory = DatasetFactory(config.data,
-                                     paths_dict['data_download_path'], # Where to download the images
-                                     paths_dict['dataset_info_path'], # Where to save the dataset information
-                                     config.active_init_mode,
+                                     # Where to download the images
+                                     paths_dict['data_download_path'],
+                                     # Where to save the dataset information
+                                     paths_dict['dataset_info_path'],
+                                     config.active_data_config,
                                      dataset_rand_seed=config.dataset_rand_seed,
                                      use_val_set=config.use_val_set)
-    train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
-    train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
-    classes, open_classes = dataset_factory.get_class_info() # Set of indices
+    train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
+    # List of indices/labels
+    train_samples, train_labels = dataset_factory.get_train_set_info()
+    classes, open_classes = dataset_factory.get_class_info()  # Set of indices
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
     # Begin from scratch
-    discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
-    val_samples = dataset_factory.get_val_samples() # Val samples is a subset of discovered_samples, and will be excluded in the network training.
-    open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
-    
+    # Get initial training set, discovered classes
+    discovered_samples, discovered_classes = dataset_factory.get_init_train_set()
+    # Val samples is a subset of discovered_samples, and will be excluded in the network training.
+    val_samples = dataset_factory.get_val_samples()
+    # Get open samples and classes in train set
+    open_samples = dataset_factory.get_open_samples_in_trainset()
+
     # The train set details
     trainset_info = TrainsetInfo(train_dataset,
                                  train_samples,
@@ -78,7 +90,7 @@ def main():
         active_test_val_diff=config.active_test_val_diff
     )
 
-    for i, b in enumerate(budget_list): 
+    for i, b in enumerate(budget_list):
         # b is the budget for independent mode, need to adjust it for sequential mode
         if config.active_query_scheme == 'sequential':
             if i > 0:
@@ -87,11 +99,11 @@ def main():
                 budget = b
         else:
             budget = b
-        
+
         # if config.training_method == 'deep_metric':
         #     print("Skip softmax network train phase, directly go to deep metric learning for train phase")
-        #     pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.init_mode+".pt")
-        #     trainer.trainer_machine.load_backbone(pretrained_softmax_path) 
+        #     pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.data_config+".pt")
+        #     trainer.trainer_machine.load_backbone(pretrained_softmax_path)
         new_discovered_samples, new_discovered_classes = trainer.query(budget,
                                                                        discovered_samples,
                                                                        discovered_classes,
@@ -110,12 +122,12 @@ def main():
                       verbose=config.verbose)
 
         closed_set_test_acc = trainer.eval_closed_set(new_discovered_classes,
-                                                    #   test_dataset,
+                                                      #   test_dataset,
                                                       paths_dict['active_test_results'][b],
                                                       verbose=config.verbose)
 
         # trainer.eval_open_set(discovered_samples, discovered_classes, test_dataset, verbose=config.verbose)
-    
+
 
 if __name__ == '__main__':
     main()

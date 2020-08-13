@@ -1,35 +1,43 @@
 import argparse
 
 arg_lists = []
-parser = argparse.ArgumentParser(description='Config for Open World Active Learning')
+parser = argparse.ArgumentParser(
+    description='Config for Open World Active Learning')
+
 
 def str2bool(v):
     return v.lower() in ('true', '1')
 
+
 def str2lower(s):
     return s.lower()
 
+
 def str2NoneInt(s):
     return None if s == "None" else int(s)
+
 
 def add_argument_group(name):
     arg = parser.add_argument_group(name)
     arg_lists.append(arg)
     return arg
 
-parser = argparse.ArgumentParser(description='PyTorch Implementation of Open Active Algorithm')
+
+parser = argparse.ArgumentParser(
+    description='PyTorch Implementation of Open Active Algorithm')
 
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", "OPEN_CIFAR10",
+                          choices=["CIFAR10", # Regular CIFAR10
+                                   "OPEN_CIFAR10",
                                    "CIFAR100", 'CUB200', 'Cars'],
                           help='Dataset for training and testing. Dataset details can be found in dataset_factory.py')
-dataset_args.add_argument('--init_mode',
+dataset_args.add_argument('--data_config',
                           default='regular',
                           choices=['regular', 'fewer_class', 'fewer_sample'],
                           help="This parameter decides how to select the initial labeled set and hold-out open set classes on given dataset")
-dataset_args.add_argument('--download_path', 
+dataset_args.add_argument('--download_path',
                           default="/scratch",
                           help='The dataset (all the images) download location.')
 dataset_args.add_argument('--save_path',
@@ -46,7 +54,7 @@ dataset_args.add_argument('--use_val_set',
 
 
 setting_arg = add_argument_group('Setting Param.')
-setting_arg.add_argument('--init_mode',
+setting_arg.add_argument('--data_config',
                          default='regular',
                          choices=['regular', 'fewer_class', 'fewer_sample',
                                   ],
@@ -64,7 +72,7 @@ setting_arg.add_argument('--val_mode',
 #                                 #   'stratified', # 5% of each observed class
 #                                   'fixed_stratified', # 5% of observed class and fix the validation set to be the same across rounds
 #                                   ],
-#                          help="How to select the validation set (for closed_set_active_learning.py)")
+#                          help="How to select the validation set (for start_active_learning.py)")
 setting_arg.add_argument('--active_test_val_diff',
                          default=False, type=str2bool,
                          help="Whether to test difference between test and val set")
@@ -73,28 +81,29 @@ trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--training_method',
                           default='softmax_network',
                           choices=['softmax_network',
-                                   'sigmoid_network', # Use 1 v.s. rest sigmoid network instead of softmax.
-                                   'cosine_network', # Use cosine similarity as final layer in place of fc layer
+                                   # Use 1 v.s. rest sigmoid network instead of softmax.
+                                   'sigmoid_network',
+                                   'cosine_network',  # Use cosine similarity as final layer in place of fc layer
                                    'deep_metric',
-                          ],
+                                   ],
                           help='The training method determines how to train/finetune using labeled samples.'
                           )
-trainer_args.add_argument('--trainer_save_dir', # The direction hierachy will be: {dataset}/{init_mode}/{trainer}/{train/query/finetune/result}
+trainer_args.add_argument('--trainer_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{trainer}/{train/query/finetune/result}
                           default='/share/coecis/open_active/trainers',
                           help='path to where the trainer checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
 
 
 trainer_args.add_argument('--query_method',
                           default='entropy',
-                          choices=['random', # random query
+                          choices=['random',  # random query
                                    'entropy',
-                                   'softmax', # Max score of softmax as an uncertainty measure
-                                   'uldr', # Unlabeled to labeled density
-                                   'uldr_norm_cosine', # ULDR With features normalized and then use cosine distance
-                                   'learnloss', # Learning Loss paper - might be a variant of it
+                                   'softmax',  # Max score of softmax as an uncertainty measure
+                                   'uldr',  # Unlabeled to labeled density
+                                   'uldr_norm_cosine',  # ULDR With features normalized and then use cosine distance
+                                   'learnloss',  # Learning Loss paper - might be a variant of it
                                    'coreset',
-                                   'coreset_norm_cosine', # Coreset With features normalized and then use cosine distance
-                          ],
+                                   'coreset_norm_cosine',  # Coreset With features normalized and then use cosine distance
+                                   ],
                           help='The active learning method determines how to query from unlabeled pool.'
                           )
 trainer_args.add_argument('--budget',
@@ -107,12 +116,12 @@ trainer_args.add_argument('--budget',
 trainer_args.add_argument('--open_set_method',
                           default='entropy',
                           choices=['entropy',
-                                   'softmax', # Max score of softmax as an uncertainty measure
-                                   'nn', # Nearest Neighbor with eu distance
-                                   'nn_cosine', # Nearest Neighbor with cosine distance
+                                   'softmax',  # Max score of softmax as an uncertainty measure
+                                   'nn',  # Nearest Neighbor with eu distance
+                                   'nn_cosine',  # Nearest Neighbor with cosine distance
                                    'openmax',
                                    'c2ae',
-                          ],
+                                   ],
                           help='The open set method determines how evaluate the open set score of a test sample.'
                           )
 
@@ -132,27 +141,27 @@ active_analysis_arg.add_argument('--active_analysis_save_dir', default="/share/c
 
 deepmetric_args = add_argument_group('Deep metric Trainer Machine Param.')
 deepmetric_args.add_argument('--deep_metric_softmax_pretrained_folder',
-                          default='/share/phoenix/nfs02/S2/localdisk/zhiqiu/open_active/pretrained_weight',
-                          help="Pretrained folder of softmax weight")
+                             default='/share/phoenix/nfs02/S2/localdisk/zhiqiu/open_active/pretrained_weight',
+                             help="Pretrained folder of softmax weight")
 
 # Need to clean out
 c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
 c2ae_args.add_argument('--c2ae_train_mode',
-                          default='default',
-                          choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce', 
-                                   "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
-                                   'debug_no_label_dcgan_mse', 'debug_no_label_not_frozen_dcgan_mse', 'a_minus_1_dcgan_mse', 'a_minus_1_dcgan',
-                                   'a_minus_1_instancenorm_dcgan_mse', 'a_minus_1_instancenorm_dcgan', 'a_minus_1_instancenorm_affine_dcgan_mse', 'a_minus_1_instancenorm_affine_dcgan',
-                                   'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
-                                   'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder',
-                                   'a_minus_1_dcgan_mse_not_frozen', 'a_minus_1_dcgan_not_frozen', 'UNet_mse', 'UNet'],
-                          help="C2AE config")
+                       default='default',
+                       choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce',
+                                "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
+                                'debug_no_label_dcgan_mse', 'debug_no_label_not_frozen_dcgan_mse', 'a_minus_1_dcgan_mse', 'a_minus_1_dcgan',
+                                'a_minus_1_instancenorm_dcgan_mse', 'a_minus_1_instancenorm_dcgan', 'a_minus_1_instancenorm_affine_dcgan_mse', 'a_minus_1_instancenorm_affine_dcgan',
+                                'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
+                                'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder',
+                                'a_minus_1_dcgan_mse_not_frozen', 'a_minus_1_dcgan_not_frozen', 'UNet_mse', 'UNet'],
+                       help="C2AE config")
 c2ae_args.add_argument('--c2ae_alpha',
-                          default=0.9, type=float,
-                          help="C2AE alpha")
+                       default=0.9, type=float,
+                       help="C2AE alpha")
 c2ae_args.add_argument('--c2ae_train_in_eval_mode',
-                          default=True, type=str2bool,
-                          help="C2AE whether to train model in eval mode")
+                       default=True, type=str2bool,
+                       help="C2AE whether to train model in eval mode")
 
 
 learnloss_args = add_argument_group('Learning Loss Param.')
@@ -177,12 +186,13 @@ learnloss_args.add_argument('--learning_loss_start_epoch',
 osdn_args = add_argument_group('OSDN Trainer Machine Param.')
 osdn_args.add_argument('--weibull_tail_size',
                        default='fixed_20',
-                       choices=['fixed_20','fixed_50'],
+                       choices=['fixed_20', 'fixed_50'],
                        help='How to fit the weibull distribution. Default is using the largest 20 (or fewer) per category, as in official OSDN repo.'
                        )
 osdn_args.add_argument('--alpha_rank',
                        default='fixed_10',
-                       choices=['fixed_5', 'fixed_2', 'fixed_10','fixed_20', 'fixed_40'],
+                       choices=['fixed_5', 'fixed_2',
+                                'fixed_10', 'fixed_20', 'fixed_40'],
                        help='The alpha rank. Default is using the largest 10 (or fewer) per category as in official OSDN repo.'
                        )
 osdn_args.add_argument('--osdn_eval_threshold',
@@ -213,32 +223,33 @@ training_arg.add_argument('--train_mode', type=str,
                           help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')
-training_arg.add_argument('--seed', type=int, default=31, help='random seed (default: 31)')
+training_arg.add_argument('--seed', type=int, default=31,
+                          help='random seed (default: 31)')
 
 
 active_arg = add_argument_group('Active Learning Param.')
 active_arg.add_argument('--active_save_path',
-                          default='/share/coecis/open_active/active_datasets',
-                          help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
+                        default='/share/coecis/open_active/active_datasets',
+                        help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
 active_arg.add_argument('--active_query_scheme', type=str,
-                          choices=['sequential', 'independent'], default='sequential',
-                          help='How the query is selected etc.')
+                        choices=['sequential', 'independent'], default='sequential',
+                        help='How the query is selected etc.')
 active_arg.add_argument('--active_train_mode', type=str,
-                          choices=['retrain'], default='retrain',
-                          help='How many epochs etc.')
-active_arg.add_argument('--active_save_dir', # The direction hierachy will be: {dataset}/{active_init_mode}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
+                        choices=['retrain'], default='retrain',
+                        help='How many epochs etc.')
+active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{active_data_config}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
                         default='/share/coecis/open_active/active_learners',
                         help='path to where the active learning checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
-active_arg.add_argument('--active_init_mode',
-                         default='active',
-                         choices=['active', # the default. Detail in global_settings.py
-                                  ],
-                         help="How to select the initial training/hold-out open set")
+active_arg.add_argument('--active_data_config',
+                        default='active',
+                        choices=['active',  # the default. Detail in global_settings.py
+                                 ],
+                        help="How to select the initial training/hold-out open set")
 active_arg.add_argument('--active_budget_mode',
-                         default='default',
-                         choices=['default', # the default. Detail in global_settings.py
-                                  ],
-                         help="How to select the budget to query and evaluate")
+                        default='default',
+                        choices=['default',  # the default. Detail in global_settings.py
+                                 ],
+                        help="How to select the budget to query and evaluate")
 
 open_arg = add_argument_group("Open set Learning Param")
 open_arg.add_argument('--open_set_save_path',
@@ -247,10 +258,10 @@ open_arg.add_argument('--open_set_save_path',
 open_arg.add_argument('--open_set_train_mode', type=str,
                       choices=['default'], default='default',
                       help='The training mode for open set recognition.')
-open_arg.add_argument('--open_set_init_mode', type=str,
-                      choices=['default_open_set', 'default_open_set_1'], default='default_open_set',
+open_arg.add_argument('--open_set_data_config', type=str,
+                      choices=['open_set'], default='open_set',
                       help='The initial dataset labelling for open set recognition.')
-open_arg.add_argument('--open_set_save_dir', # The direction hierachy will be: {dataset}/{open_set_init_mode}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
+open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{open_set_data_config}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
                       default='/share/coecis/open_active/open_learners',
                       help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
 
@@ -268,10 +279,11 @@ uncertainty_sampling_arg.add_argument('--uncertainty_measure',
 uncertainty_sampling_arg.add_argument('--active_random_sampling',
                                       default='none',
                                       type=str,
-                                      choices=['fixed_10K', # As in learning the loss paper
-                                               '1_out_of_5',  # 1/5 of the unlabled pool. Or budget if smaller than budget.
+                                      choices=['fixed_10K',  # As in learning the loss paper
+                                               # 1/5 of the unlabled pool. Or budget if smaller than budget.
+                                               '1_out_of_5',
                                                'none',
-                                              ],
+                                               ],
                                       help='If true, use the random sampling scheme in "Learning Loss Active Learning" paper',
                                       )
 uncertainty_sampling_arg.add_argument('--coreset_measure',
@@ -288,10 +300,11 @@ misc_arg.add_argument('--device', type=str, default='cuda',
                       help='Which device to use.')
 misc_arg.add_argument('--debug', action="store_true",
                       help="Whether to use the debug mode")
-misc_arg.add_argument('--verbose', type=str2bool, default=True, 
+misc_arg.add_argument('--verbose', type=str2bool, default=True,
                       help='chatty')
 misc_arg.add_argument('--use_random_seed', action='store_true', default=False,
                       help='If true, use a random random seed. Otherwise, use 30 as the seed.')
+
 
 def get_config():
     config, unparsed = parser.parse_known_args()

@@ -39,7 +39,7 @@ def main():
     dataset_factory = DatasetFactory(config.data,
                                      paths_dict['data_download_path'], # Where to download the images
                                      paths_dict['dataset_info_path'], # Where to save the dataset information
-                                     config.init_mode,
+                                     config.data_config,
                                      dataset_rand_seed=config.dataset_rand_seed,
                                      use_val_set=False)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
@@ -85,7 +85,7 @@ def main():
 
     if config.training_method == 'deep_metric':
         print("Skip softmax network train phase, directly go to deep metric learning for train phase")
-        pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.init_mode+".pt")
+        pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.data_config+".pt")
         trainer.trainer_machine.load_backbone(pretrained_softmax_path) 
     trainer.train(discovered_samples, discovered_classes, verbose=config.verbose)
 

@@ -68,22 +68,6 @@ def get_open_name(str):
     if str == 'nn': return "Nearest Neighbor"
     if str == 'nn_cosine': return "Nearest Neighbor (cosine dist.)"
 
-# def get_label_name(plot_mode, init_mode, training_method, query_method, open_method=None, train_mode=None):
-#     if train_mode == None:
-#         if plot_mode == 'compare_setting':
-#             return " | ".join(["Network: "+get_pretty_name(training_method), "Query: "+get_pretty_name(query_method)])
-#         if plot_mode == 'compare_active':
-#             return " | ".join(["Initial Labeled Pool: "+get_pretty_name(init_mode), "Query: "+get_pretty_name(query_method)])
-#         if plot_mode == 'compare_open':
-#             return "Open: "+get_open_name(open_method)
-#         else:
-#             return "_".join([init_mode, training_method, query_method])
-#     else:
-#         if plot_mode == "compare_active":
-#             return " | ".join(["Update Rule: "+get_pretty_name(train_mode), "Query: "+get_pretty_name(query_method)])
-#         else:
-#             return None
-
 def get_result_str(key, init_size, budget_dict):
     if key in ['combined', 'same_sample']:
         prefix = "Total Labeled Sample: "
@@ -102,7 +86,7 @@ class ActiveAnalysisMachine(object):
     def __init__(self,
                  active_analysis_save_dir,
                  budget_list,
-                 active_init_mode,
+                 active_data_config,
                  download_path,
                  active_save_path,
                  active_save_dir,
@@ -122,7 +106,7 @@ class ActiveAnalysisMachine(object):
         self.active_save_path = active_save_path
         self.data_download_path = download_path
 
-        self.active_init_mode = active_init_mode
+        self.active_data_config = active_data_config
         self.budget_list = budget_list
 
         self.TRAINING_METHODS = TRAINING_METHODS
@@ -157,7 +141,7 @@ class ActiveAnalysisMachine(object):
                                                                             self.data_download_path,
                                                                             self.active_save_dir,
                                                                             self.data,
-                                                                            self.active_init_mode,
+                                                                            self.active_data_config,
                                                                             dataset_rand_seed,
                                                                             training_method,
                                                                             active_train_mode,
@@ -190,7 +174,7 @@ class ActiveAnalysisMachine(object):
                                                                             self.data_download_path,
                                                                             self.active_save_dir,
                                                                             self.data,
-                                                                            self.active_init_mode,
+                                                                            self.active_data_config,
                                                                             dataset_rand_seed,
                                                                             training_method,
                                                                             active_train_mode,
@@ -201,7 +185,7 @@ class ActiveAnalysisMachine(object):
                             # dataset_factory = DatasetFactory(self.data,
                             #                                  paths_dict['data_download_path'], # Where to download the images
                             #                                  paths_dict['dataset_info_path'], # Where to save the dataset information
-                            #                                  self.active_init_mode,
+                            #                                  self.active_data_config,
                             #                                  dataset_rand_seed=None,
                             #                                  use_val_set=False)
                             # _, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
@@ -445,7 +429,7 @@ class ActiveAnalysisMachine(object):
         from utils import get_trainset_info_path
         trainset_info = torch.load(get_trainset_info_path(self.active_save_path, self.data))
         if self.data in ['CIFAR100', 'CIFAR10']:
-            init_size = DATASET_CONFIG_DICT[self.data][self.active_init_mode]['num_init_classes'] * DATASET_CONFIG_DICT[self.data][self.active_init_mode]['sample_per_class']
+            init_size = DATASET_CONFIG_DICT[self.data][self.active_data_config]['num_init_classes'] * DATASET_CONFIG_DICT[self.data][self.active_data_config]['sample_per_class']
 
         color_dict = {}
         color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue', 'skyblue', 'steelblue', 'olive', 'deeppink', 'crimson']
@@ -510,8 +494,6 @@ class ActiveAnalysisMachine(object):
                                            self.data,
                                            "results.txt")
             print("Print all results to " + self.print_path)
-            # if os.path.exists(self.print_path):
-            #     input(f"{self.print_path} already exists. Overwrite it? >> ")
             with open(self.print_path, "w+") as file:
                 for active_train_mode in finished_exp_dict.keys():
                     file.write(f"#####Start Train mode {active_train_mode}######\n")
@@ -564,7 +546,7 @@ if __name__ == "__main__":
     # QUERY_METHODS = ['uldr', 'coreset']
     analysis_machine = ActiveAnalysisMachine(config.active_analysis_save_dir,
                                              budget_list,
-                                             config.active_init_mode,
+                                             config.active_data_config,
                                              config.download_path,
                                              config.active_save_path,
                                              config.active_save_dir,

@@ -39,7 +39,7 @@ def main():
     dataset_factory = DatasetFactory(config.data,
                                      paths_dict['data_download_path'], # Where to download the images
                                      paths_dict['dataset_info_path'], # Where to save the dataset information
-                                     config.open_set_init_mode,
+                                     config.open_set_data_config,
                                      dataset_rand_seed=config.dataset_rand_seed)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels

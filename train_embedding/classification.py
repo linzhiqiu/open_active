@@ -75,7 +75,7 @@ def main(args):
     ###########################
     # Create DataLoader
     ###########################
-    dataset_factory = DatasetFactory(args.data, args.download_path, args.dir, args.init_mode)
+    dataset_factory = DatasetFactory(args.data, args.download_path, args.dir, args.data_config)
     train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
     # List of indices/labels
     train_samples, train_labels = dataset_factory.get_train_set_info()
@@ -360,7 +360,7 @@ if __name__ == '__main__':
                         choices=["CIFAR100", "MNIST", "IMAGENET12",
                                  "TINY-IMAGENET", "CIFAR10", 'CUB200'],
                         help='Choice of dataset')
-    parser.add_argument('--init_mode',
+    parser.add_argument('--data_config',
                         default='regular',
                         type=str,
                         help='Data Factory mode')
