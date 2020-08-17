@@ -4,7 +4,7 @@ export  WANDB_MODE=dryrun
 rm -r temp
 python classification.py \
 --dir temp_CUB \
---download_path /media/cheng/Samsung_T5/cub_200_2011/CUB_200_2011 \
+--data_download_path /media/cheng/Samsung_T5/cub_200_2011/CUB_200_2011 \
 --data CUB200 \
 --data_config regular \
 --bsize 64 \

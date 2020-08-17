@@ -92,7 +92,7 @@ def get_result_str(key, init_size, budget_dict):
 class AnalysisMachine(object):
     """Store all the configs we want to compare
     """
-    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, dataset_save_path, trainer_save_dir, data, dataset_rand_seed_list, training_method_list, train_mode, query_method_list):
+    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, dataset_save_path, trainer_save_dir, data, data_rand_seed_list, training_method_list, train_mode, query_method_list):
         super().__init__()
         self.silent_mode = False
         self.analysis_save_dir = analysis_save_dir
@@ -111,7 +111,7 @@ class AnalysisMachine(object):
 
         self.data = data
         
-        self.ALL_DATASET_RAND_SEED = dataset_rand_seed_list
+        self.ALL_DATASET_RAND_SEED = data_rand_seed_list
         self.ALL_TRAIN_METHODS = ['softmax_network', 'cosine_network']
         self.ALL_QUERY_METHODS = ['random', 'entropy', 'uldr', 'uldr_norm_cosine', 'coreset', 'coreset_norm_cosine', 'softmax']
         # self.ALL_QUERY_METHODS = ['random', ]
@@ -175,13 +175,13 @@ class AnalysisMachine(object):
                     if not os.path.exists(b_dir): utils.makedirs(b_dir)
                     for training_method in self.training_method_list:
                         for query_method in self.query_method_list:
-                            for dataset_rand_seed in self.ALL_DATASET_RAND_SEED:
+                            for data_rand_seed in self.ALL_DATASET_RAND_SEED:
                                 paths_dict = prepare_save_dir(self.dataset_save_path,
                                                             self.data_download_path,
                                                             self.trainer_save_dir,
                                                             self.data,
                                                             data_config,
-                                                            dataset_rand_seed,
+                                                            data_rand_seed,
                                                             training_method,
                                                             self.train_mode,
                                                             query_method,
@@ -206,7 +206,7 @@ class AnalysisMachine(object):
                                                                             training_method,
                                                                             query_method,
                                                                             b,
-                                                                            dataset_rand_seed,
+                                                                            data_rand_seed,
                                                                             silent=self.silent_mode)
                                         idx = len(undone_exp_b)
                                         b_err_i = os.path.join(b_dir, f"{idx}.err")
@@ -263,13 +263,13 @@ class AnalysisMachine(object):
                     for query_method in self.ALL_QUERY_METHODS:
                         if not query_method in finished_exp[data_config][b][training_method]:
                             finished_exp[data_config][b][training_method][query_method] = {}
-                        for dataset_rand_seed in self.ALL_DATASET_RAND_SEED:
+                        for data_rand_seed in self.ALL_DATASET_RAND_SEED:
                             paths_dict = prepare_save_dir(self.dataset_save_path,
                                                           self.data_download_path,
                                                           self.trainer_save_dir,
                                                           self.data,
                                                           data_config,
-                                                          dataset_rand_seed,
+                                                          data_rand_seed,
                                                           training_method,
                                                           self.train_mode,
                                                           query_method,
@@ -279,29 +279,29 @@ class AnalysisMachine(object):
                             print(str(b) + " " + training_method + " " + query_method)
                             if os.path.exists(paths_dict['test_result_path']):
                                 test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
-                                finished_exp[data_config][b][training_method][query_method][dataset_rand_seed] = test_result
+                                finished_exp[data_config][b][training_method][query_method][data_rand_seed] = test_result
 
                                 if draw_perclass:
                                     query_result = torch.load(paths_dict['query_result_path'], map_location=torch.device('cpu'))
-                                    finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['query_result'] = query_result
-                                    dataset_info = torch.load(paths_dict['dataset_info_path'], map_location=torch.device('cpu'))
-                                    finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['initial_discovered_classes'] = dataset_info['discovered_classes']
-                                    finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_classes'] = dataset_info['open_classes']
+                                    finished_exp[data_config][b][training_method][query_method][data_rand_seed]['query_result'] = query_result
+                                    dataset_info = torch.load(paths_dict['data_save_path'], map_location=torch.device('cpu'))
+                                    finished_exp[data_config][b][training_method][query_method][data_rand_seed]['initial_discovered_classes'] = dataset_info['discovered_classes']
+                                    finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_classes'] = dataset_info['open_classes']
                                 
                                     if not has_trainset_info:
                                         train_labels = torch.load(paths_dict['trainset_info_path'], map_location=torch.device('cpu')).train_labels
                                         has_trainset_info = True
-                                    finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['train_labels'] = train_labels
-                                finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'] = {}
+                                    finished_exp[data_config][b][training_method][query_method][data_rand_seed]['train_labels'] = train_labels
+                                finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'] = {}
                                 
                                 for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                                     if os.path.exists(paths_dict['open_result_paths'][o_method]):
                                         open_result = torch.load(paths_dict['open_result_paths'][o_method], map_location=torch.device('cpu'))
-                                        finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'][o_method] = {}
-                                        finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'][o_method]['auroc'] = open_result['roc']['auc_score']
-                                        finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'][o_method]['roc'] = open_result['roc']
-                                        finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'][o_method]['augoscr'] = open_result['goscr']['auc_score']
-                                        finished_exp[data_config][b][training_method][query_method][dataset_rand_seed]['open_results'][o_method]['goscr'] = open_result['goscr']
+                                        finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'][o_method] = {}
+                                        finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'][o_method]['auroc'] = open_result['roc']['auc_score']
+                                        finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'][o_method]['roc'] = open_result['roc']
+                                        finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'][o_method]['augoscr'] = open_result['goscr']['auc_score']
+                                        finished_exp[data_config][b][training_method][query_method][data_rand_seed]['open_results'][o_method]['goscr'] = open_result['goscr']
                                 finished += 1
                             else:
                                 unfinished += 1
@@ -1039,8 +1039,8 @@ class AnalysisMachine(object):
                                     file.write(tabulate(result_lists, headers=['Class Index', 'Per-Class Precision'], tablefmt='orgtbl'))
                                 
     
-    def _get_exp_name(self, data_config, training_method, query_method, b, dataset_rand_seed, silent=False):
-        script_prefix = (f"python train.py {self.data} --download_path {self.data_download_path} --save_path {self.dataset_save_path} --dataset_rand_seed {dataset_rand_seed}"
+    def _get_exp_name(self, data_config, training_method, query_method, b, data_rand_seed, silent=False):
+        script_prefix = (f"python train.py {self.data} --data_download_path {self.data_download_path} --data_save_path {self.data_save_path} --data_rand_seed {data_rand_seed}"
                         f" --data_config {data_config} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
                         f" --query_method {query_method} --budget {b}"
                         f" --verbose {str(not silent)}")
@@ -1125,8 +1125,8 @@ if __name__ == "__main__":
     analysis_machine = AnalysisMachine(config.analysis_save_dir,
                                        config.analysis_trainer,
                                        config.budget_mode,
-                                       config.download_path,
-                                       config.save_path,
+                                       config.data_download_path,
+                                       config.data_save_path,
                                        config.trainer_save_dir,
                                        config.data,
                                        DATASET_RAND_SEED_LIST,

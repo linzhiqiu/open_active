@@ -37,13 +37,13 @@ dataset_args.add_argument('--data_config',
                           default='regular',
                           choices=['regular', 'fewer_class', 'fewer_sample'],
                           help="This parameter decides how to select the initial labeled set and hold-out open set classes on given dataset")
-dataset_args.add_argument('--download_path',
-                          default="/scratch",
-                          help='The dataset (all the images) download location.')
-dataset_args.add_argument('--save_path',
-                          default='/share/coecis/open_active/datasets',
+dataset_args.add_argument('--data_download_path',
+                          default="./",
+                          help='The location for downloaded datasets.')
+dataset_args.add_argument('--data_save_path',
+                          default='./datasets',
                           help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
-dataset_args.add_argument('--dataset_rand_seed',
+dataset_args.add_argument('--data_rand_seed',
                           type=str2NoneInt,
                           default=None,
                           help='None then use first nth classes nth samples. Otherwise use the rand seed to select random classes and random samples.')
@@ -164,46 +164,6 @@ c2ae_args.add_argument('--c2ae_train_in_eval_mode',
                        help="C2AE whether to train model in eval mode")
 
 
-learnloss_args = add_argument_group('Learning Loss Param.')
-learnloss_args.add_argument('--learning_loss_train_mode',
-                            default='default',
-                            choices=['default', 'mse'],
-                            help="Learning loss config")
-learnloss_args.add_argument('--learning_loss_lambda',
-                            default=1.0, type=float,
-                            help="Learning loss lambda")
-learnloss_args.add_argument('--learning_loss_margin',
-                            default=1.0, type=float,
-                            help="Learning loss margin")
-learnloss_args.add_argument('--learning_loss_stop_epoch',
-                            default=120, type=int,
-                            help="Learning loss stop propagation (to target model) epoch")
-learnloss_args.add_argument('--learning_loss_start_epoch',
-                            default=0, type=int,
-                            help="Learning loss start working epoch")
-
-
-osdn_args = add_argument_group('OSDN Trainer Machine Param.')
-osdn_args.add_argument('--weibull_tail_size',
-                       default='fixed_20',
-                       choices=['fixed_20', 'fixed_50'],
-                       help='How to fit the weibull distribution. Default is using the largest 20 (or fewer) per category, as in official OSDN repo.'
-                       )
-osdn_args.add_argument('--alpha_rank',
-                       default='fixed_10',
-                       choices=['fixed_5', 'fixed_2',
-                                'fixed_10', 'fixed_20', 'fixed_40'],
-                       help='The alpha rank. Default is using the largest 10 (or fewer) per category as in official OSDN repo.'
-                       )
-osdn_args.add_argument('--osdn_eval_threshold',
-                       default=0.5,
-                       type=float,
-                       help='(OSDN setting) If max class probability < threshold, then classify new example to unseen class')
-osdn_args.add_argument('--mav_features_selection',
-                       default='correct',
-                       choices=['correct', 'all', 'none_correct_then_all'],
-                       help='Determine how features are selected to generate the mean activation vector.')
-
 disc_args = add_argument_group('Distance Metric Param.')
 disc_args.add_argument('--distance_metric',
                        default='eucos',
@@ -237,14 +197,9 @@ active_arg.add_argument('--active_query_scheme', type=str,
 active_arg.add_argument('--active_train_mode', type=str,
                         choices=['retrain'], default='retrain',
                         help='How many epochs etc.')
-active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{active_data_config}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
+active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
                         default='/share/coecis/open_active/active_learners',
                         help='path to where the active learning checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
-active_arg.add_argument('--active_data_config',
-                        default='active',
-                        choices=['active',  # the default. Detail in global_settings.py
-                                 ],
-                        help="How to select the initial training/hold-out open set")
 active_arg.add_argument('--active_budget_mode',
                         default='default',
                         choices=['default',  # the default. Detail in global_settings.py
@@ -258,10 +213,7 @@ open_arg.add_argument('--open_set_save_path',
 open_arg.add_argument('--open_set_train_mode', type=str,
                       choices=['default'], default='default',
                       help='The training mode for open set recognition.')
-open_arg.add_argument('--open_set_data_config', type=str,
-                      choices=['open_set'], default='open_set',
-                      help='The initial dataset labelling for open set recognition.')
-open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{open_set_data_config}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
+open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
                       default='/share/coecis/open_active/open_learners',
                       help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
 

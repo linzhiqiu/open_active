@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ClusterLayer(torch.nn.Module):
-    def __init__(self, cluster_num, feature_size, distance_func, gamma=1.0, data_configig='zeros'):
+    def __init__(self, cluster_num, feature_size, distance_func, gamma=1.0, data_config='zeros'):
         super(ClusterLayer, self).__init__()
-        assert data_configig == 'zeros'
+        assert data_config == 'zeros'
         self.distance_func = distance_func
         self.gamma = gamma
         self.clusters = torch.nn.Parameter(torch.zeros(cluster_num, feature_size))

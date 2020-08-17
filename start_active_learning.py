@@ -18,7 +18,6 @@ from trainer import ActiveTrainer, TrainsetInfo
 from active_config import get_active_learning_config
 import utils
 from utils import makedirs
-import logging_helper
 import json
 import random
 
@@ -44,9 +43,9 @@ def main():
                                      # Where to download the images
                                      paths_dict['data_download_path'],
                                      # Where to save the dataset information
-                                     paths_dict['dataset_info_path'],
-                                     config.active_data_config,
-                                     dataset_rand_seed=config.dataset_rand_seed,
+                                     paths_dict['data_save_path'],
+                                     config.data_config,
+                                     data_rand_seed=config.data_rand_seed,
                                      use_val_set=config.use_val_set)
     train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
     # List of indices/labels

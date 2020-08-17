@@ -11,7 +11,10 @@
 # (3) training: Print mode, make dirs
 #       SetPrintMode
 #       makedirs
-import os, sys
+import os
+import sys
+from dataclasses import dataclass
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -31,27 +34,6 @@ class SetPrintMode:
             sys.stdout.close()
             sys.stdout = self._original_stdout
 
-class FixedRepresentationDataset(torch.utils.data.TensorDataset):
-    def __init__(self, data_tensor, target_tensor):
-        assert (data_tensor.size(0) == target_tensor.size(0))
-        self.data_tensor = data_tensor
-        self.target_tensor = target_tensor
-
-    def __getitem__(self, idx):
-        return self.data_tensor[idx, ...], self.target_tensor[idx, ...] 
-
-    def __len__(self):
-        return self.data_tensor.size(0)
-
-class IndexDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset):
-        self.dataset = dataset
-
-    def __getitem__(self, idx):
-        return self.dataset[idx][0], self.dataset[idx][1], idx
-
-    def __len__(self):
-        return len(self.dataset)
 
 def makedirs(dir_name):
     if not os.path.exists(dir_name):
@@ -161,10 +143,6 @@ def get_target_mapping_func(classes,
                for idx in classes}
     return lambda idx : mapping[idx]
 
-def get_index_mapping_func(discovered_samples):
-    mapping = {idx : i for i, idx in enumerate(discovered_samples)}
-    return lambda idx : mapping[idx]
-
 def get_target_mapping_func_for_tensor(classes,
                                        discovered_classes,
                                        open_classes,
@@ -221,29 +199,24 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
         return list(map(lambda x: unmapping_dict[x], lst))
     return unmapp_func
 
-def get_dataset_dir(save_path, data, makedir=True):
-    dataset_dir = os.path.join(save_path, data)
-    if not os.path.exists(dataset_dir) and makedir:
-        print(f"{dataset_dir} does not exists.")
-        makedirs(dataset_dir)
-    return dataset_dir
 
-def get_dataset_info_path(save_path, data, data_configig, dataset_rand_seed):
+def get_dataset_info_path(save_path, data, data_config, data_rand_seed):
     dataset_info_dir = os.path.join(
-                            get_dataset_dir(save_path, data),
-                            data_configig,
+                            save_path,
+                            data,
+                            data_config,
                         )
     if not os.path.exists(dataset_info_dir):
         print(f"{dataset_info_dir} does not exists.")
         makedirs(dataset_info_dir)
-    dataset_info_path = os.path.join(dataset_info_dir, f"seed_{dataset_rand_seed}.pt")
+    dataset_info_path = os.path.join(dataset_info_dir, f"seed_{data_rand_seed}.pt")
     return dataset_info_path
 
-def get_trainer_save_dir(trainer_save_dir, data, data_configig, dataset_rand_seed, training_method, train_mode, makedir=True):
+def get_trainer_save_dir(trainer_save_dir, data, data_config, data_rand_seed, training_method, train_mode, makedir=True):
     save_dir = os.path.join(trainer_save_dir,
                             data,
-                            data_configig,
-                            "seed_"+str(dataset_rand_seed),
+                            data_config,
+                            "seed_"+str(data_rand_seed),
                             "_".join([training_method, train_mode]))
     if not os.path.exists(save_dir) and makedir:
         print("Making a new directory to save checkpoints after train/query/finetune step.")
@@ -254,14 +227,14 @@ def get_trainer_save_dir(trainer_save_dir, data, data_configig, dataset_rand_see
 def get_open_set_save_dir(open_set_save_dir,
                           data,
                           data_config,
-                          dataset_rand_seed,
+                          data_rand_seed,
                           training_method,
                           open_set_train_mode,
                           makedir=True):
     save_dir = os.path.join(open_set_save_dir,
                             data,
                             data_config,
-                            "seed_"+str(dataset_rand_seed),
+                            "seed_"+str(data_rand_seed),
                             training_method,
                             open_set_train_mode)
     if not os.path.exists(save_dir) and makedir:
@@ -273,7 +246,7 @@ def get_open_set_save_dir(open_set_save_dir,
 def get_active_save_dir(active_save_dir,
                         data,
                         data_config,
-                        dataset_rand_seed,
+                        data_rand_seed,
                         training_method,
                         active_train_mode,
                         active_query_scheme,
@@ -286,7 +259,7 @@ def get_active_save_dir(active_save_dir,
     save_dir = os.path.join(active_save_dir,
                             data,
                             data_config,
-                            "seed_"+str(dataset_rand_seed),
+                            "seed_"+str(data_rand_seed),
                             # training_method_str,
                             training_method,
                             active_train_mode,
@@ -297,17 +270,19 @@ def get_active_save_dir(active_save_dir,
         makedirs(save_dir)
     return save_dir
 
-def get_trainset_info_path(save_path, data):
-    return os.path.join(get_dataset_dir(save_path, data), "trainset_info.pt")
+def get_trainset_info_path(data_save_path, data):
+    trainset_info_dir = os.path.join(data_save_path, data)
+    makedirs(trainset_info_dir)
+    return os.path.join(trainset_info_dir, "trainset_info.pt")
 
 def prepare_save_dir_from_config(config, makedir=True):
     open_set_methods = global_setting.OPEN_SET_METHOD_DICT[config.training_method]
-    return prepare_save_dir(config.save_path,
-                            config.download_path,
+    return prepare_save_dir(config.data_save_path,
+                            config.data_download_path,
                             config.trainer_save_dir,
                             config.data,
-                            config.data_configig,
-                            config.dataset_rand_seed,
+                            config.data_config,
+                            config.data_rand_seed,
                             config.training_method,
                             config.train_mode,
                             config.query_method,
@@ -315,12 +290,13 @@ def prepare_save_dir_from_config(config, makedir=True):
                             open_set_methods,
                             makedir=makedir)
 
+
 def prepare_save_dir(save_path,
                      download_path,
                      trainer_save_dir,
                      data,
-                     data_configig,
-                     dataset_rand_seed,
+                     data_config,
+                     data_rand_seed,
                      training_method,
                      train_mode,
                      query_method,
@@ -331,18 +307,17 @@ def prepare_save_dir(save_path,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['dataset_dir'] = get_dataset_dir(save_path, data, makedir=makedir)
-    paths_dict['dataset_info_path'] = get_dataset_info_path(save_path,
+    paths_dict['data_save_path'] = get_dataset_info_path(save_path,
                                                             data,
-                                                            data_configig,
-                                                            dataset_rand_seed)
+                                                            data_config,
+                                                            data_rand_seed)
     paths_dict['trainset_info_path'] = get_trainset_info_path(save_path, data)
     
     # Where the training/testing results will be saved
     paths_dict['trainer_save_dir'] = get_trainer_save_dir(trainer_save_dir,
                                                           data,
-                                                          data_configig,
-                                                          dataset_rand_seed,
+                                                          data_config,
+                                                          data_rand_seed,
                                                           training_method,
                                                           train_mode,
                                                           makedir=makedir)
@@ -401,11 +376,11 @@ def get_budget_list(data):
 def prepare_active_learning_dir_from_config(config, budget_list, makedir=True):
     return prepare_active_learning_dir(budget_list,
                                        config.active_save_path,
-                                       config.download_path,
+                                       config.data_download_path,
                                        config.active_save_dir,
                                        config.data,
                                        config.data_config,
-                                       config.dataset_rand_seed,
+                                       config.data_rand_seed,
                                        config.training_method,
                                        config.active_train_mode,
                                        config.query_method,
@@ -419,7 +394,7 @@ def prepare_active_learning_dir(budget_list,
                                 active_save_dir,
                                 data,
                                 data_config,
-                                dataset_rand_seed,
+                                data_rand_seed,
                                 training_method,
                                 active_train_mode,
                                 query_method,
@@ -430,18 +405,17 @@ def prepare_active_learning_dir(budget_list,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['dataset_dir'] = get_dataset_dir(active_save_path, data, makedir=makedir)
-    paths_dict['dataset_info_path'] = get_dataset_info_path(active_save_path,
+    paths_dict['data_save_path'] = get_dataset_info_path(active_save_path,
                                                             data,
                                                             data_config,
-                                                            dataset_rand_seed)
+                                                            data_rand_seed)
     paths_dict['trainset_info_path'] = get_trainset_info_path(active_save_path, data)
     
     # Where the training/testing results will be saved
     paths_dict['active_save_dir'] = get_active_save_dir(active_save_dir,
                                                         data,
                                                         data_config,
-                                                        dataset_rand_seed,
+                                                        data_rand_seed,
                                                         training_method,
                                                         active_train_mode,
                                                         active_query_scheme,
@@ -471,11 +445,11 @@ def prepare_active_learning_dir(budget_list,
 def prepare_open_set_learning_dir_from_config(config, makedir=True):
     open_set_methods = global_setting.OPEN_SET_METHOD_DICT[config.training_method]
     return prepare_open_set_learning_dir(config.open_set_save_path,
-                                         config.download_path,
+                                         config.data_download_path,
                                          config.open_set_save_dir,
                                          config.data,
                                          config.data_config,
-                                         config.dataset_rand_seed,
+                                         config.data_rand_seed,
                                          config.training_method,
                                          config.open_set_train_mode,
                                          open_set_methods,
@@ -486,7 +460,7 @@ def prepare_open_set_learning_dir(open_set_save_path,
                                   open_set_save_dir,
                                   data,
                                   data_config,
-                                  dataset_rand_seed,
+                                  data_rand_seed,
                                   training_method,
                                   open_set_train_mode,
                                   open_set_methods,
@@ -495,11 +469,10 @@ def prepare_open_set_learning_dir(open_set_save_path,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['dataset_dir'] = get_dataset_dir(open_set_save_path, data, makedir=makedir)
-    paths_dict['dataset_info_path'] = get_dataset_info_path(open_set_save_path,
+    paths_dict['data_save_path'] = get_dataset_info_path(open_set_save_path,
                                                             data,
                                                             data_config,
-                                                            dataset_rand_seed)
+                                                            data_rand_seed)
     paths_dict['trainset_info_path'] = get_trainset_info_path(open_set_save_path, data)
     
     
@@ -507,7 +480,7 @@ def prepare_open_set_learning_dir(open_set_save_path,
     paths_dict['open_set_save_dir'] = get_open_set_save_dir(open_set_save_dir,
                                                             data,
                                                             data_config,
-                                                            dataset_rand_seed,
+                                                            data_rand_seed,
                                                             training_method,
                                                             open_set_train_mode,
                                                             makedir=makedir)

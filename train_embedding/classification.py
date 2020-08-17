@@ -352,7 +352,7 @@ if __name__ == '__main__':
         description='Script to Training a Image Classification Model')
     parser.add_argument('--dir', type=str, default='.',
                         help='directory to save the checkpoints')
-    parser.add_argument('--download_path',
+    parser.add_argument('--data_download_path',
                         default="./data", metavar='PATH',
                         help='path to datasets location default :%(default)')
     parser.add_argument('--data',

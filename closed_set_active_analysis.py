@@ -13,7 +13,6 @@ import torch
 import random
 import utils
 from tabulate import tabulate
-from dataset_factory import DatasetFactory
 
 SMALL_SIZE = 8
 MEDIUM_SIZE = 15
@@ -86,7 +85,7 @@ class ActiveAnalysisMachine(object):
     def __init__(self,
                  active_analysis_save_dir,
                  budget_list,
-                 active_data_config,
+                 data_config,
                  download_path,
                  active_save_path,
                  active_save_dir,
@@ -106,7 +105,7 @@ class ActiveAnalysisMachine(object):
         self.active_save_path = active_save_path
         self.data_download_path = download_path
 
-        self.active_data_config = active_data_config
+        self.data_config = data_config
         self.budget_list = budget_list
 
         self.TRAINING_METHODS = TRAINING_METHODS
@@ -130,19 +129,19 @@ class ActiveAnalysisMachine(object):
                     for active_query_scheme in self.ACTIVE_QUERY_SCHEMES:
                         if not active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method]:
                             finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme] = {}
-                        for dataset_rand_seed in self.RANDOM_SEEDS:
-                            if not dataset_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme]:
-                                finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed] = {}
+                        for data_rand_seed in self.RANDOM_SEEDS:
+                            if not data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme]:
+                                finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed] = {}
                             # for active_val_mode in self.VAL_MODES:
-                            #     if not active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed]:
-                            #         finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode] = {}
+                            #     if not active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
+                            #         finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode] = {}
                             paths_dict = utils.prepare_active_learning_dir(self.budget_list,
                                                                             self.active_save_path,
                                                                             self.data_download_path,
                                                                             self.active_save_dir,
                                                                             self.data,
-                                                                            self.active_data_config,
-                                                                            dataset_rand_seed,
+                                                                            self.data_config,
+                                                                            data_rand_seed,
                                                                             training_method,
                                                                             active_train_mode,
                                                                             query_method,
@@ -154,10 +153,10 @@ class ActiveAnalysisMachine(object):
                                     test_result = torch.load(paths_dict['active_test_results'][b],
                                                             map_location=torch.device('cpu'))
                                     res = test_result['acc']
-                                    # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode]:
-                                    #     finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode][b] = res
-                                    if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed]:
-                                        finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][b] = res
+                                    # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode]:
+                                    #     finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b] = res
+                                    if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
+                                        finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b] = res
         return finished_exp_dict
     
     def gather_query_results(self):
@@ -168,27 +167,20 @@ class ActiveAnalysisMachine(object):
             for training_method in self.TRAINING_METHODS:
                 for query_method in self.QUERY_METHODS:
                     for active_query_scheme in self.ACTIVE_QUERY_SCHEMES:
-                        for dataset_rand_seed in self.RANDOM_SEEDS:
+                        for data_rand_seed in self.RANDOM_SEEDS:
                             paths_dict = utils.prepare_active_learning_dir(self.budget_list,
                                                                             self.active_save_path,
                                                                             self.data_download_path,
                                                                             self.active_save_dir,
                                                                             self.data,
-                                                                            self.active_data_config,
-                                                                            dataset_rand_seed,
+                                                                            self.data_config,
+                                                                            data_rand_seed,
                                                                             training_method,
                                                                             active_train_mode,
                                                                             query_method,
                                                                             active_query_scheme,
                                                                         #    active_val_mode,
                                                                             makedir=False)
-                            # dataset_factory = DatasetFactory(self.data,
-                            #                                  paths_dict['data_download_path'], # Where to download the images
-                            #                                  paths_dict['dataset_info_path'], # Where to save the dataset information
-                            #                                  self.active_data_config,
-                            #                                  dataset_rand_seed=None,
-                            #                                  use_val_set=False)
-                            # _, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
 
                             curr_discovered_samples = []
                             for b in self.budget_list:
@@ -210,7 +202,7 @@ class ActiveAnalysisMachine(object):
                                                                           training_method,
                                                                           "active_"+query_method,
                                                                           active_query_scheme,
-                                                                          f'seed_{dataset_rand_seed}',
+                                                                          f'seed_{data_rand_seed}',
                                                                           f'budget_{b}')
                                     if not os.path.exists(curr_query_result_path):
                                         os.makedirs(curr_query_result_path)
@@ -384,52 +376,52 @@ class ActiveAnalysisMachine(object):
             
             self.plot_dir = os.path.join(self.active_analysis_save_dir,self.data)
             
-            print_setup_dict = {"balanced" : {'dataset_rand_seed_list' : [None],
+            print_setup_dict = {"balanced" : {'data_rand_seed_list' : [None],
                                               'error_bar' : False,
                                               'plot_dir' : os.path.join(self.plot_dir, "balanced_init_set")},
-                                "randomized" : {'dataset_rand_seed_list' : [1, 10, 100, 1000, 2000],
+                                "randomized" : {'data_rand_seed_list' : [1, 10, 100, 1000, 2000],
                                                 'error_bar' : True,
                                                 'plot_dir' : os.path.join(self.plot_dir, "randomized_init_set")},
             }
             for setup in print_setup_dict:
                 self._plot_helper(finished_exp_dict, **print_setup_dict[setup])
     
-    def _plot_helper(self, finished_exp_dict, dataset_rand_seed_list=[], error_bar=False, plot_dir=None):
+    def _plot_helper(self, finished_exp_dict, data_rand_seed_list=[], error_bar=False, plot_dir=None):
         if not os.path.exists(plot_dir): os.makedirs(plot_dir)
         for active_train_mode in finished_exp_dict.keys():
             results = {}
             for training_method in finished_exp_dict[active_train_mode].keys():
                 for query_method in finished_exp_dict[active_train_mode][training_method].keys():
                     for active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method].keys():
-                        for dataset_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
-                            # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed].keys():
-                            if not dataset_rand_seed in dataset_rand_seed_list:
+                        for data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
+                            # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+                            if not data_rand_seed in data_rand_seed_list:
                                 continue
                             has_all_budget = True
                             
                             acc = []
                             for b in self.budget_list:
-                                # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and dataset_rand_seed == 1:
+                                # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and data_rand_seed == 1:
                                 #     import pdb; pdb.set_trace()
-                                # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode].keys():
-                                if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed].keys():
+                                # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode].keys():
+                                if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
                                     has_all_budget = False
                                     break
-                                # acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode][b]))
-                                acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][b]))
+                                # acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]))
+                                acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]))
 
                             if has_all_budget == True:
                                 # if not (training_method, query_method, active_query_scheme, active_val_mode) in results:
                                 #     results[(training_method, query_method, active_query_scheme, active_val_mode)] = {}
-                                # results[(training_method, query_method, active_query_scheme, active_val_mode)][dataset_rand_seed] = acc
+                                # results[(training_method, query_method, active_query_scheme, active_val_mode)][data_rand_seed] = acc
                                 if not (training_method, query_method, active_query_scheme) in results:
                                     results[(training_method, query_method, active_query_scheme)] = {}
-                                results[(training_method, query_method, active_query_scheme)][dataset_rand_seed] = acc
+                                results[(training_method, query_method, active_query_scheme)][data_rand_seed] = acc
         # Get init set size
         from utils import get_trainset_info_path
         trainset_info = torch.load(get_trainset_info_path(self.active_save_path, self.data))
         if self.data in ['CIFAR100', 'CIFAR10']:
-            init_size = DATASET_CONFIG_DICT[self.data][self.active_data_config]['num_init_classes'] * DATASET_CONFIG_DICT[self.data][self.active_data_config]['sample_per_class']
+            init_size = DATASET_CONFIG_DICT[self.data][self.data_config]['num_init_classes'] * DATASET_CONFIG_DICT[self.data][self.data_config]['sample_per_class']
 
         color_dict = {}
         color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue', 'skyblue', 'steelblue', 'olive', 'deeppink', 'crimson']
@@ -501,19 +493,19 @@ class ActiveAnalysisMachine(object):
                     for training_method in finished_exp_dict[active_train_mode].keys():
                         for query_method in finished_exp_dict[active_train_mode][training_method].keys():
                             for active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method].keys():
-                                for dataset_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
-                                    # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed].keys():
+                                for data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
+                                    # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
                                     single_list = [get_pretty_name(active_query_scheme),
                                                 #    get_valmode_str(active_val_mode),
-                                                    str(dataset_rand_seed),
+                                                    str(data_rand_seed),
                                                     get_pretty_name(training_method),
                                                     get_pretty_name(query_method)]
                                     for b in self.budget_list:
-                                        # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and dataset_rand_seed == 1:
+                                        # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and data_rand_seed == 1:
                                         #     import pdb; pdb.set_trace()
-                                        if b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed].keys():
-                                            # single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][active_val_mode][b]:.4f}"]
-                                            single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][dataset_rand_seed][b]:.4f}"]
+                                        if b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+                                            # single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]:.4f}"]
+                                            single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]:.4f}"]
                                         else:
                                             single_list += ["N/A"]
                                     result_lists.append(single_list)
@@ -546,8 +538,8 @@ if __name__ == "__main__":
     # QUERY_METHODS = ['uldr', 'coreset']
     analysis_machine = ActiveAnalysisMachine(config.active_analysis_save_dir,
                                              budget_list,
-                                             config.active_data_config,
-                                             config.download_path,
+                                             config.data_config,
+                                             config.data_download_path,
                                              config.active_save_path,
                                              config.active_save_dir,
                                              config.data,

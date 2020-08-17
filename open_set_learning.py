@@ -13,7 +13,6 @@ from trainer import OpenTrainer, TrainsetInfo
 from open_config import get_open_set_learning_config
 import utils
 from utils import makedirs
-import logging_helper
 import json
 import random
 
@@ -32,15 +31,16 @@ def main():
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
-    
+
     # It contains all directory/save_paths that will be used
     paths_dict = prepare_open_set_learning_dir_from_config(config)
     
+    dataset = get_dataset()
     dataset_factory = DatasetFactory(config.data,
                                      paths_dict['data_download_path'], # Where to download the images
-                                     paths_dict['dataset_info_path'], # Where to save the dataset information
-                                     config.open_set_data_config,
-                                     dataset_rand_seed=config.dataset_rand_seed)
+                                     paths_dict['data_save_path'], # Where to save the dataset information
+                                     config.data_config,
+                                     data_rand_seed=config.data_rand_seed)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
     classes, open_classes = dataset_factory.get_class_info() # Set of indices

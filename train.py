@@ -13,7 +13,6 @@ from trainer import Trainer, TrainsetInfo
 from trainer_config import get_trainer_config
 import utils
 from utils import makedirs
-import logging_helper
 import json
 import random
 
@@ -36,11 +35,12 @@ def main():
     # It contains all directory/save_paths that will be used
     paths_dict = prepare_save_dir_from_config(config)
     
+    dataset = prepare_dataset_from_config(config)
     dataset_factory = DatasetFactory(config.data,
                                      paths_dict['data_download_path'], # Where to download the images
-                                     paths_dict['dataset_info_path'], # Where to save the dataset information
+                                     paths_dict['data_save_path'], # Where to save the dataset information
                                      config.data_config,
-                                     dataset_rand_seed=config.dataset_rand_seed,
+                                     data_rand_seed=config.data_rand_seed,
                                      use_val_set=False)
     train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
     train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels

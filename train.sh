@@ -119,5 +119,5 @@ python train.py CUB200 --training_method softmax_network --init_mode regular --q
                 python train.py CIFAR100 --training_method cosine_network --init_mode fewer_sample --query_method random --budget 3000;
 
 # If download dataset in local folder
-# python train.py CIFAR100 --download_path ./data --budget 3000;
-# python train.py CIFAR100 --download_path ./data --dataset_rand_seed 1 --budget 3000;
+# python train.py CIFAR100 --data_download_path ./data --budget 3000;
+# python train.py CIFAR100 --data_download_path ./data --data_rand_seed 1 --budget 3000;
