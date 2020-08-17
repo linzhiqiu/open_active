@@ -7,7 +7,7 @@ import copy
 from tqdm import tqdm
 from config import get_config
 
-from dataset_factory import DatasetFactory
+from dataset_factory import prepare_dataset_from_config
 
 from trainer import Trainer, TrainsetInfo
 from trainer_config import get_trainer_config
@@ -21,10 +21,11 @@ import global_setting
 
 def main():
     config = get_config()
+
     if config.use_random_seed:
         print("Using random random seed")
     else:
-        print("PyTorch use random seed 1")
+        print("PyTorch will use random seed 1")
         torch.manual_seed(1)
         torch.cuda.manual_seed(1)
         np.random.seed(1)
@@ -32,41 +33,28 @@ def main():
         torch.backends.cudnn.benchmark = False
     
     
-    # It contains all directory/save_paths that will be used
+    # It contains all directory that will be used for saving datasets/checkpoints
     paths_dict = prepare_save_dir_from_config(config)
     
-    dataset = prepare_dataset_from_config(config)
-    dataset_factory = DatasetFactory(config.data,
-                                     paths_dict['data_download_path'], # Where to download the images
-                                     paths_dict['data_save_path'], # Where to save the dataset information
-                                     config.data_config,
-                                     data_rand_seed=config.data_rand_seed,
-                                     use_val_set=False)
-    train_dataset, test_dataset = dataset_factory.get_dataset() # The pytorch datasets
-    train_samples, train_labels = dataset_factory.get_train_set_info() # List of indices/labels
-    classes, open_classes = dataset_factory.get_class_info() # Set of indices
+    dataset_info = prepare_dataset_from_config(
+        config,
+        paths_dict['data_download_path'],
+        paths_dict['data_save_path']
+    )
     
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
-    # Begin from scratch
-    discovered_samples, discovered_classes = dataset_factory.get_init_train_set() # Get initial training set, discovered classes
-    val_samples = dataset_factory.get_val_samples() # Val samples is a subset of discovered_samples, and will be excluded in the network training.
-    open_samples = dataset_factory.get_open_samples_in_trainset() # Get open samples and classes in train set
-    
-    # The train set details
-    trainset_info = TrainsetInfo(train_dataset,
-                                 train_samples,
-                                 open_samples,
-                                 train_labels,
-                                 classes,
-                                 open_classes)
+    # Save the train set details for later analysis
     if not os.path.exists(paths_dict['trainset_info_path']):
-        torch.save(trainset_info, paths_dict['trainset_info_path'])
+        torch.save(dataset_info.trainset_info, paths_dict['trainset_info_path'])
 
     # The training details including arch, lr, batch size..
     trainer_config = get_trainer_config(config.data,
                                         config.training_method,
                                         config.train_mode)
+
+    discovered_samples = dataset_info.discovered_samples
+    discovered_classes = dataset_info.discovered_classes
 
     # Trainer is the main class for training and querying
     # It contains train() query() finetune() functions
@@ -74,19 +62,15 @@ def main():
         config.training_method,
         config.train_mode,
         trainer_config,
-        trainset_info,
+        dataset_info,
         config.query_method,
         config.budget,
         global_setting.OPEN_SET_METHOD_DICT[config.training_method],
         paths_dict,
-        test_dataset,
-        val_samples=val_samples
+        dataset_info.test_dataset,
+        val_samples=dataset_info.trainset_info.val_samples
     )
 
-    if config.training_method == 'deep_metric':
-        print("Skip softmax network train phase, directly go to deep metric learning for train phase")
-        pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.data_config+".pt")
-        trainer.trainer_machine.load_backbone(pretrained_softmax_path) 
     trainer.train(discovered_samples, discovered_classes, verbose=config.verbose)
 
     discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=config.verbose)

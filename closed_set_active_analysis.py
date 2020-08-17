@@ -243,8 +243,6 @@ class ActiveAnalysisMachine(object):
                                         plt.savefig(os.path.join(curr_query_result_path, pool_name+"_result.png"))
                                         plt.close('all')
 
-                                        # Now re-evaluate on test set to see per-sample accuracy
-                                        # self.eval_closed_set(test_result, trainset_info, dataset_factory)
                                     
                                     # Calculate the per-class accuracy (recall: pred as cars/all cars)
                                     gt = np.array(all_result['real_labels'])
@@ -309,67 +307,6 @@ class ActiveAnalysisMachine(object):
                                         file.write(tabulate(result_lists, headers=['Class Index', 'Per-Class Precision'], tablefmt='orgtbl'))
                                         
 
-    # def eval_closed_set(self, test_result, trainset_info, dataset_factory):
-    #     """Test the model/classifier and return the acc in ckpt_dict
-    #     """
-    #     backbone = 
-    #     backbone.eval()
-    #     classifier.eval()
-        
-    #     target_mapping_func = get_target_mapping_func_for_tensor(trainset_info.classes,
-    #                                               test_result['new_discovered_classes'],
-    #                                               trainset_info.open_classes,
-    #                                               device='cuda')
-    #     dataloader = get_loader(test_dataset,
-    #                             None,
-    #                             shuffle=False,
-    #                             batch_size=128,
-    #                             workers=4)
-        
-    #     pbar = tqdm(dataloader, ncols=80)
-
-    #     performance_dict = {'corrects' : 0., 'not_seen' : 0., 'count' : 0.} # Accuracy of all non-hold out open class examples. If some classes not seen yet, accuracy = 0
-                
-    #     with torch.no_grad():
-    #         for batch, data in enumerate(pbar):
-    #             inputs, real_labels = data
-
-    #             inputs = inputs.to(self.device)
-    #             labels = target_mapping_func(real_labels.to(self.device))
-
-    #             outputs = classifier(backbone(inputs))
-    #             _, preds = torch.max(outputs, 1)
-
-    #             undiscovered_open_indices = labels == UNDISCOVERED_CLASS_INDEX
-    #             discovered_closed_indices = labels >= 0
-    #             hold_out_open_indices = labels == OPEN_CLASS_INDEX
-    #             unlabeled_pool_class_indices = undiscovered_open_indices | discovered_closed_indices
-    #             assert torch.sum(undiscovered_open_indices & discovered_closed_indices & hold_out_open_indices) == 0
-
-    #             performance_dict['count'] += float(torch.sum(unlabeled_pool_class_indices))
-
-    #             performance_dict['not_seen'] += torch.sum(undiscovered_open_indices).float()
-    #             performance_dict['corrects'] += torch.sum(
-    #                                                             torch.masked_select(
-    #                                                                 (preds==labels.data),
-    #                                                                 discovered_closed_indices
-    #                                                             )
-    #                                                         ).float()
-    #     test_acc = performance_dict['corrects'] / performance_dict['count']
-    #     seen_rate = 1. - performance_dict['not_seen'] / performance_dict['count']
-        
-        
-    #     print(f"Test => "
-    #             f"Closed set test Acc {test_acc}, "
-    #             f"Discovered precentage {seen_rate}")
-
-    #     print(f"Test Accuracy {test_acc}.")
-    #     test_dict = {
-    #         'acc' : test_acc,
-    #         'seen' : seen_rate
-    #     }
-    #     return test_dict                                    
-    
     def plot_results(self, finished_exp_dict, plot_mode=None):
         if plot_mode == None:
             # Plot the balanced mode, and the random seed mode with error bars

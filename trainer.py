@@ -17,13 +17,13 @@ class TrainsetInfo(object):
 
 
 class Trainer(object):
-    def __init__(self, training_method, train_mode, trainer_config, trainset_info, query_method, budget, open_set_methods, paths_dict, test_dataset, val_samples=None):
+    def __init__(self, training_method, train_mode, trainer_config, dataset_info, query_method, budget, open_set_methods, paths_dict, test_dataset, val_samples=None):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
                 train_mode (str) : Specify the training details, such as lr, batchsize...
                 trainer_config (dict) : Dictionary that includes all training hyperparameters
-                trainset_info (TrainsetInfo) : The details about the training set
+                dataset_info (DatasetInfo) : The details about the dataset set
                 query_method (str) : The method for querying from the unlabeled pool
                 budget (int/float) : The querying budget
                 open_set_methods (list) : The list of methods for open_set recognition
@@ -32,7 +32,7 @@ class Trainer(object):
         super(Trainer, self).__init__()
         self.training_method = training_method
         self.train_mode = train_mode
-        self.trainset_info = trainset_info
+        self.dataset_info = dataset_info
         self.trainer_config = trainer_config
         self.query_method = query_method
         self.budget = budget
@@ -50,19 +50,19 @@ class Trainer(object):
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    train_mode,
-                                                                   trainset_info,
+                                                                   dataset_info,
                                                                    trainer_config,
                                                                    test_dataset,
                                                                    val_samples=self.val_samples)
         self.query_machine = query_machine.get_query_machine(query_method,
-                                                             trainset_info,
+                                                             dataset_info,
                                                              trainer_config)
         self.eval_machines = {}
         for open_set_method in open_set_methods:
             self.eval_machines[open_set_method] = eval_machine.get_eval_machine(
                                                       open_set_method,
                                                       self.trainer_machine,
-                                                      trainset_info,
+                                                      dataset_info,
                                                       trainer_config,
                                                       self.roc_result_paths[open_set_method],
                                                       self.goscr_result_paths[open_set_method]
@@ -108,14 +108,14 @@ class Trainer(object):
         
 
 class ActiveTrainer(object):
-    # def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, active_val_mode):
-    def __init__(self, training_method, active_train_mode, active_config, trainset_info, query_method, test_dataset, val_samples=None, active_test_val_diff=False):
+    # def __init__(self, training_method, active_train_mode, active_config, dataset_info, query_method, active_val_mode):
+    def __init__(self, training_method, active_train_mode, active_config, dataset_info, query_method, test_dataset, val_samples=None, active_test_val_diff=False):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
                 active_train_mode (str) : Specify the training details, such as lr, batchsize...
                 active_config (dict) : Dictionary that includes all training hyperparameters
-                trainset_info (TrainsetInfo) : The details about the training set
+                dataset_info (DatasetInfo) : The details about the dataset set
                 query_method (str) : The method for querying from the unlabeled pool
                 # active_val_mode (str or None) : How to select the validation set
                 test_dataset (torch.nn.Dataset) : The test dataset
@@ -123,7 +123,7 @@ class ActiveTrainer(object):
         super(ActiveTrainer, self).__init__()
         self.training_method = training_method
         self.active_train_mode = active_train_mode
-        self.trainset_info = trainset_info
+        self.dataset_info = dataset_info
         self.active_config = active_config
         self.query_method = query_method
         # self.active_val_mode = active_val_mode
@@ -131,13 +131,13 @@ class ActiveTrainer(object):
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    active_train_mode,
-                                                                   trainset_info,
+                                                                   dataset_info,
                                                                    active_config,
                                                                    test_dataset,
                                                                    val_samples=self.val_samples,
                                                                    active_test_val_diff=active_test_val_diff)
         self.query_machine = query_machine.get_query_machine(query_method,
-                                                             trainset_info,
+                                                             dataset_info,
                                                              active_config)
 
     def train(self, discovered_samples, discovered_classes, trained_ckpt_path, verbose=False):
@@ -185,7 +185,7 @@ class OpenTrainer(object):
                  training_method,
                  open_set_train_mode,
                  open_set_config,
-                 trainset_info,
+                 dataset_info,
                  open_set_methods,
                  test_dataset,
                  val_samples,
@@ -195,7 +195,7 @@ class OpenTrainer(object):
                 training_method (str) : The method for training the network
                 open_set_train_mode (str) : Specify the training details, such as lr, batchsize...
                 open_set_config (dict) : Dictionary that includes all training hyperparameters
-                trainset_info (TrainsetInfo) : The details about the training set
+                dataset_info (DatasetInfo) : The details about the dataset set
                 open_set_methods (list) : The list of methods for open_set recognition
                 test_dataset (torch.nn.Dataset) : The test dataset
                 val_samples (list) : List of validation set samples
@@ -206,7 +206,7 @@ class OpenTrainer(object):
         self.open_set_train_mode = open_set_train_mode
         self.open_set_config = open_set_config
         self.open_set_methods = open_set_methods
-        self.trainset_info = trainset_info
+        self.dataset_info = dataset_info
         self.val_samples = val_samples
         self.test_dataset = test_dataset
         self.paths_dict = paths_dict
@@ -219,7 +219,7 @@ class OpenTrainer(object):
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
                                                                    open_set_train_mode,
-                                                                   trainset_info,
+                                                                   dataset_info,
                                                                    open_set_config,
                                                                    test_dataset,
                                                                    val_samples=self.val_samples)
@@ -230,7 +230,7 @@ class OpenTrainer(object):
             self.eval_machines[open_set_method] = eval_machine.get_eval_machine(
                                                       open_set_method,
                                                       self.trainer_machine,
-                                                      trainset_info,
+                                                      dataset_info,
                                                       open_set_config,
                                                       self.roc_result_paths[open_set_method],
                                                       self.goscr_result_paths[open_set_method]

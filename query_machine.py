@@ -6,11 +6,11 @@ import sys, random, os
 import trainer_machine
 from utils import get_subset_loader, get_target_unmapping_dict, SetPrintMode
 
-def get_query_machine(query_method, trainset_info, trainer_config):
+def get_query_machine(query_method, dataset_info, trainer_config):
     """Return a QueryMachine object
         Args:
             query_method (str) : The querying method
-            trainset_info (TrainsetInfo) : The details of the train set
+            dataset_info (DatasetInfo) : The details of the dataset
     """
     if query_method == 'random':
         query_machine_class = RandomQuery
@@ -30,18 +30,19 @@ def get_query_machine(query_method, trainset_info, trainer_config):
         query_machine_class = CoresetNormCosQuery
     else:
         raise NotImplementedError()
-    return query_machine_class(trainset_info, trainer_config)
+    return query_machine_class(dataset_info, trainer_config)
 
 class QueryMachine(object):
     """Abstract class for query algorithms"""
-    def __init__(self, trainset_info, trainer_config):
+
+    def __init__(self, dataset_info, trainer_config):
         """Base class for active querying
             Args:
                 query_method (str) : Specify the active learning method
-                trainset_info (TrainsetInfo) : 
+                dataset_info (DatasetInfo): Dataset Information
         """
         super(QueryMachine, self).__init__()
-        self.trainset_info = trainset_info
+        self.dataset_info = dataset_info
         self.batch = trainer_config['batch']
         self.workers = trainer_config['workers']
         self.device = trainer_config['device']
@@ -88,7 +89,7 @@ class QueryMachine(object):
         raise NotImplementedError()
     
     def _get_loader(self, samples, use_tqdm=True):
-        dataloader = get_subset_loader(self.trainset_info.train_dataset,
+        dataloader = get_subset_loader(self.dataset_info.train_dataset,
                                         samples,
                                         None, # target transform is None,
                                         batch_size=self.batch,
@@ -124,15 +125,16 @@ class QueryMachine(object):
                 discovered_classes (set)
                 verbose (bool)
         """
-        unlabeled_pool = self.trainset_info.query_samples.difference(discovered_samples)
+        unlabeled_pool = self.dataset_info.trainset_info.query_samples.difference(discovered_samples)
         unlabeled_pool = list(unlabeled_pool)
-        unmapping = get_target_unmapping_dict(self.trainset_info.classes, discovered_classes)
+        unmapping = get_target_unmapping_dict(
+            self.dataset_info.class_info.classes, discovered_classes)
         if budget == 0:
             print("Budget is 0. No querying.")
             return discovered_samples, discovered_classes
         if len(unlabeled_pool) <= budget:
             print("Remaining data is fewer/ equal than the budget constraint. Label all.")
-            return list(self.trainset_info.query_samples), self.trainset_info.query_classes
+            return list(self.dataset_info.trainset_info.query_samples), self.dataset_info.class_info.query_classes
 
         # Keep a rank for each sample. Higher ranks means more preferable to label.
         rankings = self._get_favorable_rankings(unlabeled_pool,
@@ -148,7 +150,7 @@ class QueryMachine(object):
         for idx in rankings:
             new_sample = unlabeled_pool[int(idx)]
             new_discovered_samples.add(new_sample)
-            new_discovered_classes.add(self.trainset_info.train_labels[new_sample])
+            new_discovered_classes.add(self.dataset_info.trainset_info.train_labels[new_sample])
         return list(new_discovered_samples), new_discovered_classes
             
 

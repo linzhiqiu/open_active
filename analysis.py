@@ -1,7 +1,9 @@
-import json, argparse, os
-import numpy as np
+import json
+import argparse
+import os
 from glob import glob
-from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
+
+import numpy as np
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib
 matplotlib.use('Agg')
@@ -11,9 +13,14 @@ import tqdm
 import pickle
 import torch
 import random
-import utils
-import global_setting
 from tabulate import tabulate
+
+import global_setting
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
+from config import get_config
+from dataset_factory import DATASET_CONFIG_DICT
+import utils
+from utils import prepare_save_dir
 
 SMALL_SIZE = 8
 MEDIUM_SIZE = 15
@@ -92,7 +99,7 @@ def get_result_str(key, init_size, budget_dict):
 class AnalysisMachine(object):
     """Store all the configs we want to compare
     """
-    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, dataset_save_path, trainer_save_dir, data, data_rand_seed_list, training_method_list, train_mode, query_method_list):
+    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, data_save_path, trainer_save_dir, data, data_rand_seed_list, training_method_list, train_mode, query_method_list):
         super().__init__()
         self.silent_mode = False
         self.analysis_save_dir = analysis_save_dir
@@ -102,7 +109,7 @@ class AnalysisMachine(object):
         self.data = data
         self.save_dir = self.get_save_dir()
         if not os.path.exists(self.save_dir):
-            utils.makedirs(self.save_dir)
+            os.makedirs(self.save_dir)
         else:
             print(f"Already exists: {self.save_dir} . Overwriting")
 
@@ -121,7 +128,7 @@ class AnalysisMachine(object):
 
         self.PLOT_MODE = ['compare_active', 'compare_train', 'compare_setting']
         self.trainer_save_dir = trainer_save_dir
-        self.dataset_save_path = dataset_save_path
+        self.data_save_path = data_save_path
         self.data_download_path = data_download_path
         
         self.training_method_list = training_method_list
@@ -172,11 +179,11 @@ class AnalysisMachine(object):
                 for b in b_list:
                     undone_exp_b = []
                     b_dir = os.path.join(self.script_dir, data_config, f"budget_{b}")
-                    if not os.path.exists(b_dir): utils.makedirs(b_dir)
+                    if not os.path.exists(b_dir): os.makedirs(b_dir)
                     for training_method in self.training_method_list:
                         for query_method in self.query_method_list:
                             for data_rand_seed in self.ALL_DATASET_RAND_SEED:
-                                paths_dict = prepare_save_dir(self.dataset_save_path,
+                                paths_dict = prepare_save_dir(self.data_save_path,
                                                             self.data_download_path,
                                                             self.trainer_save_dir,
                                                             self.data,
@@ -225,10 +232,8 @@ class AnalysisMachine(object):
                     print(f"Mode {data_config}: {len(undone_exp_mode)} to run.")
                     undone_exp = undone_exp + undone_exp_mode
             if undone_exp.__len__() > 0:
-                # if os.path.exists(script_file):
-                #     input(f"{script_file} already exists. Overwrite >> ")
                 if not os.path.exists(b_dir):
-                    utils.makedirs(b_dir)
+                    os.makedirs(b_dir)
                     print(f"Details will be saved at {script_dir}")
                 with open(script_file, "w+") as file:
                     for i, line in enumerate(undone_exp):
@@ -264,7 +269,7 @@ class AnalysisMachine(object):
                         if not query_method in finished_exp[data_config][b][training_method]:
                             finished_exp[data_config][b][training_method][query_method] = {}
                         for data_rand_seed in self.ALL_DATASET_RAND_SEED:
-                            paths_dict = prepare_save_dir(self.dataset_save_path,
+                            paths_dict = prepare_save_dir(self.data_save_path,
                                                           self.data_download_path,
                                                           self.trainer_save_dir,
                                                           self.data,
@@ -276,7 +281,7 @@ class AnalysisMachine(object):
                                                           b,
                                                           global_setting.OPEN_SET_METHOD_DICT[training_method],
                                                           makedir=False)
-                            print(str(b) + " " + training_method + " " + query_method)
+                            # print(str(b) + " " + training_method + " " + query_method)
                             if os.path.exists(paths_dict['test_result_path']):
                                 test_result = torch.load(paths_dict['test_result_path'], map_location=torch.device('cpu'))
                                 finished_exp[data_config][b][training_method][query_method][data_rand_seed] = test_result
@@ -321,7 +326,7 @@ class AnalysisMachine(object):
             #               'fewer_b_list': budget_list_fewer,
             #               'regular_b_list': budget_list_regular},
         }
-        if not os.path.exists(self.plot_dir): utils.makedirs(self.plot_dir)
+        if not os.path.exists(self.plot_dir): os.makedirs(self.plot_dir)
         print("All plots are saved at " + self.plot_dir)
         total_pool_size, regular_init_size, fewer_init_size, budget_ratio = self._get_dataset_info()
         
@@ -335,7 +340,7 @@ class AnalysisMachine(object):
     def _draw_closed_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, draw_acc_lowest=True, draw_acc_highest=True, error_bar=False):
         assert key in comparsion_dict
         path = os.path.join(comparsion_dict[key]['path'], plot_mode)
-        if not os.path.exists(path): utils.makedirs(path)
+        if not os.path.exists(path): os.makedirs(path)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
@@ -502,7 +507,7 @@ class AnalysisMachine(object):
         for item in ['auroc', 'augoscr']:
             for o_method in ALL_OPEN_METHODS:
                 open_path = os.path.join(path, o_method)
-                if not os.path.exists(open_path): utils.makedirs(open_path)
+                if not os.path.exists(open_path): os.makedirs(open_path)
                 if plot_mode == 'compare_active':
                     COMPARARISON = self.ALL_QUERY_METHODS
                 elif plot_mode == 'compare_train':
@@ -659,7 +664,7 @@ class AnalysisMachine(object):
     def _draw_open_set_plot(self, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
         assert key in comparsion_dict
         path = os.path.join(comparsion_dict[key]['path'], "compare_open")
-        if not os.path.exists(path): utils.makedirs(path)
+        if not os.path.exists(path): os.makedirs(path)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
@@ -772,7 +777,7 @@ class AnalysisMachine(object):
 
                         plt.tight_layout()
                         save_dir = os.path.join(path, data_config, training_method, query_method)
-                        utils.makedirs(save_dir)
+                        os.makedirs(save_dir)
                         save_path = os.path.join(save_dir, item+".png")
                         save_path_txt = os.path.join(save_dir, item+".txt")
                         plt.savefig(save_path)
@@ -860,7 +865,7 @@ class AnalysisMachine(object):
 
                                 plt.tight_layout()
                                 save_dir = os.path.join(path, data_config, training_method, query_method, f"budget_{b}", f"seed_{seed}")
-                                utils.makedirs(save_dir)
+                                os.makedirs(save_dir)
                                 save_path = os.path.join(save_dir, item+".png")
                                 plt.savefig(save_path)
                                 plt.close('all')
@@ -868,7 +873,7 @@ class AnalysisMachine(object):
     def _draw_perclass_plot(self, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
         assert key in comparsion_dict
         path = os.path.join(comparsion_dict[key]['path'], "compare_perclass")
-        if not os.path.exists(path): utils.makedirs(path)
+        if not os.path.exists(path): os.makedirs(path)
         fewer_b_list = comparsion_dict[key]['fewer_b_list']
         regular_b_list = comparsion_dict[key]['regular_b_list']
         
@@ -955,7 +960,6 @@ class AnalysisMachine(object):
                                 plt.close('all')
                                 print(os.path.join(curr_query_result_path, pool_name+"_result.png"))
                                 # Now re-evaluate on test set to see per-sample accuracy
-                                # self.eval_closed_set(test_result, trainset_info, dataset_factory)
                                     
                                 # Calculate the per-class accuracy (recall: pred as cars/all cars)
                                 gt = np.array(all_result['real_labels'])
@@ -1048,13 +1052,13 @@ class AnalysisMachine(object):
 
     def _get_dataset_info(self):
         from utils import get_trainset_info_path
-        trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
+        trainset_info = torch.load(get_trainset_info_path(self.data_save_path, self.data))
         total_query_sample_size = len(trainset_info.query_samples)
         
         if self.data in ['CIFAR100', 'CUB200', 'Cars', 'CIFAR10']:
-            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['regular']['sample_per_class']
-            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_class']['sample_per_class']
-            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_sample']['sample_per_class']
+            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular'].num_init_classes * DATASET_CONFIG_DICT[self.data]['regular'].sample_per_class
+            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_class'].sample_per_class
+            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_sample'].sample_per_class
         return total_query_sample_size, regular_init_sample_size, fewer_init_sample_size, list(map(float, self.budget_mode.split("_")))
  
 
@@ -1066,13 +1070,13 @@ class AnalysisMachine(object):
         """
         assert analysis_mode in ['same_sample', 'same_budget']
         from utils import get_trainset_info_path
-        trainset_info = torch.load(get_trainset_info_path(self.dataset_save_path, self.data))
+        trainset_info = torch.load(get_trainset_info_path(self.data_save_path, self.data))
         total_query_sample_size = len(trainset_info.query_samples)
         
         if self.data in ['CIFAR100', 'CUB200', 'Cars', 'CIFAR10']:
-            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['regular']['sample_per_class']
-            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_class']['sample_per_class']
-            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample']['num_init_classes'] * DATASET_CONFIG_DICT[self.data]['fewer_sample']['sample_per_class']
+            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular'].num_init_classes * DATASET_CONFIG_DICT[self.data]['regular'].sample_per_class
+            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_class'].sample_per_class
+            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_sample'].sample_per_class
             
             regular_unlabeled_pool_size = total_query_sample_size - regular_init_sample_size
             fewer_unlabeled_pool_size = total_query_sample_size - fewer_init_sample_size
@@ -1098,9 +1102,6 @@ class AnalysisMachine(object):
 
 
 if __name__ == "__main__":
-    from config import get_config
-    from global_setting import DATASET_CONFIG_DICT
-    from utils import prepare_save_dir
     config = get_config()
 
     # Below are the settings to want to compare

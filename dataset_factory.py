@@ -178,10 +178,10 @@ class DatasetInfo():
     discovered_classes: set
 
 
-def _get_dataset_from_params(dataset_params: DatasetParams) -> Dataset:
+def _get_dataset_from_params(dataset_params: DatasetParams) -> DatasetInfo:
     train_dataset, test_dataset = _generate_dataset(
         dataset_params.data,
-        dataset_params.dataset_paths.data_download_path
+        dataset_params.dataset_paths.download_path
     )
     train_samples, train_labels, classes = _generate_dataset_info(
         dataset_params.data,
@@ -197,7 +197,7 @@ def _get_dataset_from_params(dataset_params: DatasetParams) -> Dataset:
             f"Dataset file does not exist. Will be created at {dataset_params.dataset_paths.save_path}")
         # Split the training set using the config
         dataset_save_dict = _split_train_set(dataset_params.data,
-                                             dataset_params.data_config,
+                                             dataset_params.dataset_config,
                                              classes,
                                              train_labels,
                                              dataset_params.data_rand_seed,
@@ -243,7 +243,7 @@ def prepare_dataset_from_config(config, data_download_path, data_save_path):
         config (ArgParse object): The argparse arguments
 
     Returns:
-        Dataset
+        DatasetInfo: All dataset information
     """
     dataset_paths = DatasetPaths(download_path=data_download_path,
                                  save_path=data_save_path)
@@ -251,12 +251,12 @@ def prepare_dataset_from_config(config, data_download_path, data_save_path):
     return _get_dataset_from_params(dataset_params)
 
 
-def _split_train_set(data, data_config, classes, labels, data_rand_seed, use_val_set=False):
+def _split_train_set(data, dataset_config, classes, labels, data_rand_seed, use_val_set=False):
     """Split the training set, and prepare the following class variables
 
     Args:
         data (str) : Name of dataset
-        data_config (str) : How to split the dataset. Same as the arg passed into constructor
+        dataset_config (DatasetConfig) : How to split the dataset. Same as the arg passed into constructor
         classes (lst of int) : The list of indices for all classes in dataset
         labels (lst of int) : The label of all samples in train set
         data_rand_seed (int or None) : The random seed. None if not randomized.
@@ -271,9 +271,8 @@ def _split_train_set(data, data_config, classes, labels, data_rand_seed, use_val
     if data_rand_seed:
         random.seed(data_rand_seed)
 
-    init_conf = DATASET_CONFIG_DICT[data][data_config]
     # Assert: num of class - num of open class - num of initial discovered classes >= 0
-    assert len(classes) - init_conf.num_open_classes - init_conf.num_init_classes >= 0
+    assert len(classes) - dataset_config.num_open_classes - dataset_config.num_init_classes >= 0
     # class_to_sample_indices[class_index] = list of sample indices (list of int)
     class_to_sample_indices = {}
     for class_i in classes:
@@ -283,13 +282,13 @@ def _split_train_set(data, data_config, classes, labels, data_rand_seed, use_val
 
     if data_rand_seed:
         discovered_classes = set(random.sample(
-            classes, init_conf.num_init_classes))
+            classes, dataset_config.num_init_classes))
         remaining_classes = set(classes).difference(discovered_classes)
-        open_classes = set(random.sample(remaining_classes, init_conf.num_open_classes))
+        open_classes = set(random.sample(remaining_classes, dataset_config.num_open_classes))
     else:
-        discovered_classes = set(range(init_conf.num_init_classes))
-        if init_conf.num_open_classes > 0:
-            open_classes = set(range(len(classes))[-init_conf.num_open_classes:])
+        discovered_classes = set(range(dataset_config.num_init_classes))
+        if dataset_config.num_open_classes > 0:
+            open_classes = set(range(len(classes))[-dataset_config.num_open_classes:])
         else:
             open_classes = set()
 
@@ -299,11 +298,11 @@ def _split_train_set(data, data_config, classes, labels, data_rand_seed, use_val
         for class_i in discovered_classes:
             all_samples += class_to_sample_indices[class_i]
 
-        total_sample_size = init_conf.sample_per_class * len(discovered_classes)
+        total_sample_size = dataset_config.sample_per_class * len(discovered_classes)
         discovered_samples = list(random.sample(all_samples, total_sample_size))
     else:
         for class_i in discovered_classes:
-            discovered_samples += class_to_sample_indices[class_i][:init_conf.sample_per_class]
+            discovered_samples += class_to_sample_indices[class_i][:dataset_config.sample_per_class]
 
     open_samples = []
     for open_class_i in open_classes:

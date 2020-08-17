@@ -39,8 +39,6 @@ def makedirs(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, mode=0o777)
         os.chmod(dir_name, 0o0777)
-    else:
-        print(f"{dir_name} already exists.")
 
 def get_loader(dataset, target_transform, batch_size=1, shuffle=False, workers=0):
     """Returns a PyTorch Dataloader

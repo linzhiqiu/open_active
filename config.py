@@ -54,11 +54,6 @@ dataset_args.add_argument('--use_val_set',
 
 
 setting_arg = add_argument_group('Setting Param.')
-setting_arg.add_argument('--data_config',
-                         default='regular',
-                         choices=['regular', 'fewer_class', 'fewer_sample',
-                                  ],
-                         help="How to select the initial training/hold-out open set")
 setting_arg.add_argument('--val_mode',
                          default=None,
                          choices=['randomized', 'balanced',
