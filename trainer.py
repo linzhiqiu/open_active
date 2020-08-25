@@ -1,141 +1,149 @@
 import trainer_machine, query_machine, eval_machine
 import os
 
-class TrainsetInfo(object):
-    """ A data class holding all resources for training
-    """
-    def __init__(self, train_dataset, train_samples, open_samples, train_labels, classes, open_classes):
-        super(TrainsetInfo, self).__init__()
-        self.train_dataset = train_dataset # PyTorch train dataset
-        self.train_samples = train_samples # List of indices in train set
-        self.open_samples = open_samples # List of indices representing training samples belonging to open class
-        self.query_samples = train_samples.difference(open_samples) # List of indices representing the unlabeled pool
-        self.train_labels = train_labels # List of labels of all train samples
-        self.classes = classes # Set of all classes
-        self.open_classes = open_classes # Set of all hold out open classes
-        self.query_classes = classes.difference(open_classes) # Set of all classes in unlabeled pool
-
 
 class Trainer(object):
-    def __init__(self, training_method, train_mode, trainer_config, dataset_info, query_method, budget, open_set_methods, paths_dict, test_dataset, val_samples=None):
-        """The main class for training/querying/finetuning
-            Args:
-                training_method (str) : The method for training the network
-                train_mode (str) : Specify the training details, such as lr, batchsize...
-                trainer_config (dict) : Dictionary that includes all training hyperparameters
-                dataset_info (DatasetInfo) : The details about the dataset set
-                query_method (str) : The method for querying from the unlabeled pool
-                budget (int/float) : The querying budget
-                open_set_methods (list) : The list of methods for open_set recognition
-                paths_dict (dict) : The directionary that has directory to save/load the checkpoints.
+    def __init__(self, training_method, trainer_config, dataset_info, query_method):
+        """The highest-level class performing training/querying/finetuning
+        It will instantitate TrainerMachine/QueryMachine/EvalMachine objects based on the arguments,
+        and use them for training/querying/testing.
+
+        Args:
+            training_method (str) : The network training method
+            trainer_config (train_config.TrainerConfig) : Including all training hyperparameters
+            dataset_info (dataset_factory.DatasetInfo) : The details about the dataset set
+            query_method (str) : The method for querying from the unlabeled pool
         """
         super(Trainer, self).__init__()
         self.training_method = training_method
-        self.train_mode = train_mode
         self.dataset_info = dataset_info
         self.trainer_config = trainer_config
         self.query_method = query_method
-        self.budget = budget
-        self.open_set_methods = open_set_methods
-        self.test_dataset = test_dataset
-        self.val_samples = val_samples
-       
-        self.trained_ckpt_path   = paths_dict['trained_ckpt_path']
-        self.query_result_path   = paths_dict['query_result_path']
-        self.finetuned_ckpt_path = paths_dict['finetuned_ckpt_path']
-        self.test_result_path    = paths_dict['test_result_path']
-        self.open_result_paths    = paths_dict['open_result_paths']
-        self.roc_result_paths     = paths_dict['open_result_roc_paths']
-        self.goscr_result_paths   = paths_dict['open_result_goscr_paths']
 
-        self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
-                                                                   train_mode,
-                                                                   dataset_info,
-                                                                   trainer_config,
-                                                                   test_dataset,
-                                                                   val_samples=self.val_samples)
-        self.query_machine = query_machine.get_query_machine(query_method,
-                                                             dataset_info,
-                                                             trainer_config)
-        self.eval_machines = {}
+        self.trainer_machine = trainer_machine.get_trainer_machine(
+                                   training_method,
+                                   dataset_info,
+                                   trainer_config
+                               )
+        self.query_machine = query_machine.get_query_machine(
+                                 query_method,
+                                 dataset_info,
+                                 trainer_config
+                             )
+        
+    def train(self, discovered_samples, discovered_classes, ckpt_path, verbose=False):
+        """Performs training using [discovered_samples] and saved the results to [ckpt_path]
+
+        Args:
+            discovered_samples (list[int]): All discovered (labeled) training samples
+            discovered_classes (list[int]): All classes with discovered samples
+            ckpt_path ([type]): Where the training results will be saved
+            verbose (bool, optional): Whether to print more information. Defaults to False
+        """        
+        self.trainer_machine.train(
+            discovered_samples,
+            discovered_classes,
+            ckpt_path=ckpt_path,
+            verbose=verbose
+        )
+    
+    def query(self, discovered_samples, discovered_classes, budget, query_result_path, verbose=False):
+        """Performs querying from unlabeled pool.
+
+        Args:
+            discovered_samples (list[int]): All discovered (labeled) training samples
+            discovered_classes (list[int]): All classes with discovered samples
+            budget (int): Number of new samples to label
+            query_result_path (str): Where the result will be saved
+            verbose (bool, optional): Whether to print more information. Defaults to False
+
+        Returns:
+            list[int]: Discovered (labeled) training samples after querying
+            list[int]: Classes with discovered samples after querying
+        """        
+        return self.query_machine.query(
+            self.trainer_machine,
+            budget,
+            discovered_samples,
+            discovered_classes,
+            query_result_path=query_result_path,
+            verbose=verbose
+        )
+    
+    def eval_closed_set(self, discovered_classes, result_path, verbose=False):
+        """Evaluating on test set (assuming all classes are discovered, so no open set method is used).
+        For test samples not in discovered classes, their accuracy is zero.
+
+        Args:
+            discovered_classes (list[int]): All classes with discovered samples
+            result_path ([type]): Where the result will be saved
+            verbose (bool, optional): Whether to print more information. Defaults to False
+
+        Returns:
+            float: Test Accuracy on all test samples. For samples not in discovered set of classes,
+                   they are always marked as incorrect prediction.
+        """        
+        return self.trainer_machine.eval_closed_set(
+            discovered_classes,
+            result_path=result_path,
+            verbose=verbose
+        )
+
+    def eval_open_set(self,
+                      discovered_samples,
+                      discovered_classes,
+                      open_set_methods,
+                      result_paths,
+                      roc_paths,
+                      goscr_paths,
+                      verbose=False):
+        """Evaluating on test set using all open set set methods in 'open_set_methods'(list).
+
+        Args:
+            discovered_samples (list[int]): All discovered (labeled) training samples
+            discovered_classes (list[int]): All classes with discovered samples
+            open_set_methods (list[str]): All open set methods to evaluate
+            result_paths (list[str]): Where the evaluation result will be saved
+            roc_paths (list[str]): Where the ROC result will be saved
+            goscr_paths (list[str]): Where the GOSCR result will be saved
+            verbose (bool, optional): Whether to print more information. Defaults to False
+        """        
         for open_set_method in open_set_methods:
-            self.eval_machines[open_set_method] = eval_machine.get_eval_machine(
-                                                      open_set_method,
-                                                      self.trainer_machine,
-                                                      dataset_info,
-                                                      trainer_config,
-                                                      self.roc_result_paths[open_set_method],
-                                                      self.goscr_result_paths[open_set_method]
-                                                  )
-
-    def train(self, discovered_samples, discovered_classes, verbose=False):
-        """Performs training using discovered_samples
-        """
-        self.trainer_machine.train(discovered_samples,
-                                   discovered_classes,
-                                   ckpt_path=self.trained_ckpt_path,
-                                   verbose=verbose)
-    
-    def query(self, discovered_samples, discovered_classes, verbose=False):
-        """Performs querying from unlabeled pool. discovered_samples is the already labaled samples
-        """
-        return self.query_machine.query(self.trainer_machine,
-                                        self.budget,
-                                        discovered_samples,
-                                        discovered_classes,
-                                        query_result_path=self.query_result_path,
-                                        verbose=verbose)
-    
-    def finetune(self, discovered_samples, discovered_classes, verbose=False):
-        self.trainer_machine.finetune(discovered_samples,
-                                      discovered_classes,
-                                      ckpt_path=self.finetuned_ckpt_path,
-                                      verbose=verbose)
-
-    def eval_closed_set(self, discovered_classes, verbose=False):
-        return self.trainer_machine.eval_closed_set(discovered_classes,
-                                                    result_path=self.test_result_path,
-                                                    verbose=verbose)
-
-    def eval_open_set(self, discovered_samples, discovered_classes, verbose=False):
-        for open_set_method in self.open_result_paths:
-            eval_machine = self.eval_machines[open_set_method]
-            eval_machine.eval_open_set(discovered_samples,
-                                       discovered_classes,
-                                       self.test_dataset,
-                                       result_path=self.open_result_paths[open_set_method],
-                                       verbose=verbose)
+            eval_machine_instance = eval_machine.get_eval_machine(
+                open_set_method,
+                self.trainer_machine,
+                self.dataset_info,
+                self.trainer_config,
+            )
+            eval_machine_instance.eval_open_set(
+                discovered_samples,
+                discovered_classes,
+                result_path=result_paths[open_set_method],
+                roc_path=roc_paths[open_set_method],
+                goscr_path=goscr_paths[open_set_method],
+                verbose=verbose
+            )
         
 
 class ActiveTrainer(object):
-    # def __init__(self, training_method, active_train_mode, active_config, dataset_info, query_method, active_val_mode):
-    def __init__(self, training_method, active_train_mode, active_config, dataset_info, query_method, test_dataset, val_samples=None, active_test_val_diff=False):
+    def __init__(self, training_method, active_config, dataset_info, query_method, test_dataset, val_samples=None):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
-                active_train_mode (str) : Specify the training details, such as lr, batchsize...
                 active_config (dict) : Dictionary that includes all training hyperparameters
                 dataset_info (DatasetInfo) : The details about the dataset set
                 query_method (str) : The method for querying from the unlabeled pool
-                # active_val_mode (str or None) : How to select the validation set
                 test_dataset (torch.nn.Dataset) : The test dataset
         """
         super(ActiveTrainer, self).__init__()
         self.training_method = training_method
-        self.active_train_mode = active_train_mode
         self.dataset_info = dataset_info
         self.active_config = active_config
         self.query_method = query_method
-        # self.active_val_mode = active_val_mode
-        self.val_samples = val_samples
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
-                                                                   active_train_mode,
                                                                    dataset_info,
-                                                                   active_config,
-                                                                   test_dataset,
-                                                                   val_samples=self.val_samples,
-                                                                   active_test_val_diff=active_test_val_diff)
+                                                                   active_config)
         self.query_machine = query_machine.get_query_machine(query_method,
                                                              dataset_info,
                                                              active_config)
@@ -183,7 +191,6 @@ class ActiveTrainer(object):
 class OpenTrainer(object):
     def __init__(self,
                  training_method,
-                 open_set_train_mode,
                  open_set_config,
                  dataset_info,
                  open_set_methods,
@@ -193,22 +200,16 @@ class OpenTrainer(object):
         """The main class for training/querying/finetuning
             Args:
                 training_method (str) : The method for training the network
-                open_set_train_mode (str) : Specify the training details, such as lr, batchsize...
                 open_set_config (dict) : Dictionary that includes all training hyperparameters
                 dataset_info (DatasetInfo) : The details about the dataset set
                 open_set_methods (list) : The list of methods for open_set recognition
-                test_dataset (torch.nn.Dataset) : The test dataset
-                val_samples (list) : List of validation set samples
                 paths_dict (dict) : Dictionary of output paths
         """
         super(OpenTrainer, self).__init__()
         self.training_method = training_method
-        self.open_set_train_mode = open_set_train_mode
         self.open_set_config = open_set_config
         self.open_set_methods = open_set_methods
         self.dataset_info = dataset_info
-        self.val_samples = val_samples
-        self.test_dataset = test_dataset
         self.paths_dict = paths_dict
 
         self.trained_ckpt_path    = paths_dict['trained_ckpt_path']
@@ -218,11 +219,8 @@ class OpenTrainer(object):
         self.goscr_result_paths   = paths_dict['open_result_goscr_paths']
 
         self.trainer_machine = trainer_machine.get_trainer_machine(training_method,
-                                                                   open_set_train_mode,
                                                                    dataset_info,
-                                                                   open_set_config,
-                                                                   test_dataset,
-                                                                   val_samples=self.val_samples)
+                                                                   open_set_config)
 
 
         self.eval_machines = {}
@@ -256,7 +254,6 @@ class OpenTrainer(object):
             eval_machine = self.eval_machines[open_set_method]
             eval_machine.eval_open_set(discovered_samples,
                                        discovered_classes,
-                                       self.test_dataset,
                                        result_path=self.open_result_paths[open_set_method],
                                        verbose=verbose)
      

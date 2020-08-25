@@ -777,7 +777,8 @@ class AnalysisMachine(object):
 
                         plt.tight_layout()
                         save_dir = os.path.join(path, data_config, training_method, query_method)
-                        os.makedirs(save_dir)
+                        if not os.path.exists(save_dir):
+                            os.makedirs(save_dir)
                         save_path = os.path.join(save_dir, item+".png")
                         save_path_txt = os.path.join(save_dir, item+".txt")
                         plt.savefig(save_path)
@@ -865,7 +866,8 @@ class AnalysisMachine(object):
 
                                 plt.tight_layout()
                                 save_dir = os.path.join(path, data_config, training_method, query_method, f"budget_{b}", f"seed_{seed}")
-                                os.makedirs(save_dir)
+                                if not os.path.exists(save_dir):
+                                    os.makedirs(save_dir)
                                 save_path = os.path.join(save_dir, item+".png")
                                 plt.savefig(save_path)
                                 plt.close('all')
@@ -1044,7 +1046,7 @@ class AnalysisMachine(object):
                                 
     
     def _get_exp_name(self, data_config, training_method, query_method, b, data_rand_seed, silent=False):
-        script_prefix = (f"python train.py {self.data} --data_download_path {self.data_download_path} --data_save_path {self.data_save_path} --data_rand_seed {data_rand_seed}"
+        script_prefix = (f"python start_open_active_learning.py {self.data} --data_download_path {self.data_download_path} --data_save_path {self.data_save_path} --data_rand_seed {data_rand_seed}"
                         f" --data_config {data_config} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
                         f" --query_method {query_method} --budget {b}"
                         f" --verbose {str(not silent)}")

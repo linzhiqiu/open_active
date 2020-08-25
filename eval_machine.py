@@ -32,7 +32,7 @@ def calc_auc_score(x, y):
         area = area.dtype.type(area)
     return area
 
-def get_eval_machine(open_set_method, trainer_machine, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path):
+def get_eval_machine(open_set_method, trainer_machine, dataset_info, trainer_config):
     if open_set_method == 'entropy':
         eval_machine_class = EntropyOpen
     elif open_set_method == "openmax":
@@ -47,32 +47,40 @@ def get_eval_machine(open_set_method, trainer_machine, trainset_info, trainer_co
         eval_machine_class = C2AE
     else:
         raise NotImplementedError()
-    return eval_machine_class(trainer_machine, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path)
+    return eval_machine_class(trainer_machine, dataset_info, trainer_config)
 
 class EvalMachine(object):
-    def __init__(self, trainer_machine, trainset_info, trainer_config, open_result_roc_path, open_result_goscr_path):
+    def __init__(self, trainer_machine, dataset_info, trainer_config):
         super().__init__()
         self.trainer_machine = trainer_machine
-        self.trainset_info = trainset_info
+        self.dataset_info = dataset_info
         self.trainer_config = trainer_config
 
-        self.roc_path = open_result_roc_path
-        self.goscr_path = open_result_goscr_path
-
-        self.batch = trainer_config['batch']
-        self.workers = trainer_config['workers']
-        self.device = trainer_config['device']
+        self.batch = trainer_config.batch
+        self.workers = trainer_config.workers
+        self.device = trainer_config.device
 
     def _get_target_mapp_func(self, discovered_classes):
-        return get_target_mapping_func_for_tensor(self.trainset_info.classes,
-                                                  discovered_classes,
-                                                  self.trainset_info.open_classes,
-                                                  device=self.device)
+        return get_target_mapping_func_for_tensor(
+            self.dataset_info.class_info.classes,
+            discovered_classes,
+            self.dataset_info.class_info.open_classes,
+            device=self.device
+        )
     
     def _get_target_unmapping_func_for_list(self, discovered_classes):
-        return get_target_unmapping_func_for_list(self.trainset_info.classes, discovered_classes)
+        return get_target_unmapping_func_for_list(
+            self.dataset_info.class_info.classes,
+            discovered_classes
+        )
          
-    def eval_open_set(self, discovered_samples, discovered_classes, test_dataset, result_path=None, verbose=True):
+    def eval_open_set(self,
+                      discovered_samples,
+                      discovered_classes,
+                      result_path,
+                      roc_path,
+                      goscr_path,
+                      verbose=True):
         """ Performing open set evaluation
         """
         if os.path.exists(result_path):
@@ -81,24 +89,35 @@ class EvalMachine(object):
         else:
             self.open_set_result = self._eval_open_set_helper(discovered_samples,
                                                               discovered_classes,
-                                                              test_dataset,
+                                                              roc_path,
+                                                              goscr_path,
                                                               verbose=verbose)
             torch.save(self.open_set_result, result_path)
             
-        
-
-    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+    def _eval_open_set_helper(self,
+                              discovered_samples,
+                              discovered_classes,
+                              roc_path,
+                              goscr_path,
+                              verbose=True,
+                              do_plot=True):
         raise NotImplementedError()
 
 class NetworkOpen(EvalMachine):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
-    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True, do_plot=True):
+    def _eval_open_set_helper(self,
+                              discovered_samples,
+                              discovered_classes,
+                              roc_path,
+                              goscr_path,
+                              verbose=True,
+                              do_plot=True):
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
 
-        dataloader = get_loader(test_dataset,
+        dataloader = get_loader(self.dataset_info.test_dataset,
                                 None,
                                 shuffle=False,
                                 batch_size=self.batch,
@@ -146,11 +165,11 @@ class NetworkOpen(EvalMachine):
                     open_set_result['closed_argmax_prob'] += open_set_result_i['closed_argmax_prob']
                     open_set_result['open_argmax_prob'] += open_set_result_i['open_argmax_prob']
         
-        open_set_result['roc'] = self._parse_roc_result(open_set_result, do_plot=do_plot)
-        open_set_result['goscr'] = self._parse_goscr_result(open_set_result, do_plot=do_plot)
+        open_set_result['roc'] = self._parse_roc_result(open_set_result, roc_path, do_plot=do_plot)
+        open_set_result['goscr'] = self._parse_goscr_result(open_set_result, goscr_path, do_plot=do_plot)
         return open_set_result
     
-    def _parse_roc_result(self, open_set_result, do_plot=True):
+    def _parse_roc_result(self, open_set_result, roc_path, do_plot=True):
         res = {'fpr' : None,
                'tpr' : None,
                'auroc' : None}
@@ -188,12 +207,12 @@ class NetworkOpen(EvalMachine):
             plt.legend(loc='upper left',
                     borderaxespad=0., fontsize=10)
             plt.tight_layout()
-            plt.savefig(self.roc_path)
-            print(f"ROC plot saved at {self.roc_path} with AUROC {auc_score:.3f}")
+            plt.savefig(roc_path)
+            print(f"ROC plot saved at {roc_path} with AUROC {auc_score:.3f}")
             plt.close('all')
         return res
     
-    def _parse_goscr_result(self, open_set_result, do_plot=True):
+    def _parse_goscr_result(self, open_set_result, goscr_path, do_plot=True):
         # Discovered v.s. Hold-out open
         gt = np.array(open_set_result['ground_truth'])
         open_predicted = np.array(open_set_result['open_predicted'])
@@ -261,8 +280,8 @@ class NetworkOpen(EvalMachine):
                     borderaxespad=0., fontsize=10)
 
             plt.tight_layout()
-            plt.savefig(self.goscr_path)
-            print(f"GOSCR plot saved at {self.goscr_path} with AUGOSCR {auc_score:.3f}")
+            plt.savefig(goscr_path)
+            print(f"GOSCR plot saved at {goscr_path} with AUGOSCR {auc_score:.3f}")
             plt.close('all')
         return res
 
@@ -281,7 +300,13 @@ class OpenmaxOpen(NetworkOpen):
         self.div_eu = 1000.
         self.mav_features_selection = "none_correct_then_all"
 
-    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+    def _eval_open_set_helper(self,
+                              discovered_samples,
+                              discovered_classes,
+                              roc_path,
+                              goscr_path,
+                              verbose=True,
+                              do_plot=True):
         dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
         train_loader = dataset_loaders['train']
         self.num_discovered_classes = len(discovered_classes)
@@ -318,15 +343,15 @@ class OpenmaxOpen(NetworkOpen):
         self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
         features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
         self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
     
 
     def _gather_correct_features(self, train_loader, discovered_classes=set(), mav_features_selection='correct', verbose=False):
         assert len(discovered_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
-        mapping_func = get_target_mapping_func(self.trainset_info.classes,
+        mapping_func = get_target_mapping_func(self.dataset_info.class_info.classes,
                                                discovered_classes,
-                                               self.trainset_info.open_classes)
+                                               self.dataset_info.class_info.open_classes)
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         seen_class_softmax_indices = [mapping_func(i) for i in discovered_classes]
 
@@ -534,10 +559,16 @@ class NNOpen(NetworkOpen):
 
         return features
     
-    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+    def _eval_open_set_helper(self,
+                              discovered_samples,
+                              discovered_classes,
+                              roc_path,
+                              goscr_path,
+                              verbose=True,
+                              do_plot=True):
         dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
         train_loader = dataset_loaders['train']
-        test_loader = get_loader(test_dataset,
+        test_loader = get_loader(self.dataset_info.test_dataset,
                                  None,
                                  shuffle=False,
                                  batch_size=self.batch,
@@ -545,7 +576,7 @@ class NNOpen(NetworkOpen):
         test_features = self._get_features(test_loader, self.trainer_machine, verbose=verbose).cpu()
         labeled_features = self._get_features(train_loader, self.trainer_machine, verbose=verbose).cpu()
         self.min_dist = self.distance_function(test_features, labeled_features).min(dim=1)[0].cpu().tolist()
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
 
     def _get_open_set_pred_func(self):
         def open_set_prediction(inputs):
@@ -577,7 +608,13 @@ class C2AE(NetworkOpen):
         self.max_epochs = 100
         self.latent_size = self.trainer_machine.trainer_config['feature_dim']
     
-    def _eval_open_set_helper(self, discovered_samples, discovered_classes, test_dataset, verbose=True):
+    def _eval_open_set_helper(self,
+                              discovered_samples,
+                              discovered_classes,
+                              roc_path,
+                              goscr_path,
+                              verbose=True,
+                              do_plot=True):
         dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
         train_loader = dataset_loaders['train']
         
@@ -622,13 +659,7 @@ class C2AE(NetworkOpen):
                                     )
         print(f"C2AE "
               f"Match Loss {match_loss}, Non-match Loss {nm_loss}")
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
-        # self.num_discovered_classes = len(discovered_classes)
-
-        # self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
-        # features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
-        # self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
-        # return super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=True)
+        return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
 
     def _get_open_set_pred_func(self):
         def open_set_prediction(inputs):

@@ -36,19 +36,19 @@ class QueryMachine(object):
     """Abstract class for query algorithms"""
 
     def __init__(self, dataset_info, trainer_config):
-        """Base class for active querying
+        """Template class for all active querying methods
             Args:
                 query_method (str) : Specify the active learning method
-                dataset_info (DatasetInfo): Dataset Information
+                dataset_info (dataset_factory.DatasetInfo): Dataset Information
         """
         super(QueryMachine, self).__init__()
         self.dataset_info = dataset_info
-        self.batch = trainer_config['batch']
-        self.workers = trainer_config['workers']
-        self.device = trainer_config['device']
+        self.batch = trainer_config.batch
+        self.workers = trainer_config.workers
+        self.device = trainer_config.device
 
     def query(self, trainer_machine, budget, discovered_samples, discovered_classes, query_result_path=None, verbose=True):
-        """Perform querying
+        """Perform a round of active querying
             Returns:
                 new_discovered_samples (list of int) : New labeled samples (including old ones)
                 new_discovered_classes (set of int) : New labeled classes (including old ones)

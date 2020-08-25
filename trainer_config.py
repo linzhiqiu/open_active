@@ -23,6 +23,9 @@ class OptimConfig():
         epochs (int): Total epochs
         decay_epochs (int): Learning rate decay after every [decay_epochs]
         decay_by (float): Learning rate decay ratio
+        random_restart (bool): For each retrain round, whether to use a fresh random initialization.
+                               If False, then use the same initialization each round 
+                               (by loading from a checkpoint file with a randomly init network).
     """
     optim: str = 'sgd'
     weight_decay: float = 0.0005
@@ -31,6 +34,7 @@ class OptimConfig():
     epochs: int = 200
     decay_epochs: int = 60
     decay_by: float = 0.1
+    random_restart: bool = False
 
 
 @dataclass
@@ -57,7 +61,7 @@ CIFAR_OPTIM_CONFIG = OptimConfig(
     weight_decay=0.0005,
     momentum=0.9,
     lr=0.1,
-    epochs=200,
+    epochs=2,
     decay_epochs=60,
     decay_by=0.1,
     random_restart=False

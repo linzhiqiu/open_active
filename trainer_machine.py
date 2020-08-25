@@ -21,68 +21,58 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINE
 import libmr
 import math
 
-def get_trainer_machine(training_method, train_mode, dataset_info, trainer_config, test_dataset, val_samples=None, active_test_val_diff=False):
+def get_trainer_machine(training_method, dataset_info, trainer_config):
     """Return a TrainerMachine object
         Args:
             training_method (str) : The training method
-            train_mode (str) : The training mode (with/without finetune)
-            dataset_info (DatasetInfo) : The details about dataset
-            trainer_config (dict) : The details about hyperparameter and etc.
-            test_dataset
-            val_samples
-            active_test_val_diff
+            dataset_info (dataset_factory.DatasetInfo) : Dataset information
+            trainer_config (train_config.TrainerConfig) : The details about hyperparameter and etc.
     """
     if training_method == "softmax_network":
         trainer_machine_class = SoftmaxNetwork
     elif training_method == "cosine_network":
         trainer_machine_class = CosineNetwork
-    elif training_method == 'deep_metric':
-        trainer_machine_class = DeepMetricNetwork
-    # elif training_method == 'sigmoid_network':
-    #     trainer_machine_class = SigmoidNetwork
-    else:
-        raise NotImplementedError()
     
-    return trainer_machine_class(train_mode, dataset_info, trainer_config, test_dataset, val_samples=val_samples, active_test_val_diff=active_test_val_diff)
+    return trainer_machine_class(dataset_info, trainer_config)
 
 class TrainerMachine(object):
-    """Abstract class"""
+    """A template class for all training machine classes
 
-    def __init__(self, train_mode, dataset_info, trainer_config, test_dataset, val_samples=None, active_test_val_diff=False):
+    Args:
+        dataset_info (dataset_factory.DatasetInfo): Dataset information
+        trainer_config (train_config.TrainerConfig): Training configuration
+    """    
+    def __init__(self, dataset_info, trainer_config):
         super(TrainerMachine, self).__init__()
-        self.train_mode = train_mode
         self.dataset_info = dataset_info
         
-        self.train_config = trainer_config['train']
-        self.finetune_config = trainer_config['finetune']
+        self.optim_config = trainer_config.optim_config
         
-        self.batch = trainer_config['batch']
-        self.workers = trainer_config['workers']
-        self.device = trainer_config['device']
+        self.batch = trainer_config.batch
+        self.workers = trainer_config.workers
+        self.device = trainer_config.device
         
         self.trainer_config  = trainer_config
-        self.backbone = None
-        self.feature_dim = trainer_config['feature_dim']
-        self.classifier = None # Initialize per train()/finetune() call.
+        self.feature_dim = trainer_config.feature_dim
+
+        self.backbone = None # Feature extractor
+        self.classifier = None # Initialize per call to train().
         
         self.ckpt_dict = None # A dictionary that holds all checkpoint information
-        self.val_samples = val_samples
-        self.test_dataset = test_dataset
-        self.active_test_val_diff = active_test_val_diff # whether to compare val acc against test acc for every epochs
 
     def train(self, discovered_samples, discovered_classes, ckpt_path=None, verbose=False):
         """Perform the train step (starting from a random initialization)
         """
         if os.path.exists(ckpt_path):
-            print("Load from pre-existing ckpt. No training will be performed.")
+            print("Load from pre-existing ckpt for an already trained network.")
             self.ckpt_dict = torch.load(ckpt_path)
             self._load_ckpt_dict(self.ckpt_dict)
         else:
             print(f"Training the model from scratch. Ckpt will be saved at {ckpt_path}")
-            self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
-            if not self.train_config.random_restart:
-                # Load random weight from a checkpoint to ensure different round uses same initialization
-                random_model_weight_path = os.path.join(".", "weights", self.trainer_config['backbone']+".pt")
+            self.backbone = self._get_backbone_network(self.trainer_config.backbone).to(self.device)
+            if not self.optim_config.random_restart:
+                print("Load random network to ensure same network random initialization")
+                random_model_weight_path = os.path.join(".", "weights", self.trainer_config.backbone+".pt")
                 if not os.path.exists(random_model_weight_path):
                     if not os.path.exists('./weights'): os.makedirs("./weights"); print("Make a new folder at ./weights/ to store random weights")
                     print(f"Model {random_model_weight_path} doesn't exist. Generating a random model for the first time.")
@@ -91,50 +81,20 @@ class TrainerMachine(object):
             else:
                 print("Using random initialization (Not loading from any checkpoint)")
                 pass # Not doing anything, just use a random initialization
-            self.ckpt_dict = self._train_helper(self.train_config,
-                                                discovered_samples,
-                                                discovered_classes,
-                                                verbose=verbose)
-            torch.save(self.ckpt_dict, ckpt_path)
-
-    def finetune(self, discovered_samples, discovered_classes, ckpt_path=None, verbose=False):
-        """Perform the finetuning step
-        """
-        if os.path.exists(ckpt_path):
-            print("Load from pre-existing ckpt. No finetuning will be performed.")
-            self.ckpt_dict = torch.load(ckpt_path)
-            self._load_ckpt_dict(self.ckpt_dict)
-        else:
-            print(f"First time finetuning the model. Ckpt will be saved at {ckpt_path}")
-            if self.train_mode in ['retrain']:
-                print("Use a new backbone network without finetuning.")
-                self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
-            elif self.train_mode == 'fix_feature_extractor':
-                print("Fix feature extractor..")
-                for p in self.backbone.parameters():
-                    p.requires_grad = False
-            self.ckpt_dict = self._train_helper(self.finetune_config,
+            self.ckpt_dict = self._train_helper(self.optim_config,
                                                 discovered_samples,
                                                 discovered_classes,
                                                 verbose=verbose)
             torch.save(self.ckpt_dict, ckpt_path)
     
-    # def eval_closed_set(self, discovered_classes, test_dataset, result_path=None, verbose=True):
     def eval_closed_set(self, discovered_classes, result_path=None, verbose=True):
         """ Performing closed set evaluation
         """
         if os.path.exists(result_path):
             print("Closed set result already saved.")
             self.closed_set_result = torch.load(result_path)
-            if not 'closed_set_result' in self.closed_set_result.keys():
-                print("Closed set result incomplete. We will do it once again")
-                self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
-                                                                      self.test_dataset,
-                                                                      verbose=verbose)
-                torch.save(self.closed_set_result, result_path)
         else:
             self.closed_set_result = self._eval_closed_set_helper(discovered_classes,
-                                                                  self.test_dataset,
                                                                   verbose=verbose)
             torch.save(self.closed_set_result, result_path)
         return self.closed_set_result['acc']
@@ -176,55 +136,37 @@ class TrainerMachine(object):
         """
         raise NotImplementedError()
     
-    def _eval_closed_set_helper(discovered_classes, test_dataset, verbose=True):
+    def _eval_closed_set_helper(discovered_classes, verbose=True):
         """ To be overwrite by subclass
         """
         raise NotImplementedError()
 
     # Below are some helper functions shared by all subclasses
     def _load_ckpt_dict(self, ckpt_dict):
-        self.backbone = self._get_backbone_network(self.trainer_config['backbone']).to(self.device)
+        self.backbone = self._get_backbone_network(self.trainer_config.backbone).to(self.device)
         self.classifier = self._get_classifier(ckpt_dict['discovered_classes']).to(self.device)
         self.classifier.load_state_dict(ckpt_dict['classifier'])
         self.backbone.load_state_dict(ckpt_dict['backbone'])
 
     def _get_backbone_network(self, backbone_name):
         if backbone_name == 'ResNet18':
-            backbone = models.ResNet18(last_relu=False) # Always false.
+            backbone = models.ResNet18(last_relu=False)
         elif backbone_name == 'ResNet18HighRes':
             backbone = models.ResNet18(last_relu=False, high_res=True)
-        elif backbone_name == 'ResNet18ImgNet':
-            import torchvision
-            pretrained_model = torchvision.models.resnet18(pretrained=True)
-            class PretrainedResNetBackbone(torch.nn.Module):
-                def __init__(self, pretrained_model):
-                    super().__init__()
-                    self.model = pretrained_model
-                
-                def forward(self, x):
-                    x = self.model.relu(self.model.bn1(self.model.conv1(x)))
-                    x = self.model.maxpool(x)
-                    x = self.model.layer1(x)
-                    x = self.model.layer2(x)
-                    x = self.model.layer3(x)
-                    x = self.model.layer4(x)
-                    x = self.model.avgpool(x)
-                    return x.view(x.shape[0], -1)
-            backbone = PretrainedResNetBackbone(pretrained_model)
         else:
             raise NotImplementedError()
         return backbone
 
     def get_trainloaders(self, discovered_samples, shuffle=True):
-        train_samples = list(set(discovered_samples).difference(self.val_samples))
-        print(f"We have {len(train_samples)} train samples and {len(self.val_samples)} val samples.")
+        train_samples = list(set(discovered_samples).difference(self.dataset_info.trainset_info.val_samples))
+        print(f"We have {len(train_samples)} train samples and {len(self.dataset_info.trainset_info.val_samples)} val samples.")
         return get_subset_dataloaders(self.dataset_info.train_dataset,
                                       train_samples,
-                                      self.val_samples,
+                                      self.dataset_info.trainset_info.val_samples,
                                       None, # No target transform
                                       batch_size=self.batch,
                                       shuffle=shuffle,
-                                      workers=self.workers), train_samples, self.val_samples
+                                      workers=self.workers), train_samples, self.dataset_info.trainset_info.val_samples
         
     def _get_target_mapp_func(self, discovered_classes):
         return get_target_mapping_func_for_tensor(self.dataset_info.class_info.classes,
@@ -264,8 +206,6 @@ class Network(TrainerMachine):
         avg_acc_per_epoch = []
         avg_val_loss_per_epoch = []
         avg_val_acc_per_epoch = []
-
-        if self.active_test_val_diff: avg_test_acc_per_epoch = []
 
         best_val_acc = 0
         best_val_epoch = None
@@ -341,12 +281,6 @@ class Network(TrainerMachine):
                             best_val_acc = avg_acc
                             best_val_acc_backbone_state_dict = self.backbone.state_dict()
                             best_val_acc_classifier_state_dict = self.classifier.state_dict()
-                        if self.active_test_val_diff:
-                            # eval on test set as well
-                            test_acc = self._eval_closed_set_helper(discovered_classes,
-                                                                    self.test_dataset,
-                                                                    verbose=verbose)
-                            avg_test_acc_per_epoch.append(test_acc)
                     print(f"Average {phase} Loss {avg_loss}, Accuracy {avg_acc}")
                 print()
         
@@ -372,13 +306,11 @@ class Network(TrainerMachine):
             ckpt_dict['val_acc_curve'] = avg_val_acc_per_epoch
             ckpt_dict['best_val_epoch'] = best_val_epoch
             ckpt_dict['best_val_acc'] = best_val_acc
-        if self.active_test_val_diff:
-            ckpt_dict['test_acc_curve'] = avg_test_acc_per_epoch
         return ckpt_dict
     
     
     
-    def _eval_closed_set_helper(self, discovered_classes, test_dataset, verbose=True):
+    def _eval_closed_set_helper(self, discovered_classes, verbose=True):
         """Test the model/classifier and return the acc in ckpt_dict
         """
         self.backbone.eval()
@@ -386,7 +318,7 @@ class Network(TrainerMachine):
 
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
-        dataloader = get_loader(test_dataset,
+        dataloader = get_loader(self.dataset_info.test_dataset,
                                 None,
                                 shuffle=False,
                                 batch_size=self.batch,

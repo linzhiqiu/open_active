@@ -80,13 +80,11 @@ def main():
     # It contains train() query() finetune() functions
     trainer = ActiveTrainer(
         config.training_method,
-        config.active_train_mode,
         active_config,
         trainset_info,
         config.query_method,
         test_dataset,
         val_samples=val_samples,
-        active_test_val_diff=config.active_test_val_diff
     )
 
     for i, b in enumerate(budget_list):

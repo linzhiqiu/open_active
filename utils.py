@@ -17,8 +17,16 @@ from dataclasses import dataclass
 
 import torch
 from torch.utils.data import DataLoader
+import numpy as np
 
 import global_setting # include some constant value
+
+def set_random_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 class SetPrintMode:
     def __init__(self, hidden=False):
