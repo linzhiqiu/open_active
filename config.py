@@ -30,8 +30,10 @@ dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
                           choices=["CIFAR10", # Regular CIFAR10
-                                   "OPEN_CIFAR10",
-                                   "CIFAR100", 'CUB200', 'Cars'],
+                                   "OPEN_CIFAR10", # CIFAR10 for open set learning
+                                   "CIFAR100",
+                                   'CUB200',
+                                   'Cars'],
                           help='Dataset for training and testing. Dataset details can be found in dataset_factory.py')
 dataset_args.add_argument('--data_config',
                           default='regular',
@@ -59,32 +61,17 @@ setting_arg.add_argument('--val_mode',
                          choices=['randomized', 'balanced',
                                   ],
                          help="How to select the validation set (for train.py)")
-# setting_arg.add_argument('--active_val_mode',
-#                          default="fixed_stratified",
-#                          choices=[
-#                                 #   'randomized', # random 5% of labeled set
-#                                 #   'balanced', # 5% of labeled set. Each class has same number of sample
-#                                 #   'stratified', # 5% of each observed class
-#                                   'fixed_stratified', # 5% of observed class and fix the validation set to be the same across rounds
-#                                   ],
-#                          help="How to select the validation set (for start_active_learning.py)")
-setting_arg.add_argument('--active_test_val_diff',
-                         default=False, type=str2bool,
-                         help="Whether to test difference between test and val set")
 
 trainer_args = add_argument_group('Trainer Param.')
 trainer_args.add_argument('--training_method',
                           default='softmax_network',
                           choices=['softmax_network',
-                                   # Use 1 v.s. rest sigmoid network instead of softmax.
-                                   'sigmoid_network',
                                    'cosine_network',  # Use cosine similarity as final layer in place of fc layer
-                                   'deep_metric',
                                    ],
                           help='The training method determines how to train/finetune using labeled samples.'
                           )
 trainer_args.add_argument('--trainer_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{trainer}/{train/query/finetune/result}
-                          default='/share/coecis/open_active/trainers',
+                          default='./trainers',
                           help='path to where the trainer checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
 
 
@@ -134,47 +121,9 @@ active_analysis_arg.add_argument('--active_analysis_save_dir', default="/share/c
                                  help='The directory to save all the plots for closed set active learning')
 
 
-deepmetric_args = add_argument_group('Deep metric Trainer Machine Param.')
-deepmetric_args.add_argument('--deep_metric_softmax_pretrained_folder',
-                             default='/share/phoenix/nfs02/S2/localdisk/zhiqiu/open_active/pretrained_weight',
-                             help="Pretrained folder of softmax weight")
-
-# Need to clean out
-c2ae_args = add_argument_group('C2AE Trainer Machine Param.')
-c2ae_args.add_argument('--c2ae_train_mode',
-                       default='default',
-                       choices=['default', 'a_minus_1', 'default_mse', 'a_minus_1_mse', 'default_bce', 'a_minus_1_bce',
-                                "debug_no_label", 'debug_no_label_mse', 'debug_no_label_bce', 'debug_no_label_dcgan',
-                                'debug_no_label_dcgan_mse', 'debug_no_label_not_frozen_dcgan_mse', 'a_minus_1_dcgan_mse', 'a_minus_1_dcgan',
-                                'a_minus_1_instancenorm_dcgan_mse', 'a_minus_1_instancenorm_dcgan', 'a_minus_1_instancenorm_affine_dcgan_mse', 'a_minus_1_instancenorm_affine_dcgan',
-                                'debug_no_label_not_frozen', 'debug_no_label_not_frozen_dcgan', 'debug_no_label_simple_autoencoder', 'debug_no_label_simple_autoencoder_bce',
-                                'debug_simple_autoencoder_bce', 'debug_simple_autoencoder_mse', 'debug_simple_autoencoder',
-                                'a_minus_1_dcgan_mse_not_frozen', 'a_minus_1_dcgan_not_frozen', 'UNet_mse', 'UNet'],
-                       help="C2AE config")
-c2ae_args.add_argument('--c2ae_alpha',
-                       default=0.9, type=float,
-                       help="C2AE alpha")
-c2ae_args.add_argument('--c2ae_train_in_eval_mode',
-                       default=True, type=str2bool,
-                       help="C2AE whether to train model in eval mode")
-
-
-disc_args = add_argument_group('Distance Metric Param.')
-disc_args.add_argument('--distance_metric',
-                       default='eucos',
-                       choices=['eu', 'cos', 'eucos'],
-                       help='How to measure the distance between two examples in the feature space. EU distance is always divided by eu_divby.'
-                       )
-disc_args.add_argument('--div_eu',
-                       default=200.,
-                       type=float,
-                       help='EU distance will be divided by this parameter.'
-                       )
-
-
 training_arg = add_argument_group('Training and Finetuning Param.')
 training_arg.add_argument('--train_mode', type=str,
-                          choices=['default', 'retrain', 'default_300eps', 'default_lr01_200eps', 'fix_feature_extractor'], default='default',
+                          choices=['retrain'], default='retrain',
                           help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
 training_arg.add_argument('--workers', default=4, type=int,
                           help='number of data loading workers (default: 4)')
@@ -212,35 +161,6 @@ open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: 
                       default='/share/coecis/open_active/open_learners',
                       help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
 
-
-uncertainty_sampling_arg = add_argument_group('Uncertainty Measure Param.')
-uncertainty_sampling_arg.add_argument('--uncertainty_measure',
-                                      default='least_confident',
-                                      choices=['least_confident',
-                                               'most_confident',
-                                               'random_query',
-                                               'entropy',
-                                               'highest_loss',
-                                               'lowest_loss'],
-                                      )
-uncertainty_sampling_arg.add_argument('--active_random_sampling',
-                                      default='none',
-                                      type=str,
-                                      choices=['fixed_10K',  # As in learning the loss paper
-                                               # 1/5 of the unlabled pool. Or budget if smaller than budget.
-                                               '1_out_of_5',
-                                               'none',
-                                               ],
-                                      help='If true, use the random sampling scheme in "Learning Loss Active Learning" paper',
-                                      )
-uncertainty_sampling_arg.add_argument('--coreset_measure',
-                                      default='greedy',
-                                      choices=['greedy'],
-                                      )
-uncertainty_sampling_arg.add_argument('--coreset_feature',
-                                      default='before_fc',
-                                      choices=['before_fc', 'after_fc'],
-                                      )
 
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--device', type=str, default='cuda',

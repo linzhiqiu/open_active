@@ -1,5 +1,5 @@
 import torch
-import numpy as np 
+import numpy as np
 
 import time
 import os
@@ -19,6 +19,7 @@ import random
 from utils import prepare_save_dir_from_config
 import global_setting
 
+
 def main():
     config = get_config()
 
@@ -31,22 +32,22 @@ def main():
         np.random.seed(1)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    
-    
+
     # It contains all directory that will be used for saving datasets/checkpoints
     paths_dict = prepare_save_dir_from_config(config)
-    
+
     dataset_info = prepare_dataset_from_config(
         config,
         paths_dict['data_download_path'],
         paths_dict['data_save_path']
     )
-    
+
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
     # Save the train set details for later analysis
     if not os.path.exists(paths_dict['trainset_info_path']):
-        torch.save(dataset_info.trainset_info, paths_dict['trainset_info_path'])
+        torch.save(dataset_info.trainset_info,
+                   paths_dict['trainset_info_path'])
 
     # The training details including arch, lr, batch size..
     trainer_config = get_trainer_config(config.data,
@@ -71,16 +72,35 @@ def main():
         val_samples=dataset_info.trainset_info.val_samples
     )
 
-    trainer.train(discovered_samples, discovered_classes, verbose=config.verbose)
+    trainer.train(
+        discovered_samples,
+        discovered_classes,
+        verbose=config.verbose
+    )
 
-    discovered_samples, discovered_classes = trainer.query(discovered_samples, discovered_classes, verbose=config.verbose)
-    
-    trainer.finetune(discovered_samples, discovered_classes, verbose=config.verbose)
-    
-    closed_set_test_acc = trainer.eval_closed_set(discovered_classes, verbose=config.verbose)
-    
-    trainer.eval_open_set(discovered_samples, discovered_classes, verbose=config.verbose)
-    
+    discovered_samples, discovered_classes = trainer.query(
+        discovered_samples,
+        discovered_classes,
+        verbose=config.verbose
+    )
+
+    trainer.finetune(
+        discovered_samples,
+        discovered_classes,
+        verbose=config.verbose
+    )
+
+    closed_set_test_acc = trainer.eval_closed_set(
+        discovered_classes,
+        verbose=config.verbose
+    )
+
+    trainer.eval_open_set(
+        discovered_samples,
+        discovered_classes,
+        verbose=config.verbose
+    )
+
 
 if __name__ == '__main__':
     main()
