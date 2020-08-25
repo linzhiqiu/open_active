@@ -1,3 +1,0 @@
-python open_set_learning.py CIFAR100 --training_method softmax_network --data_config open_set --open_set_train_mode default --data_rand_seed None --data_download_path ./ --open_set_save_path ./open_datasets  --open_set_save_dir ./open_set_learners --verbose True
-
-python open_set_learning.py CIFAR10 --training_method softmax_network --data_config open_set --open_set_train_mode default --data_rand_seed None --data_download_path ./ --open_set_save_path ./open_datasets  --open_set_save_dir ./open_set_learners --verbose True

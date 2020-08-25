@@ -117,24 +117,24 @@ class ActiveAnalysisMachine(object):
 
     def gather_results(self, draw_open=True):
         finished_exp_dict = {}
-        for active_train_mode in self.ACTIVE_TRAIN_MODES:
-            if not active_train_mode in finished_exp_dict:
-                finished_exp_dict[active_train_mode] = {}
+        for train_mode in self.ACTIVE_TRAIN_MODES:
+            if not train_mode in finished_exp_dict:
+                finished_exp_dict[train_mode] = {}
             for training_method in self.TRAINING_METHODS:
-                if not training_method in finished_exp_dict[active_train_mode]:
-                    finished_exp_dict[active_train_mode][training_method] = {}
+                if not training_method in finished_exp_dict[train_mode]:
+                    finished_exp_dict[train_mode][training_method] = {}
                 for query_method in self.QUERY_METHODS:
-                    if not query_method in finished_exp_dict[active_train_mode][training_method]:
-                        finished_exp_dict[active_train_mode][training_method][query_method] = {}
+                    if not query_method in finished_exp_dict[train_mode][training_method]:
+                        finished_exp_dict[train_mode][training_method][query_method] = {}
                     for active_query_scheme in self.ACTIVE_QUERY_SCHEMES:
-                        if not active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method]:
-                            finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme] = {}
+                        if not active_query_scheme in finished_exp_dict[train_mode][training_method][query_method]:
+                            finished_exp_dict[train_mode][training_method][query_method][active_query_scheme] = {}
                         for data_rand_seed in self.RANDOM_SEEDS:
-                            if not data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme]:
-                                finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed] = {}
+                            if not data_rand_seed in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme]:
+                                finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed] = {}
                             # for active_val_mode in self.VAL_MODES:
-                            #     if not active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
-                            #         finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode] = {}
+                            #     if not active_val_mode in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
+                            #         finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode] = {}
                             paths_dict = utils.prepare_active_learning_dir(self.budget_list,
                                                                             self.active_save_path,
                                                                             self.data_download_path,
@@ -143,7 +143,7 @@ class ActiveAnalysisMachine(object):
                                                                             self.data_config,
                                                                             data_rand_seed,
                                                                             training_method,
-                                                                            active_train_mode,
+                                                                            train_mode,
                                                                             query_method,
                                                                             active_query_scheme,
                                                                         #    active_val_mode,
@@ -153,17 +153,17 @@ class ActiveAnalysisMachine(object):
                                     test_result = torch.load(paths_dict['active_test_results'][b],
                                                             map_location=torch.device('cpu'))
                                     res = test_result['acc']
-                                    # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode]:
-                                    #     finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b] = res
-                                    if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
-                                        finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b] = res
+                                    # if not b in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode]:
+                                    #     finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b] = res
+                                    if not b in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed]:
+                                        finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b] = res
         return finished_exp_dict
     
     def gather_query_results(self):
         self.query_result_path = os.path.join(self.active_analysis_save_dir,
                                               self.data,
                                               'query_result_analysis')
-        for active_train_mode in self.ACTIVE_TRAIN_MODES:
+        for train_mode in self.ACTIVE_TRAIN_MODES:
             for training_method in self.TRAINING_METHODS:
                 for query_method in self.QUERY_METHODS:
                     for active_query_scheme in self.ACTIVE_QUERY_SCHEMES:
@@ -176,7 +176,7 @@ class ActiveAnalysisMachine(object):
                                                                             self.data_config,
                                                                             data_rand_seed,
                                                                             training_method,
-                                                                            active_train_mode,
+                                                                            train_mode,
                                                                             query_method,
                                                                             active_query_scheme,
                                                                         #    active_val_mode,
@@ -198,7 +198,7 @@ class ActiveAnalysisMachine(object):
 
                                     # Need to plot both query sample and total labeled samples distribution
                                     curr_query_result_path = os.path.join(self.query_result_path,
-                                                                          active_train_mode,
+                                                                          train_mode,
                                                                           training_method,
                                                                           "active_"+query_method,
                                                                           active_query_scheme,
@@ -325,13 +325,13 @@ class ActiveAnalysisMachine(object):
     
     def _plot_helper(self, finished_exp_dict, data_rand_seed_list=[], error_bar=False, plot_dir=None):
         if not os.path.exists(plot_dir): os.makedirs(plot_dir)
-        for active_train_mode in finished_exp_dict.keys():
+        for train_mode in finished_exp_dict.keys():
             results = {}
-            for training_method in finished_exp_dict[active_train_mode].keys():
-                for query_method in finished_exp_dict[active_train_mode][training_method].keys():
-                    for active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method].keys():
-                        for data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
-                            # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+            for training_method in finished_exp_dict[train_mode].keys():
+                for query_method in finished_exp_dict[train_mode][training_method].keys():
+                    for active_query_scheme in finished_exp_dict[train_mode][training_method][query_method].keys():
+                        for data_rand_seed in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme].keys():
+                            # for active_val_mode in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
                             if not data_rand_seed in data_rand_seed_list:
                                 continue
                             has_all_budget = True
@@ -340,12 +340,12 @@ class ActiveAnalysisMachine(object):
                             for b in self.budget_list:
                                 # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and data_rand_seed == 1:
                                 #     import pdb; pdb.set_trace()
-                                # if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode].keys():
-                                if not b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+                                # if not b in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode].keys():
+                                if not b in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
                                     has_all_budget = False
                                     break
-                                # acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]))
-                                acc.append(float(finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]))
+                                # acc.append(float(finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]))
+                                acc.append(float(finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]))
 
                             if has_all_budget == True:
                                 # if not (training_method, query_method, active_query_scheme, active_val_mode) in results:
@@ -424,14 +424,14 @@ class ActiveAnalysisMachine(object):
                                            "results.txt")
             print("Print all results to " + self.print_path)
             with open(self.print_path, "w+") as file:
-                for active_train_mode in finished_exp_dict.keys():
-                    file.write(f"#####Start Train mode {active_train_mode}######\n")
+                for train_mode in finished_exp_dict.keys():
+                    file.write(f"#####Start Train mode {train_mode}######\n")
                     result_lists = []
-                    for training_method in finished_exp_dict[active_train_mode].keys():
-                        for query_method in finished_exp_dict[active_train_mode][training_method].keys():
-                            for active_query_scheme in finished_exp_dict[active_train_mode][training_method][query_method].keys():
-                                for data_rand_seed in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme].keys():
-                                    # for active_val_mode in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+                    for training_method in finished_exp_dict[train_mode].keys():
+                        for query_method in finished_exp_dict[train_mode][training_method].keys():
+                            for active_query_scheme in finished_exp_dict[train_mode][training_method][query_method].keys():
+                                for data_rand_seed in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme].keys():
+                                    # for active_val_mode in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
                                     single_list = [get_pretty_name(active_query_scheme),
                                                 #    get_valmode_str(active_val_mode),
                                                     str(data_rand_seed),
@@ -440,15 +440,15 @@ class ActiveAnalysisMachine(object):
                                     for b in self.budget_list:
                                         # if active_query_scheme == 'independent' and training_method == 'softmax_network' and query_method == 'uldr' and data_rand_seed == 1:
                                         #     import pdb; pdb.set_trace()
-                                        if b in finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
-                                            # single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]:.4f}"]
-                                            single_list += [f"{finished_exp_dict[active_train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]:.4f}"]
+                                        if b in finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed].keys():
+                                            # single_list += [f"{finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][active_val_mode][b]:.4f}"]
+                                            single_list += [f"{finished_exp_dict[train_mode][training_method][query_method][active_query_scheme][data_rand_seed][b]:.4f}"]
                                         else:
                                             single_list += ["N/A"]
                                     result_lists.append(single_list)
                     # file.write(tabulate(result_lists, headers=['Query Scheme', 'Model CKPT', 'Seed', 'Training Method', 'Query Method'] + list(map(str, self.budget_list)), tablefmt='orgtbl'))
                     file.write(tabulate(result_lists, headers=['Query Scheme', 'Seed', 'Training Method', 'Query Method'] + list(map(str, self.budget_list)), tablefmt='orgtbl'))
-                    file.write(f"\n#####End Train mode {active_train_mode}######\n\n\n")              
+                    file.write(f"\n#####End Train mode {train_mode}######\n\n\n")              
 
 
 if __name__ == "__main__":

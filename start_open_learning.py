@@ -1,8 +1,8 @@
-"""Start a open set active learning experiment
-The network is first trained on initial labeled set, then an active learning method will be used to
-query (i.e., select) new samples to label. The network will then be trained on the new labeled set.
-The new labeled set may contain samples not in initial labeled set of classes.
+"""Start a open set learning experiment
+The network is first trained on initial labeled set, then evaluate on a test set which may contain
+samples not in initially labeled set of classes.
 """
+
 import time
 import os
 
@@ -12,7 +12,7 @@ from config import get_config
 from dataset_factory import prepare_dataset_from_config
 from trainer import Trainer
 from trainer_config import get_trainer_config
-from utils import prepare_save_dir_from_config, set_random_seed
+from utils import prepare_open_set_learning_dir_from_config, set_random_seed
 import global_setting
 
 
@@ -22,8 +22,8 @@ def main():
     if not config.use_random_seed:
         set_random_seed(1)
 
-    # It contains all directory that will be used for saving datasets/checkpoints
-    paths_dict = prepare_save_dir_from_config(config)
+    # It contains all directory/save_paths that will be used
+    paths_dict = prepare_open_set_learning_dir_from_config(config)
 
     dataset_info = prepare_dataset_from_config(
         config,
@@ -57,29 +57,10 @@ def main():
         dataset_info=dataset_info
     )
 
-    # First time training
     trainer.train(
         discovered_samples,
         discovered_classes,
         ckpt_path=paths_dict['trained_ckpt_path'],
-        verbose=config.verbose
-    )
-
-    # Perform active querying
-    discovered_samples, discovered_classes = trainer.query(
-        discovered_samples,
-        discovered_classes,
-        budget=config.budget,
-        query_method=config.query_method,
-        query_result_path=paths_dict['query_result_path'],
-        verbose=config.verbose
-    )
-
-    # Perform second round of training
-    trainer.train(
-        discovered_samples,
-        discovered_classes,
-        ckpt_path=paths_dict['finetuned_ckpt_path'],
         verbose=config.verbose
     )
 
@@ -89,6 +70,7 @@ def main():
         verbose=config.verbose
     )
 
+    # Evaluate on all open set methods
     trainer.eval_open_set(
         discovered_samples,
         discovered_classes,

@@ -2,89 +2,79 @@
 The network is first trained on initial labeled set, then an active learning method will be used to
 query (i.e., select) new samples to label. The network will then be trained on the new labeled set.
 This process will repeat for different numbers of query.
-"""
-import torch
-import numpy as np
 
+Two active learning scheme:
+    Suppose the size of initial labeled pool is 100.
+    If the list of budget is [0, 100, 200, 300].
+        (a) Sequential mode (common adopted by active learning literature):
+            The network is first trained on 100 samples.
+            Then it query for 100 new labeled samples, add them to labeled pool, and train on total 100+100=200 samples.
+            Next it query for another 100 new labeled samples, add them to labeled pool, and train again on these total 300 samples.
+            And go on..
+
+        (b) Independent mode:
+            The network is first trained on 100 samples.
+            Then it query for 100 new labeled samples, and train on the 200 samples.
+            However, it does not add those 100 new labeled samples to labeled pool.
+            Instead, it used the trained network to query another 200 new samples, and train again on these total 100+200=300 samples.
+            Only the initial labeled pool is always used for training.
+            Caveat: Not a common way to do active learning.
+"""
 import time
 import os
-import copy
-from tqdm import tqdm
+
+import torch
+
 from config import get_config
-
-from dataset_factory import DatasetFactory
-
-from trainer import ActiveTrainer, TrainsetInfo
-from active_config import get_active_learning_config
-import utils
-from utils import makedirs
-import json
-import random
-
-from utils import prepare_active_learning_dir_from_config, get_budget_list_from_config
+from dataset_factory import prepare_dataset_from_config
+from trainer import Trainer
+from trainer_config import get_trainer_config
+from utils import prepare_active_learning_dir_from_config, get_budget_list_from_config, set_random_seed
 
 
 def main():
     config = get_config()
-    if config.use_random_seed:
-        print("Using random random seed")
-    else:
-        print("Use random seed 1")
-        torch.manual_seed(1)
-        np.random.seed(1)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+
+    if not config.use_random_seed:
+        set_random_seed(1)
+
+    # A list of budgets to query, e.g. [100, 200, 300].
+    # Then the labeled pool will obtain 100 new samples each round, until 300 budgets are all used.
+    budget_list = get_budget_list_from_config(config)
 
     # It contains all directory/save_paths that will be used
-    budget_list = get_budget_list_from_config(config)
     paths_dict = prepare_active_learning_dir_from_config(config, budget_list)
 
-    dataset_factory = DatasetFactory(config.data,
-                                     # Where to download the images
-                                     paths_dict['data_download_path'],
-                                     # Where to save the dataset information
-                                     paths_dict['data_save_path'],
-                                     config.data_config,
-                                     data_rand_seed=config.data_rand_seed,
-                                     use_val_set=config.use_val_set)
-    train_dataset, test_dataset = dataset_factory.get_dataset()  # The pytorch datasets
-    # List of indices/labels
-    train_samples, train_labels = dataset_factory.get_train_set_info()
-    classes, open_classes = dataset_factory.get_class_info()  # Set of indices
+    dataset_info = prepare_dataset_from_config(
+        config,
+        paths_dict['data_download_path'],
+        paths_dict['data_save_path']
+    )
+
     time_stamp = time.strftime("%Y-%m-%d %H:%M")
 
-    # Begin from scratch
-    # Get initial training set, discovered classes
-    discovered_samples, discovered_classes = dataset_factory.get_init_train_set()
-    # Val samples is a subset of discovered_samples, and will be excluded in the network training.
-    val_samples = dataset_factory.get_val_samples()
-    # Get open samples and classes in train set
-    open_samples = dataset_factory.get_open_samples_in_trainset()
-
-    # The train set details
-    trainset_info = TrainsetInfo(train_dataset,
-                                 train_samples,
-                                 open_samples,
-                                 train_labels,
-                                 classes,
-                                 open_classes)
+    # Save the train set details for later analysis
     if not os.path.exists(paths_dict['trainset_info_path']):
-        torch.save(trainset_info, paths_dict['trainset_info_path'])
+        torch.save(
+            dataset_info.trainset_info,
+            paths_dict['trainset_info_path']
+        )
 
-    # The training details including arch, lr, batch size..
-    active_config = get_active_learning_config(config.data,
-                                               config.training_method,
-                                               config.active_train_mode)
+    # The training configurations including backbone architecture, lr, batch size..
+    trainer_config = get_trainer_config(
+        config.data,
+        config.training_method,
+        config.train_mode
+    )
+
+    discovered_samples = dataset_info.discovered_samples
+    discovered_classes = dataset_info.discovered_classes
 
     # Trainer is the main class for training and querying
-    # It contains train() query() finetune() functions
-    trainer = ActiveTrainer(
-        config.training_method,
-        active_config,
-        trainset_info,
-        config.query_method,
-        test_dataset,
-        val_samples=val_samples,
+    trainer = Trainer(
+        training_method=config.training_method,
+        trainer_config=trainer_config,
+        dataset_info=dataset_info
     )
 
     for i, b in enumerate(budget_list):
@@ -97,33 +87,33 @@ def main():
         else:
             budget = b
 
-        # if config.training_method == 'deep_metric':
-        #     print("Skip softmax network train phase, directly go to deep metric learning for train phase")
-        #     pretrained_softmax_path = os.path.join(config.deep_metric_softmax_pretrained_folder, config.data, config.data_config+".pt")
-        #     trainer.trainer_machine.load_backbone(pretrained_softmax_path)
-        new_discovered_samples, new_discovered_classes = trainer.query(budget,
-                                                                       discovered_samples,
-                                                                       discovered_classes,
-                                                                       paths_dict['active_query_results'][b],
-                                                                       verbose=config.verbose)
+        new_discovered_samples, new_discovered_classes = trainer.query(
+            discovered_samples,
+            discovered_classes,
+            budget=budget,
+            query_method=config.query_method,
+            query_result_path=paths_dict['active_query_results'][b],
+            verbose=config.verbose
+        )
 
         if config.active_query_scheme == 'sequential':
-            print("using sequential mode, we updated the discovered samples")
+            print("Using sequential mode, we updated the discovered samples")
             discovered_samples, discovered_classes = new_discovered_samples, new_discovered_classes
         else:
-            print("using independent mode, we do not update the initial labeled pool.")
+            print("Using independent mode, we do not update the initial labeled pool.")
 
-        trainer.train(new_discovered_samples,
-                      new_discovered_classes,
-                      paths_dict['active_ckpt_results'][b],
-                      verbose=config.verbose)
+        trainer.train(
+            new_discovered_samples,
+            new_discovered_classes,
+            ckpt_path=paths_dict['active_ckpt_results'][b],
+            verbose=config.verbose
+        )
 
-        closed_set_test_acc = trainer.eval_closed_set(new_discovered_classes,
-                                                      #   test_dataset,
-                                                      paths_dict['active_test_results'][b],
-                                                      verbose=config.verbose)
-
-        # trainer.eval_open_set(discovered_samples, discovered_classes, test_dataset, verbose=config.verbose)
+        closed_set_test_acc = trainer.eval_closed_set(
+            new_discovered_classes,
+            result_path=paths_dict['active_test_results'][b],
+            verbose=config.verbose
+        )
 
 
 if __name__ == '__main__':

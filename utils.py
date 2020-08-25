@@ -235,14 +235,14 @@ def get_open_set_save_dir(open_set_save_dir,
                           data_config,
                           data_rand_seed,
                           training_method,
-                          open_set_train_mode,
+                          train_mode,
                           makedir=True):
     save_dir = os.path.join(open_set_save_dir,
                             data,
                             data_config,
                             "seed_"+str(data_rand_seed),
                             training_method,
-                            open_set_train_mode)
+                            train_mode)
     if not os.path.exists(save_dir) and makedir:
         print("Making a new directory to save checkpoints for open set learning.")
         print(f"Location {save_dir}")
@@ -254,7 +254,7 @@ def get_active_save_dir(active_save_dir,
                         data_config,
                         data_rand_seed,
                         training_method,
-                        active_train_mode,
+                        train_mode,
                         active_query_scheme,
                         # active_val_mode,
                         makedir=True):
@@ -268,7 +268,7 @@ def get_active_save_dir(active_save_dir,
                             "seed_"+str(data_rand_seed),
                             # training_method_str,
                             training_method,
-                            active_train_mode,
+                            train_mode,
                             active_query_scheme)
     if not os.path.exists(save_dir) and makedir:
         print("Making a new directory to save checkpoints for active learning.")
@@ -388,10 +388,9 @@ def prepare_active_learning_dir_from_config(config, budget_list, makedir=True):
                                        config.data_config,
                                        config.data_rand_seed,
                                        config.training_method,
-                                       config.active_train_mode,
+                                       config.train_mode,
                                        config.query_method,
                                        config.active_query_scheme,
-                                    #    config.active_val_mode,
                                        makedir=makedir)
 
 def prepare_active_learning_dir(budget_list,
@@ -402,7 +401,7 @@ def prepare_active_learning_dir(budget_list,
                                 data_config,
                                 data_rand_seed,
                                 training_method,
-                                active_train_mode,
+                                train_mode,
                                 query_method,
                                 active_query_scheme,
                                 # active_val_mode,
@@ -423,7 +422,7 @@ def prepare_active_learning_dir(budget_list,
                                                         data_config,
                                                         data_rand_seed,
                                                         training_method,
-                                                        active_train_mode,
+                                                        train_mode,
                                                         active_query_scheme,
                                                         # active_val_mode,
                                                         makedir=makedir)
@@ -457,7 +456,7 @@ def prepare_open_set_learning_dir_from_config(config, makedir=True):
                                          config.data_config,
                                          config.data_rand_seed,
                                          config.training_method,
-                                         config.open_set_train_mode,
+                                         config.train_mode,
                                          open_set_methods,
                                          makedir=makedir)
 
@@ -468,7 +467,7 @@ def prepare_open_set_learning_dir(open_set_save_path,
                                   data_config,
                                   data_rand_seed,
                                   training_method,
-                                  open_set_train_mode,
+                                  train_mode,
                                   open_set_methods,
                                   makedir=True):
     """Return a dictionary of save_paths for open set learning
@@ -488,7 +487,7 @@ def prepare_open_set_learning_dir(open_set_save_path,
                                                             data_config,
                                                             data_rand_seed,
                                                             training_method,
-                                                            open_set_train_mode,
+                                                            train_mode,
                                                             makedir=makedir)
 
     folder_path = paths_dict["open_set_save_dir"]

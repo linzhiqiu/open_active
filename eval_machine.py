@@ -14,7 +14,8 @@ from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrin
 from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 import libmr
 import math
-from distance import eu_distance, cos_distance
+from query_machine import distance_matrix, cosine_distance
+
 
 def calc_auc_score(x, y):
     # x and y should be bounded between [0,1]
@@ -307,7 +308,7 @@ class OpenmaxOpen(NetworkOpen):
                               goscr_path,
                               verbose=True,
                               do_plot=True):
-        dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
+        dataset_loaders, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
         train_loader = dataset_loaders['train']
         self.num_discovered_classes = len(discovered_classes)
 
@@ -318,7 +319,7 @@ class OpenmaxOpen(NetworkOpen):
         #             self.div_eu = div_eu
         #             self.alpha_rank = alpha_rank
         #             self.weibull_tail_size = weibull_tail_size
-        #             self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
+        #             self.distance_func = lambda a, b: _eu_distance(a,b,div_eu=self.div_eu) + _cos_distance(a,b)
         #             features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
         #             self.weibull_distributions = self._gather_weibull_distribution(features_dict, div_eu)
         #             open_set_result_i = super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=False)
@@ -340,7 +341,7 @@ class OpenmaxOpen(NetworkOpen):
         # self.weibull_tail_size = res['weibull_tail_size']
         # self.alpha_rank = res['alpha_rank']
         # self.div_eu = res['div_eu']
-        self.distance_func = lambda a, b: eu_distance(a,b,div_eu=self.div_eu) + cos_distance(a,b)
+        self.distance_func = lambda a, b: _eu_distance(a,b,div_eu=self.div_eu) + _cos_distance(a,b)
         features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
         self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
         return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
@@ -540,8 +541,6 @@ class EntropyOpen(NetworkOpen):
         return open_set_prediction
 
 
-
-from query_machine import distance_matrix, cosine_distance
 class NNOpen(NetworkOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -566,7 +565,7 @@ class NNOpen(NetworkOpen):
                               goscr_path,
                               verbose=True,
                               do_plot=True):
-        dataset_loaders, _, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
+        dataset_loaders, _ = self.trainer_machine.get_trainloaders(discovered_samples, shuffle=False)
         train_loader = dataset_loaders['train']
         test_loader = get_loader(self.dataset_info.test_dataset,
                                  None,
@@ -688,3 +687,11 @@ class C2AE(NetworkOpen):
             # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction
+
+
+def _eu_distance(a, b, div_eu=200.):
+    return torch.sqrt(torch.sum((a - b) ** 2)) / div_eu
+
+
+def _cos_distance(a, b):
+    return 1 - torch.nn.CosineSimilarity(dim=0)(a, b)

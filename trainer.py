@@ -3,7 +3,7 @@ import os
 
 
 class Trainer(object):
-    def __init__(self, training_method, trainer_config, dataset_info, query_method):
+    def __init__(self, training_method, trainer_config, dataset_info):
         """The highest-level class performing training/querying/finetuning
         It will instantitate TrainerMachine/QueryMachine/EvalMachine objects based on the arguments,
         and use them for training/querying/testing.
@@ -12,24 +12,17 @@ class Trainer(object):
             training_method (str) : The network training method
             trainer_config (train_config.TrainerConfig) : Including all training hyperparameters
             dataset_info (dataset_factory.DatasetInfo) : The details about the dataset set
-            query_method (str) : The method for querying from the unlabeled pool
         """
         super(Trainer, self).__init__()
         self.training_method = training_method
         self.dataset_info = dataset_info
         self.trainer_config = trainer_config
-        self.query_method = query_method
 
         self.trainer_machine = trainer_machine.get_trainer_machine(
                                    training_method,
                                    dataset_info,
                                    trainer_config
                                )
-        self.query_machine = query_machine.get_query_machine(
-                                 query_method,
-                                 dataset_info,
-                                 trainer_config
-                             )
         
     def train(self, discovered_samples, discovered_classes, ckpt_path, verbose=False):
         """Performs training using [discovered_samples] and saved the results to [ckpt_path]
@@ -47,21 +40,33 @@ class Trainer(object):
             verbose=verbose
         )
     
-    def query(self, discovered_samples, discovered_classes, budget, query_result_path, verbose=False):
+    def query(self,
+              discovered_samples,
+              discovered_classes,
+              budget,
+              query_method,
+              query_result_path,
+              verbose=False):
         """Performs querying from unlabeled pool.
 
         Args:
             discovered_samples (list[int]): All discovered (labeled) training samples
             discovered_classes (list[int]): All classes with discovered samples
             budget (int): Number of new samples to label
+            query_method (str) : The method for querying from the unlabeled pool
             query_result_path (str): Where the result will be saved
             verbose (bool, optional): Whether to print more information. Defaults to False
 
         Returns:
             list[int]: Discovered (labeled) training samples after querying
             list[int]: Classes with discovered samples after querying
-        """        
-        return self.query_machine.query(
+        """
+        query_machine_instance = query_machine.get_query_machine(
+            query_method,
+            self.dataset_info,
+            self.trainer_config
+        )
+        return query_machine_instance.query(
             self.trainer_machine,
             budget,
             discovered_samples,

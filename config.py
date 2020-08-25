@@ -109,15 +109,15 @@ trainer_args.add_argument('--open_set_method',
 
 # Configs for analaysis.py
 analysis_arg = add_argument_group('Analysis.')
-analysis_arg.add_argument('--analysis_save_dir', default="/share/coecis/open_active/analysis",
+analysis_arg.add_argument('--analysis_save_dir', default="./analysis",
                           help='The directory to save all the plots.')
-analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network', 'deep_metric'], default='same_sample',
-                          help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
+analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network'], default='softmax_network',
+                          help='The training method to evaluate.')
 analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
                           help='For the budget constraint, whether to evaluate based on same query size, or same sample size.')
 
 active_analysis_arg = add_argument_group('Active Learning Analysis.')
-active_analysis_arg.add_argument('--active_analysis_save_dir', default="/share/coecis/open_active/active_analysis",
+active_analysis_arg.add_argument('--active_analysis_save_dir', default="./active_analysis",
                                  help='The directory to save all the plots for closed set active learning')
 
 
@@ -133,32 +133,22 @@ training_arg.add_argument('--seed', type=int, default=31,
 
 active_arg = add_argument_group('Active Learning Param.')
 active_arg.add_argument('--active_save_path',
-                        default='/share/coecis/open_active/active_datasets',
+                        default='./active_datasets',
                         help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
 active_arg.add_argument('--active_query_scheme', type=str,
                         choices=['sequential', 'independent'], default='sequential',
-                        help='How the query is selected etc.')
-active_arg.add_argument('--active_train_mode', type=str,
-                        choices=['retrain'], default='retrain',
-                        help='How many epochs etc.')
-active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{active_query_scheme}/{active_train_mode}/{seed}/{round}
-                        default='/share/coecis/open_active/active_learners',
+                        help='How the query is selected etc. Refer the module string of [start_active_learning.py] for details.')
+active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{active_query_scheme}/{train_mode}/{seed}/{round}
+                        default='./active_learners',
                         help='path to where the active learning checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
-active_arg.add_argument('--active_budget_mode',
-                        default='default',
-                        choices=['default',  # the default. Detail in global_settings.py
-                                 ],
-                        help="How to select the budget to query and evaluate")
+
 
 open_arg = add_argument_group("Open set Learning Param")
 open_arg.add_argument('--open_set_save_path',
-                      default='/share/coecis/open_active/open_datasets',
+                      default='./open_datasets',
                       help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
-open_arg.add_argument('--open_set_train_mode', type=str,
-                      choices=['default'], default='default',
-                      help='The training mode for open set recognition.')
-open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{open_set_train_mode}/{seed}/{open_set_method}
-                      default='/share/coecis/open_active/open_learners',
+open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{train_mode}/{seed}/{open_set_method}
+                      default='./open_learners',
                       help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
 
 
