@@ -1,5 +1,6 @@
+import os
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import copy
@@ -9,15 +10,25 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 from sklearn.metrics import roc_curve, roc_auc_score
-import os
-from utils import get_subset_dataloaders, get_subset_loader, get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_unmapping_dict, get_target_mapping_func, get_target_unmapping_func_for_list
-from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX, PRETRAINED_MODEL_PATH
 import libmr
 import math
+
+from utils import get_loader, SetPrintMode, get_target_mapping_func_for_tensor, get_target_mapping_func, get_target_unmapping_func_for_list
+from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 from query_machine import distance_matrix, cosine_distance
+from c2ae import Decoder, generator32, get_autoencoder, train_autoencoder
 
 
 def calc_auc_score(x, y):
+    """Calculate Area under Curve metric score for (x, y)
+
+    Args:
+        x (numpy.array): X values
+        y (numpy.array): Y values
+
+    Returns:
+        float: Area
+    """    
     # x and y should be bounded between [0,1]
     direction = 1
     dx = np.diff(x)
@@ -34,6 +45,20 @@ def calc_auc_score(x, y):
     return area
 
 def get_eval_machine(open_set_method, trainer_machine, dataset_info, trainer_config):
+    """Return a EvalMachine object
+
+    Args:
+        open_set_method (str): [description]
+        trainer_machine (trainer_machine.TrainerMachine): A trainer machine
+        dataset_info (dataset_factory.DatasetInfo): Dataset information
+        trainer_config (train_config.TrainerConfig): Training configuration
+
+    Raises:
+        NotImplementedError: [description]
+
+    Returns:
+        [type]: [description]
+    """    
     if open_set_method == 'entropy':
         eval_machine_class = EntropyOpen
     elif open_set_method == "openmax":
@@ -61,20 +86,6 @@ class EvalMachine(object):
         self.workers = trainer_config.workers
         self.device = trainer_config.device
 
-    def _get_target_mapp_func(self, discovered_classes):
-        return get_target_mapping_func_for_tensor(
-            self.dataset_info.class_info.classes,
-            discovered_classes,
-            self.dataset_info.class_info.open_classes,
-            device=self.device
-        )
-    
-    def _get_target_unmapping_func_for_list(self, discovered_classes):
-        return get_target_unmapping_func_for_list(
-            self.dataset_info.class_info.classes,
-            discovered_classes
-        )
-         
     def eval_open_set(self,
                       discovered_samples,
                       discovered_classes,
@@ -82,8 +93,16 @@ class EvalMachine(object):
                       roc_path,
                       goscr_path,
                       verbose=True):
-        """ Performing open set evaluation
-        """
+        """Performing open set test set evaluation
+
+        Args:
+            discovered_samples (list[int]): All discovered (labeled) training samples
+            discovered_classes (list[int]): All classes with discovered samples
+            result_path (dict): Each open set method correspond to a result path
+            roc_path (dict): Each open set method correspond to a ROC graph save path
+            goscr_path (dict): Each open set method correspond to a GOSCR graph save path
+            verbose (bool, optional): Whether to print more information. Defaults to False
+        """        
         if os.path.exists(result_path):
             print(f"Open set result already saved at {result_path}.")
             self.open_set_result = torch.load(result_path)
@@ -103,6 +122,20 @@ class EvalMachine(object):
                               verbose=True,
                               do_plot=True):
         raise NotImplementedError()
+    
+    def _get_target_mapp_func(self, discovered_classes):
+        return get_target_mapping_func_for_tensor(
+            self.dataset_info.class_info.classes,
+            discovered_classes,
+            self.dataset_info.class_info.open_classes,
+            device=self.device
+        )
+
+    def _get_target_unmapping_func_for_list(self, discovered_classes):
+        return get_target_unmapping_func_for_list(
+            self.dataset_info.class_info.classes,
+            discovered_classes
+        )
 
 class NetworkOpen(EvalMachine):
     def __init__(self, *args, **kwargs):
@@ -116,13 +149,16 @@ class NetworkOpen(EvalMachine):
                               verbose=True,
                               do_plot=True):
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
-        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes) # Only for transforming predicted label (in network indices) to real indices
+        # Only for transforming predicted label (in network indices) to real indices
+        target_unmapping_func_for_list = self._get_target_unmapping_func_for_list(discovered_classes)
 
-        dataloader = get_loader(self.dataset_info.test_dataset,
-                                None,
-                                shuffle=False,
-                                batch_size=self.batch,
-                                workers=self.workers)
+        dataloader = get_loader(
+            self.dataset_info.test_dataset,
+            None,
+            shuffle=False,
+            batch_size=self.batch,
+            workers=self.workers
+        )
         
         with SetPrintMode(hidden=not verbose):
             if verbose:
@@ -131,16 +167,17 @@ class NetworkOpen(EvalMachine):
                 pbar = dataloader
 
             open_set_prediction = self._get_open_set_pred_func()
-            open_set_result = {'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
-                               'real_labels' : [], # The real labels for CIFAR100 or other datasets.
-                               'open_set_score' : [], # Higher the score, more likely to be open set
-                               'closed_predicted' : [], # The predicted closed set label (indices in network output) if not open set?
-                               'closed_predicted_real' : [], # The predicted closed set label (real labels) if not open set?
-                               'closed_argmax_prob' : [], # The probability for predicted closed set class if not open set?
-                               'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
-                               'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
-                               'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
-                               } # A list of dictionary
+            open_set_result = {
+                'ground_truth' : [], # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
+                'real_labels' : [], # The real labels for CIFAR100 or other datasets.
+                'open_set_score' : [], # Higher the score, more likely to be open set
+                'closed_predicted' : [], # The predicted closed set label (indices in network output) if not open set?
+                'closed_predicted_real' : [], # The predicted closed set label (real labels) if not open set?
+                'closed_argmax_prob' : [], # The probability for predicted closed set class if not open set?
+                'open_predicted' : [], # What is the true predicted label including open set/ for k class method, this is same as above (network predicted output)
+                'open_predicted_real' : [], # What is the true predicted label including open set/ for k class method, this is same as above (real labels)
+                'open_argmax_prob' : [], # What is the probability of the true predicted label including open set/ for k class method, this is same as above
+            }
 
             with torch.no_grad():
                 for batch, data in enumerate(pbar):
@@ -166,14 +203,23 @@ class NetworkOpen(EvalMachine):
                     open_set_result['closed_argmax_prob'] += open_set_result_i['closed_argmax_prob']
                     open_set_result['open_argmax_prob'] += open_set_result_i['open_argmax_prob']
         
-        open_set_result['roc'] = self._parse_roc_result(open_set_result, roc_path, do_plot=do_plot)
-        open_set_result['goscr'] = self._parse_goscr_result(open_set_result, goscr_path, do_plot=do_plot)
+        open_set_result['roc'] = self._parse_roc_result(open_set_result,
+                                     roc_path,
+                                     do_plot=do_plot
+                                 )
+        open_set_result['goscr'] = self._parse_goscr_result(
+                                       open_set_result,
+                                       goscr_path,
+                                       do_plot=do_plot
+                                   )
         return open_set_result
     
     def _parse_roc_result(self, open_set_result, roc_path, do_plot=True):
-        res = {'fpr' : None,
-               'tpr' : None,
-               'auroc' : None}
+        res = {
+            'fpr' : None,
+            'tpr' : None,
+            'auroc' : None
+        }
         # Discovered v.s. Hold-out open
         gt = np.array(open_set_result['ground_truth']) # 0 if closed set, UNDISCOVERED_CLASS_INDEX if unseen open set, OPEN_CLASS_INDEX if hold out open set
         open_scores = np.array(open_set_result['open_set_score'])
@@ -292,12 +338,8 @@ class NetworkOpen(EvalMachine):
 class OpenmaxOpen(NetworkOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.weibull_tail_sizes = [20]
-        # self.alpha_ranks = [20, 80]
-        # self.div_eus = [1000] # EU distance will be divided by this number
         self.weibull_tail_size = 20
-        # self.alpha_rank = 10
-        self.alpha_rank = 5
+        self.alpha_rank = 4
         self.div_eu = 1000.
         self.mav_features_selection = "none_correct_then_all"
 
@@ -312,47 +354,35 @@ class OpenmaxOpen(NetworkOpen):
         train_loader = dataset_loaders['train']
         self.num_discovered_classes = len(discovered_classes)
 
-        # all_open_set_results = []
-        # for weibull_tail_size in self.weibull_tail_sizes:
-        #     for alpha_rank in self.alpha_ranks:
-        #         for div_eu in self.div_eus:
-        #             self.div_eu = div_eu
-        #             self.alpha_rank = alpha_rank
-        #             self.weibull_tail_size = weibull_tail_size
-        #             self.distance_func = lambda a, b: _eu_distance(a,b,div_eu=self.div_eu) + _cos_distance(a,b)
-        #             features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
-        #             self.weibull_distributions = self._gather_weibull_distribution(features_dict, div_eu)
-        #             open_set_result_i = super()._eval_open_set_helper(discovered_samples, discovered_classes, test_dataset, verbose=verbose, do_plot=False)
-        #             roc_i = open_set_result_i['roc']['auc_score']
-        #             print(f"AUROC {roc_i}, div_eu {div_eu}, alpha {alpha_rank}, tail {weibull_tail_size}")
-        #             d = {'roc' : roc_i,
-        #                  'div_eu' : div_eu,
-        #                  'alpha_rank' : alpha_rank,
-        #                  'weibull_tail_size': weibull_tail_size}
-        #             all_open_set_results.append(d)
-        # all_open_set_results.sort(key=lambda x: x['roc'], reverse=True)
-        # for res in all_open_set_results:
-        #     tail = res['weibull_tail_size']
-        #     score = res['roc']
-        #     alpha_rank = res['alpha_rank']
-        #     div_eu = res['div_eu']
-        #     print(f"AUROC {score}, div_eu {div_eu}, alpha {alpha_rank}, tail {tail}")
-        # res = all_open_set_results[0]
-        # self.weibull_tail_size = res['weibull_tail_size']
-        # self.alpha_rank = res['alpha_rank']
-        # self.div_eu = res['div_eu']
-        self.distance_func = lambda a, b: _eu_distance(a,b,div_eu=self.div_eu) + _cos_distance(a,b)
-        features_dict = self._gather_correct_features(train_loader, discovered_classes, mav_features_selection=self.mav_features_selection, verbose=verbose)
-        self.weibull_distributions = self._gather_weibull_distribution(features_dict, self.div_eu)
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
+        self.distance_func = lambda a, b: _eu_distance(a, b, div_eu=self.div_eu) + _cos_distance(a, b)
+        features_dict = self._gather_correct_features(
+                            train_loader,
+                            discovered_classes,
+                            mav_features_selection=self.mav_features_selection,
+                            verbose=verbose
+                        )
+        self.weibull_distributions = self._gather_weibull_distribution(
+                                         features_dict,
+                                         self.div_eu
+                                     )
+        return super()._eval_open_set_helper(
+            discovered_samples,
+            discovered_classes,
+            roc_path,
+            goscr_path,
+            verbose=verbose,
+            do_plot=True
+        )
     
 
     def _gather_correct_features(self, train_loader, discovered_classes=set(), mav_features_selection='correct', verbose=False):
         assert len(discovered_classes) > 0
         assert mav_features_selection in ['correct', 'none_correct_then_all', 'all']
-        mapping_func = get_target_mapping_func(self.dataset_info.class_info.classes,
-                                               discovered_classes,
-                                               self.dataset_info.class_info.open_classes)
+        mapping_func = get_target_mapping_func(
+                           self.dataset_info.class_info.classes,
+                           discovered_classes,
+                           self.dataset_info.class_info.open_classes
+                       )
         target_mapping_func = self._get_target_mapp_func(discovered_classes)
         seen_class_softmax_indices = [mapping_func(i) for i in discovered_classes]
 
@@ -449,7 +479,7 @@ class OpenmaxOpen(NetworkOpen):
         open_set_result_i = {}
         outputs = self.trainer_machine.get_class_scores(inputs)
         alpha_weights = [((self.alpha_rank+1) - i)/float(self.alpha_rank) for i in range(1, self.alpha_rank+1)]
-        softmax_outputs = F.softmax(outputs, dim=1)
+        softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)
         _, softmax_rank = torch.sort(softmax_outputs, descending=True)
         
         open_scores = torch.zeros(outputs.size(0)).to(outputs.device)
@@ -470,7 +500,13 @@ class OpenmaxOpen(NetworkOpen):
                 batch_i_output[class_index] = modified_score # should change the corresponding score in outputs
 
         # total_denominators = torch.sum(torch.exp(outputs), dim=1) + torch.exp(open_scores)
-        openmax_outputs = F.softmax(torch.cat((outputs, open_scores.unsqueeze(1)), dim=1), dim=1)
+        openmax_outputs = torch.nn.functional.softmax(
+            torch.cat(
+                (outputs, open_scores.unsqueeze(1)),
+                dim=1
+            ),
+            dim=1
+        )
         openmax_max, openmax_preds = torch.max(openmax_outputs, 1)
         openmax_top2, openmax_preds2 = torch.topk(openmax_outputs, 2, dim=1)
         closed_preds = torch.where(openmax_preds == self.num_discovered_classes, 
@@ -513,7 +549,6 @@ class SoftmaxOpen(NetworkOpen):
             open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
             open_set_result_i['open_predicted']     = softmax_preds.tolist()
             open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
-            # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction
 
@@ -536,7 +571,6 @@ class EntropyOpen(NetworkOpen):
             open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
             open_set_result_i['open_predicted']     = softmax_preds.tolist()
             open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
-            # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction
 
@@ -598,7 +632,6 @@ class NNCosineOpen(NNOpen):
         super().__init__(*args, **kwargs)
         self.distance_function = cosine_distance # Euclidean distance matrix
 
-from c2ae import Decoder, generator32, get_autoencoder, train_autoencoder
 class C2AE(NetworkOpen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -658,7 +691,14 @@ class C2AE(NetworkOpen):
                                     )
         print(f"C2AE "
               f"Match Loss {match_loss}, Non-match Loss {nm_loss}")
-        return super()._eval_open_set_helper(discovered_samples, discovered_classes, roc_path, goscr_path, verbose=verbose, do_plot=True)
+        return super()._eval_open_set_helper(
+            discovered_samples,
+            discovered_classes,
+            roc_path,
+            goscr_path,
+            verbose=verbose,
+            do_plot=True
+        )
 
     def _get_open_set_pred_func(self):
         def open_set_prediction(inputs):
@@ -684,7 +724,6 @@ class C2AE(NetworkOpen):
             open_set_result_i['closed_argmax_prob'] = softmax_max.tolist()
             open_set_result_i['open_predicted']     = softmax_preds.tolist()
             open_set_result_i['open_argmax_prob']   = softmax_max.tolist()
-            # open_set_result_i['actual_loss']        += (torch.nn.CrossEntropyLoss(reduction='none')(outputs, label_for_learnloss)).tolist()
             return open_set_result_i
         return open_set_prediction
 

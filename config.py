@@ -29,8 +29,7 @@ parser = argparse.ArgumentParser(
 dataset_args = add_argument_group('Dataset Param.')
 dataset_args.add_argument('data',
                           default="CIFAR100",
-                          choices=["CIFAR10", # Regular CIFAR10
-                                   "OPEN_CIFAR10", # CIFAR10 for open set learning
+                          choices=["CIFAR10",
                                    "CIFAR100",
                                    'CUB200',
                                    'Cars'],
@@ -70,11 +69,9 @@ trainer_args.add_argument('--training_method',
                                    ],
                           help='The training method determines how to train/finetune using labeled samples.'
                           )
-trainer_args.add_argument('--trainer_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{trainer}/{train/query/finetune/result}
-                          default='./trainers',
-                          help='path to where the trainer checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
-
-
+trainer_args.add_argument('--train_mode', type=str,
+                          choices=['retrain'], default='retrain',
+                          help='The optimization mode. Check TRAIN_CONFIG_DICT in trainer_config.py.')
 trainer_args.add_argument('--query_method',
                           default='entropy',
                           choices=['random',  # random query
@@ -93,8 +90,6 @@ trainer_args.add_argument('--budget',
                           type=int,
                           help='The budget to query from unlabeled pool.'
                           )
-
-# Warning not used anymore
 trainer_args.add_argument('--open_set_method',
                           default='entropy',
                           choices=['entropy',
@@ -107,10 +102,22 @@ trainer_args.add_argument('--open_set_method',
                           help='The open set method determines how evaluate the open set score of a test sample.'
                           )
 
+save_dir_args = add_argument_group('Checkpoint Saving Directory.')
+save_dir_args.add_argument('--open_active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{train_mode}/{train/query/finetune/result}
+                           default='./open_active_learners',
+                           help='Where checkpoints will be saved for open set active experiments.')
+save_dir_args.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{active_query_scheme}/{train_mode}/{seed}/{round}
+                           default='./active_learners',
+                           help='Where checkpoints will be saved for closed set active experiments.')
+save_dir_args.add_argument('--open_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{train_mode}/{seed}/{open_set_method}
+                           default='./open_learners',
+                           help='Where checkpoints will be saved for open set active experiments.')
+
+
 # Configs for analaysis.py
 analysis_arg = add_argument_group('Analysis.')
-analysis_arg.add_argument('--analysis_save_dir', default="./analysis",
-                          help='The directory to save all the plots.')
+analysis_arg.add_argument('--analysis_save_dir', default="./open_active_analysis",
+                          help='The directory to save all the plots for open set active learning experiments [start_open_active_learning.py].')
 analysis_arg.add_argument('--analysis_trainer', choices=['softmax_network', 'cosine_network'], default='softmax_network',
                           help='The training method to evaluate.')
 analysis_arg.add_argument('--budget_mode', choices=['1_5_10_20_50_100'], default='1_5_10_20_50_100',
@@ -121,15 +128,6 @@ active_analysis_arg.add_argument('--active_analysis_save_dir', default="./active
                                  help='The directory to save all the plots for closed set active learning')
 
 
-training_arg = add_argument_group('Training and Finetuning Param.')
-training_arg.add_argument('--train_mode', type=str,
-                          choices=['retrain'], default='retrain',
-                          help='The training and finetuning mode. Check TRAIN_CONFIG_DICT in trainer_machine.py.')
-training_arg.add_argument('--workers', default=4, type=int,
-                          help='number of data loading workers (default: 4)')
-training_arg.add_argument('--seed', type=int, default=31,
-                          help='random seed (default: 31)')
-
 
 active_arg = add_argument_group('Active Learning Param.')
 active_arg.add_argument('--active_save_path',
@@ -138,19 +136,13 @@ active_arg.add_argument('--active_save_path',
 active_arg.add_argument('--active_query_scheme', type=str,
                         choices=['sequential', 'independent'], default='sequential',
                         help='How the query is selected etc. Refer the module string of [start_active_learning.py] for details.')
-active_arg.add_argument('--active_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{active_query_scheme}/{train_mode}/{seed}/{round}
-                        default='./active_learners',
-                        help='path to where the active learning checkpoints will be saved after training/finetuning. If already exist, use existing dataset.')
+
 
 
 open_arg = add_argument_group("Open set Learning Param")
 open_arg.add_argument('--open_set_save_path',
                       default='./open_datasets',
                       help='path to where the dataset information will be saved after initialized. If already exist, use existing dataset.')
-open_arg.add_argument('--open_set_save_dir',  # The direction hierachy will be: {dataset}/{data_config}/{training_method}/{train_mode}/{seed}/{open_set_method}
-                      default='./open_learners',
-                      help='path to where the open set learning checkpoints will be saved after training/eval. If already exist, use existing dataset.')
-
 
 misc_arg = add_argument_group('Misc.')
 misc_arg.add_argument('--device', type=str, default='cuda',

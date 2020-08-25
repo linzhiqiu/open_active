@@ -11,7 +11,6 @@ import os
 
 from utils import get_subset_dataloaders, SetPrintMode
 from global_setting import UNDISCOVERED_CLASS_INDEX
-from eval_machine import NetworkOpen
 
 class Decoder(nn.Module):
     def __init__(self, latent_size=100, batch_size=64, num_classes=0, generator_class=None, **decoder_params):

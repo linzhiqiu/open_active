@@ -3,8 +3,6 @@ import os
 import random
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from tqdm import tqdm
@@ -16,6 +14,7 @@ from global_setting import OPEN_CLASS_INDEX, UNDISCOVERED_CLASS_INDEX
 
 def get_trainer_machine(training_method, dataset_info, trainer_config):
     """Return a TrainerMachine object
+    
     Args:
         training_method (str) : The training method
         dataset_info (dataset_factory.DatasetInfo) : Dataset information
@@ -294,7 +293,10 @@ class Network(TrainerMachine):
                             outputs = self.classifier(features)
                             _, preds = torch.max(outputs, 1)
 
-                            log_probability = F.log_softmax(outputs, dim=1)
+                            log_probability = torch.nn.functional.log_softmax(
+                                outputs,
+                                dim=1
+                            )
 
                             loss = criterion(log_probability, labels)
 
@@ -496,13 +498,3 @@ class CosineNetwork(Network):
 
     def _get_classifier(self, discovered_classes):
         return models.cosine_clf(self.feature_dim, len(discovered_classes))
-
-
-def get_acc_from_performance_dict(dict):
-    result_dict = {}
-    for k in dict.keys():
-        if dict[k]['count'] == 0:
-            result_dict[k] = "N/A"
-        else:
-            result_dict[k] = float(dict[k]['corrects']/dict[k]['count'])
-    return result_dict

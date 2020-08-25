@@ -38,3 +38,5 @@ weights/
 active_analysis_*/
 open_set_learners/
 analysis_*/
+*_analysis/
+*_learners/

@@ -14,7 +14,7 @@ def get_transform_dict(data):
     Returns:
         dict: A dict with two keys 'train' and 'test' with corresponding value being the transform object.
     """    
-    if data in ["CIFAR10", "CIFAR100", "OPEN_CIFAR10"]:
+    if data in ["CIFAR10", "CIFAR100"]:
         transform_train, transform_test = _get_cifar_transform()
     elif data in ['CUB200', 'Cars']:
         transform_train, transform_test = _get_imagenet_transform()

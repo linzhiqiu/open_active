@@ -37,21 +37,12 @@ plt.rc('ytick', labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 def get_pretty_name(str, verbose=True):
-    if str == 'default': return "Finetune"
-    if str == 'default_lr01_200eps': return "Retrain"
-    if str == 'fix_feature_extractor': return "Linear"
-
     if str == 'regular': return "Original Setup"
     if str == 'fewer_class': return "Fewer Classes"
     if str == 'fewer_sample': return "Fewer Samples"
     
     if str == 'softmax_network': return "Softmax"
     if str == 'cosine_network': return "Cosine"
-    if str == 'deep_metric':
-        if verbose:
-            return "Deep Metric Learning"
-        else:
-            return "DML"
     
     if str == 'softmax': return "Argmax Probability"
     if str == 'uldr': return "ULDR"
@@ -84,13 +75,9 @@ def get_label_name(plot_mode, data_config, training_method, query_method, open_m
         else:
             return None
 
-def get_result_str(key, init_size, budget_dict):
-    if key in ['combined', 'same_sample']:
-        prefix = "Total Labeled Sample: "
-        add_num = init_size
-    else:
-        prefix = "Total Query Budget: "
-        add_num = 0
+def get_result_str(init_size, budget_dict):
+    prefix = "Total Labeled Sample: "
+    add_num = init_size
     
     for b in budget_dict:
         prefix += str(b+add_num) + f":(mean:{budget_dict[b]['res']:.4f})|(std:{budget_dict[b]['err']:.4f})|(count:{budget_dict[b]['count']:2d}) " 
@@ -99,7 +86,7 @@ def get_result_str(key, init_size, budget_dict):
 class AnalysisMachine(object):
     """Store all the configs we want to compare
     """
-    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, data_save_path, trainer_save_dir, data, data_rand_seed_list, training_method_list, train_mode, query_method_list):
+    def __init__(self, analysis_save_dir, analysis_trainer, budget_mode, data_download_path, data_save_path, open_active_save_dir, data, data_rand_seed_list, training_method_list, train_mode, query_method_list):
         super().__init__()
         self.silent_mode = False
         self.analysis_save_dir = analysis_save_dir
@@ -108,12 +95,7 @@ class AnalysisMachine(object):
         self.train_mode = train_mode
         self.data = data
         self.save_dir = self.get_save_dir()
-        if not os.path.exists(self.save_dir):
-            os.makedirs(self.save_dir)
-        else:
-            print(f"Already exists: {self.save_dir} . Overwriting")
 
-        self.script_dir = self.get_script_dir()
         self.plot_dir = self.get_plot_dir()
 
         self.data = data
@@ -123,11 +105,10 @@ class AnalysisMachine(object):
         self.ALL_QUERY_METHODS = ['random', 'entropy', 'uldr', 'uldr_norm_cosine', 'coreset', 'coreset_norm_cosine', 'softmax']
         # self.ALL_QUERY_METHODS = ['random', ]
         self.ALL_DATA_CONFIGS = ['regular', 'fewer_class', 'fewer_sample']
-        self.ALL_TRAIN_MODES = ['default_lr01_200eps']
 
 
         self.PLOT_MODE = ['compare_active', 'compare_train', 'compare_setting']
-        self.trainer_save_dir = trainer_save_dir
+        self.open_active_save_dir = open_active_save_dir
         self.data_save_path = data_save_path
         self.data_download_path = data_download_path
         
@@ -135,115 +116,111 @@ class AnalysisMachine(object):
         self.query_method_list = query_method_list
 
     def get_save_dir(self):
-        return os.path.join(self.analysis_save_dir,
-                            self.data,
-                            self.train_mode,
-                            self.analysis_trainer,
-                            self.budget_mode)
-    
-    def get_script_dir(self):
-        return os.path.join(self.get_save_dir(),
-                            )
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        else:
+            print(f"Already exists: {self.save_dir} . Overwriting")
+        save_dir = os.path.join(
+                       self.analysis_save_dir,
+                       self.data,
+                       self.train_mode,
+                       self.analysis_trainer,
+                       self.budget_mode
+                   )
     
     def get_plot_dir(self):
         return os.path.join(self.analysis_save_dir,
                             self.data,
                             self.train_mode,
-                            self.budget_mode)
-    
-    def get_update_plot_dir(self):
-        return os.path.join(self.analysis_save_dir,
-                            self.data,
-                            'all_update_rule',
+                            "plots",
                             self.budget_mode)
     
     def check_ckpts_exist(self):
-        for a_mode in ['same_sample']:
-            budget_list_regular, budget_list_fewer= self._get_budget_candidates(analysis_mode=a_mode)
-            
-            print("For regular setup, the budgets to query are: " + str(budget_list_regular))
-            print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
-            
-            print(f"Saving all unfinished experiments to {self.script_dir}")
-            undone_exp = []
-            script_file = os.path.join(self.script_dir, f"scripts_{a_mode}.sh")
-            script_err = os.path.join(self.script_dir, "scripts.err")
-            script_out = os.path.join(self.script_dir, "scripts.out")
+        budget_list_regular, budget_list_fewer= self._get_budget_candidates()
+        
+        print("For regular setup, the budgets to query are: " + str(budget_list_regular))
+        print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
+        
+        print(f"Saving all unfinished experiments to {self.save_dir}")
+        undone_exp = []
+        script_file = os.path.join(self.save_dir, f"scripts.sh")
+        script_err = os.path.join(self.save_dir, "scripts.err")
+        script_out = os.path.join(self.save_dir, "scripts.out")
 
-            enum_list = [('regular', budget_list_regular),
-                            ('fewer_class', budget_list_fewer),
-                            ('fewer_sample',budget_list_fewer)]
-            for data_config, b_list in enum_list:
-                print(f"For {data_config} setting: The experiments to run are:")
-                undone_exp_mode = []
-                for b in b_list:
-                    undone_exp_b = []
-                    b_dir = os.path.join(self.script_dir, data_config, f"budget_{b}")
-                    if not os.path.exists(b_dir): os.makedirs(b_dir)
-                    for training_method in self.training_method_list:
-                        for query_method in self.query_method_list:
-                            for data_rand_seed in self.ALL_DATASET_RAND_SEED:
-                                paths_dict = prepare_save_dir(self.data_save_path,
-                                                            self.data_download_path,
-                                                            self.trainer_save_dir,
-                                                            self.data,
-                                                            data_config,
-                                                            data_rand_seed,
-                                                            training_method,
-                                                            self.train_mode,
-                                                            query_method,
-                                                            b,
-                                                            global_setting.OPEN_SET_METHOD_DICT[training_method],
-                                                            makedir=False)
-                                # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
-                                    # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
-                                
-                                # For all ckpts
-                                for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_paths']:
-                                    exp_finished = True
-                                    if k == 'open_result_paths':
-                                        for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
-                                            if not os.path.exists(paths_dict[k][o_method]):
-                                                exp_finished = False
-                                    else:
-                                        if not os.path.exists(paths_dict[k]):
+        enum_list = [
+            ('regular', budget_list_regular),
+            ('fewer_class', budget_list_fewer),
+            ('fewer_sample',budget_list_fewer)
+        ]
+        for data_config, b_list in enum_list:
+            print(f"For {data_config} setting: The experiments to run are:")
+            undone_exp_mode = []
+            for b in b_list:
+                undone_exp_b = []
+                b_dir = os.path.join(self.save_dir, data_config, f"budget_{b}")
+                if not os.path.exists(b_dir): os.makedirs(b_dir)
+                for training_method in self.training_method_list:
+                    for query_method in self.query_method_list:
+                        for data_rand_seed in self.ALL_DATASET_RAND_SEED:
+                            paths_dict = prepare_save_dir(self.data_save_path,
+                                                        self.data_download_path,
+                                                        self.open_active_save_dir,
+                                                        self.data,
+                                                        data_config,
+                                                        data_rand_seed,
+                                                        training_method,
+                                                        self.train_mode,
+                                                        query_method,
+                                                        b,
+                                                        global_setting.OPEN_SET_METHOD_DICT[training_method],
+                                                        makedir=False)
+                            # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path']:
+                                # for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_path']:
+                            
+                            # For all ckpts
+                            for k in ['trained_ckpt_path', 'query_result_path', 'finetuned_ckpt_path', 'test_result_path', 'open_result_paths']:
+                                exp_finished = True
+                                if k == 'open_result_paths':
+                                    for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
+                                        if not os.path.exists(paths_dict[k][o_method]):
                                             exp_finished = False
-                                    if not exp_finished:
-                                        python_script = self._get_exp_name(data_config,
-                                                                            training_method,
-                                                                            query_method,
-                                                                            b,
-                                                                            data_rand_seed,
-                                                                            silent=self.silent_mode)
-                                        idx = len(undone_exp_b)
-                                        b_err_i = os.path.join(b_dir, f"{idx}.err")
-                                        b_out_i = os.path.join(b_dir, f"{idx}.out")
-                                        # script = python_script + f" >> >(tee -a {b_out_i} >> {script_out}) 2>> >(tee -a {b_err_i} >> {script_err}) \n"
-                                        if self.silent_mode:
-                                            script = python_script + f" > {b_out_i} 2> {b_err_i} \n"
-                                        else:
-                                            script = python_script + " \n"
-                                        undone_exp_b.append(script)
-                                        break
-                    if undone_exp_b.__len__() > 0:
-                        print(f"Budget {b}: {len(undone_exp_b)} experiments to run.")
-                        undone_exp_mode = undone_exp_mode + undone_exp_b   
-                if undone_exp_mode.__len__() > 0:
-                    print(f"Mode {data_config}: {len(undone_exp_mode)} to run.")
-                    undone_exp = undone_exp + undone_exp_mode
+                                else:
+                                    if not os.path.exists(paths_dict[k]):
+                                        exp_finished = False
+                                if not exp_finished:
+                                    python_script = self._get_exp_name(data_config,
+                                                                        training_method,
+                                                                        query_method,
+                                                                        b,
+                                                                        data_rand_seed,
+                                                                        silent=self.silent_mode)
+                                    idx = len(undone_exp_b)
+                                    b_err_i = os.path.join(b_dir, f"{idx}.err")
+                                    b_out_i = os.path.join(b_dir, f"{idx}.out")
+                                    # script = python_script + f" >> >(tee -a {b_out_i} >> {script_out}) 2>> >(tee -a {b_err_i} >> {script_err}) \n"
+                                    if self.silent_mode:
+                                        script = python_script + f" > {b_out_i} 2> {b_err_i} \n"
+                                    else:
+                                        script = python_script + " \n"
+                                    undone_exp_b.append(script)
+                                    break
+                if undone_exp_b.__len__() > 0:
+                    print(f"Budget {b}: {len(undone_exp_b)} experiments to run.")
+                    undone_exp_mode = undone_exp_mode + undone_exp_b   
+            if undone_exp_mode.__len__() > 0:
+                print(f"Mode {data_config}: {len(undone_exp_mode)} to run.")
+                undone_exp = undone_exp + undone_exp_mode
             if undone_exp.__len__() > 0:
                 if not os.path.exists(b_dir):
                     os.makedirs(b_dir)
-                    print(f"Details will be saved at {script_dir}")
+                    print(f"Details will be saved at {save_dir}")
                 with open(script_file, "w+") as file:
                     for i, line in enumerate(undone_exp):
                         file.write(line)
-            print(f"Budget analysis {a_mode}: {len(undone_exp)} experiments to run at {script_file}.")
+            print(f"Budget analysis: {len(undone_exp)} experiments to run at {script_file}.")
 
     def draw_closed_set(self, draw_open=True, draw_perclass=True):
-        budget_list_regular, budget_list_fewer_same_budget = self._get_budget_candidates(analysis_mode='same_budget')
-        _, budget_list_fewer_same_sample = self._get_budget_candidates(analysis_mode='same_sample')
-        budget_list_fewer = list(set(budget_list_fewer_same_budget + budget_list_fewer_same_sample))
+        budget_list_regular, budget_list_fewer = self._get_budget_candidates()
         budget_list_fewer.sort()
         print("For regular setup, the budgets to query are: " + str(budget_list_regular))
         print("For fewer class/sample setup, the budgets to query are: " + str(budget_list_fewer))
@@ -271,7 +248,7 @@ class AnalysisMachine(object):
                         for data_rand_seed in self.ALL_DATASET_RAND_SEED:
                             paths_dict = prepare_save_dir(self.data_save_path,
                                                           self.data_download_path,
-                                                          self.trainer_save_dir,
+                                                          self.open_active_save_dir,
                                                           self.data,
                                                           data_config,
                                                           data_rand_seed,
@@ -311,38 +288,23 @@ class AnalysisMachine(object):
                             else:
                                 unfinished += 1
 
-        # total = finished+unfinished
-        # print(f"{finished}/{total} experiments are finished.")
-        # print(f"Plot will be draw at {self.plot_dir}")
-
-        comparsion_dict = {
-            'same_sample' : {'path':os.path.join(self.plot_dir, "same_sample"),
-                             'fewer_b_list': budget_list_fewer_same_sample,
-                             'regular_b_list': budget_list_regular},
-            # 'same_budget' : {'path':os.path.join(self.plot_dir, "same_budget"),
-            #                  'fewer_b_list': budget_list_fewer_same_budget,
-            #                  'regular_b_list': budget_list_regular},
-            # 'combined' : {'path':os.path.join(self.plot_dir, "combined"),
-            #               'fewer_b_list': budget_list_fewer,
-            #               'regular_b_list': budget_list_regular},
-        }
+        comparsion_dict = {'path':os.path.join(self.plot_dir),
+                           'fewer_b_list': budget_list_fewer,
+                           'regular_b_list': budget_list_regular}
         if not os.path.exists(self.plot_dir): os.makedirs(self.plot_dir)
         print("All plots are saved at " + self.plot_dir)
         total_pool_size, regular_init_size, fewer_init_size, budget_ratio = self._get_dataset_info()
         
-        
-        for k in comparsion_dict.keys():
-            if draw_perclass: self._draw_perclass_plot(finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
-            for plot_mode in self.PLOT_MODE:
-                self._draw_closed_set_plot(plot_mode, finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
-            if draw_open: self._draw_open_set_plot(finished_exp, k, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
+        if draw_perclass: self._draw_perclass_plot(finished_exp, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
+        for plot_mode in self.PLOT_MODE:
+            self._draw_closed_set_plot(plot_mode, finished_exp, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
+        if draw_open: self._draw_open_set_plot(finished_exp, comparsion_dict, total_pool_size, regular_init_size, fewer_init_size, budget_ratio)
 
-    def _draw_closed_set_plot(self, plot_mode, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, draw_acc_lowest=True, draw_acc_highest=True, error_bar=False):
-        assert key in comparsion_dict
-        path = os.path.join(comparsion_dict[key]['path'], plot_mode)
+    def _draw_closed_set_plot(self, plot_mode, finished_exp, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, draw_acc_lowest=True, draw_acc_highest=True, error_bar=False):
+        path = os.path.join(comparsion_dict['path'], plot_mode)
         if not os.path.exists(path): os.makedirs(path)
-        fewer_b_list = comparsion_dict[key]['fewer_b_list']
-        regular_b_list = comparsion_dict[key]['regular_b_list']
+        fewer_b_list = comparsion_dict['fewer_b_list']
+        regular_b_list = comparsion_dict['regular_b_list']
         
         min_seen_line_idx_dict = {}
         for item in ['seen', 'acc']:
@@ -400,12 +362,7 @@ class AnalysisMachine(object):
                 color_func, marker_func = get_style_funcs(plot_mode)
                 axes = plt.gca()
                 axes.set_xlim([0, total_size])
-                if key == 'same_sample':
-                    plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
-                # elif key == 'same_budget':
-                #     plt.xlabel("Number of budgets after initial round", fontsize=LABEL_SIZE)
-                # elif key == 'combined':
-                #     plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
+                plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
                 
                 save_path = os.path.join(path, compare_thing+"_"+item+".png")
                 save_path_txt = os.path.join(path, compare_thing+"_"+item+".txt")
@@ -432,8 +389,7 @@ class AnalysisMachine(object):
                         budget_list = fewer_b_list
                         init_size = fewer_size
                     x = np.array(budget_list)
-                    if key in ['combined', 'same_sample']:
-                        x = x + init_size
+                    x = x + init_size
                     for training_method in ALL_TRAIN_METHODS:
                         if not training_method in detail_dict: detail_dict[data_config][training_method] = {}
                         for query_method in ALL_QUERY_METHODS:
@@ -456,8 +412,6 @@ class AnalysisMachine(object):
                                     y[idx] = res
                                     err[idx] = std
                                     if draw_seen_line and item=='seen' and res < 1 and min_seen_line_idx_dict[compare_thing] <= idx:
-                                        # if key == 'same_budget' and data_config == 'fewer_sample':
-                                        #     import pdb; pdb.set_trace()
                                         min_seen_line_idx_dict[compare_thing] = idx+1
                                     if draw_acc_lowest and item=='acc' and res < acc_min:
                                         acc_min = res
@@ -479,8 +433,7 @@ class AnalysisMachine(object):
                 
                 if draw_seen_line:
                     min_seen = budget_list[min_seen_line_idx_dict[compare_thing]]
-                    if key in ['combined', 'same_sample']:
-                        min_seen = min_seen + init_size
+                    min_seen = min_seen + init_size
                     print("all seen line draw at " + str(min_seen))
                     plt.vlines(min_seen,0,1,
                                linestyles='dashed')
@@ -499,7 +452,7 @@ class AnalysisMachine(object):
                         for t_method in detail_dict[i_mode]:
                             for q_method in detail_dict[i_mode][t_method]:
                                 label_str = get_label_name(plot_mode, i_mode, t_method, q_method, open_method=None)
-                                result_str = get_result_str(key, init_size, detail_dict[i_mode][t_method][q_method])
+                                result_str = get_result_str(init_size, detail_dict[i_mode][t_method][q_method])
                                 result_lists.append([label_str, result_str])
                     file.write(tabulate(result_lists, headers=['Details', 'Result'], tablefmt='orgtbl'))
                 print(f"Saved at {save_path_txt}")
@@ -568,12 +521,7 @@ class AnalysisMachine(object):
                     axes = plt.gca()
                     axes.set_ylim([0,1])
                     axes.set_xlim([0, total_size])
-                    if key == 'same_sample':
-                        plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
-                    elif key == 'same_budget':
-                        plt.xlabel("Number of budgets after initial round", fontsize=LABEL_SIZE)
-                    elif key == 'combined':
-                        plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
+                    plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
                     
                     save_path = os.path.join(open_path, compare_thing+"_"+item+".png")
                     save_path_txt = os.path.join(open_path, compare_thing+"_"+item+".txt")
@@ -598,8 +546,7 @@ class AnalysisMachine(object):
                             budget_list = fewer_b_list
                             init_size = fewer_size
                         x = np.array(budget_list)
-                        if key in ['combined', 'same_sample']:
-                            x = x + init_size
+                        x = x + init_size
                         for training_method in ALL_TRAIN_METHODS:
                             if not training_method in detail_dict: detail_dict[data_config][training_method] = {}
                             for query_method in ALL_QUERY_METHODS:
@@ -639,8 +586,7 @@ class AnalysisMachine(object):
                     # plt.legend(fontsize=LEGEND_SIZE)
                     if draw_seen_line:
                         min_seen = budget_list[min_seen_line_idx_dict[compare_thing]]
-                        if key in ['combined', 'same_sample']:
-                            min_seen = min_seen + init_size
+                        min_seen = min_seen + init_size
                         # print("all seen line draw at " + str(min_seen))
                         plt.vlines(min_seen,0,1,
                                    linestyles='dashed')
@@ -656,17 +602,16 @@ class AnalysisMachine(object):
                                 for q_method in detail_dict[i_mode][t_method]:
                                     label_str = get_label_name(plot_mode, i_mode, t_method, q_method, open_method=None)
                                     init_size = regular_size if i_mode == "regular" else fewer_size
-                                    result_str = get_result_str(key, init_size, detail_dict[i_mode][t_method][q_method])
+                                    result_str = get_result_str(init_size, detail_dict[i_mode][t_method][q_method])
                                     result_lists.append([label_str, result_str])
                         file.write(tabulate(result_lists, headers=['Details', 'Result'], tablefmt='orgtbl'))
                     print(f"Saved at {save_path_txt}")
     
-    def _draw_open_set_plot(self, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
-        assert key in comparsion_dict
-        path = os.path.join(comparsion_dict[key]['path'], "compare_open")
+    def _draw_open_set_plot(self, finished_exp, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
+        path = os.path.join(comparsion_dict['path'], "compare_open")
         if not os.path.exists(path): os.makedirs(path)
-        fewer_b_list = comparsion_dict[key]['fewer_b_list']
-        regular_b_list = comparsion_dict[key]['regular_b_list']
+        fewer_b_list = comparsion_dict['fewer_b_list']
+        regular_b_list = comparsion_dict['regular_b_list']
         
         ALL_DATA_CONFIGS = self.ALL_DATA_CONFIGS
         ALL_TRAIN_METHODS = self.ALL_TRAIN_METHODS
@@ -696,8 +641,7 @@ class AnalysisMachine(object):
                     budget_list = fewer_b_list
                     init_size = fewer_size
                 x = np.array(budget_list)
-                if key in ['combined', 'same_sample']:
-                    x = x + init_size
+                x = x + init_size
                 for training_method in ALL_TRAIN_METHODS:
                     for query_method in ALL_QUERY_METHODS:
                         color_dict = {}
@@ -717,12 +661,7 @@ class AnalysisMachine(object):
                         axes = plt.gca()
                         axes.set_ylim([0,1])
                         axes.set_xlim([0, total_size])
-                        if key == 'same_sample':
-                            plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
-                        elif key == 'same_budget':
-                            plt.xlabel("Number of budgets after initial round", fontsize=LABEL_SIZE)
-                        elif key == 'combined':
-                            plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
+                        plt.xlabel("Number of total labeled samples", fontsize=LABEL_SIZE)
                         for o_method in global_setting.OPEN_SET_METHOD_DICT[training_method]:
                             y = np.array([None for _ in x]).astype(np.double)
                             err = np.array([None for _ in x]).astype(np.double)
@@ -767,11 +706,14 @@ class AnalysisMachine(object):
                             except:
                                 pass
                             if draw_line:
-                                if key in ['combined', 'same_sample']:
-                                    init_size = fewer_size if data_config != 'regular' else regular_size
-                                    min_seen = min_seen + init_size
-                                    plt.vlines(min_seen,0,1,
-                                            linestyles='dashed')
+                                init_size = fewer_size if data_config != 'regular' else regular_size
+                                min_seen = min_seen + init_size
+                                plt.vlines(
+                                    min_seen,
+                                    0,
+                                    1,
+                                    linestyles='dashed'
+                                )
                             else:
                                 print(f"Not drawing line for {data_config}/{training_method}/{query_method}")
 
@@ -791,7 +733,7 @@ class AnalysisMachine(object):
                                 for q_method in detail_dict[t_method]:
                                     for o_method in detail_dict[t_method][q_method]:
                                         label_str = get_label_name("compare_open", data_config, t_method, q_method, open_method=o_method)
-                                        result_str = get_result_str(key, init_size, detail_dict[t_method][q_method][o_method])
+                                        result_str = get_result_str(init_size, detail_dict[t_method][q_method][o_method])
                                         result_lists.append([label_str, result_str])
                             file.write(tabulate(result_lists, headers=['Details', 'Result'], tablefmt='orgtbl'))
         
@@ -804,8 +746,7 @@ class AnalysisMachine(object):
                     budget_list = fewer_b_list
                     init_size = fewer_size
                 x = np.array(budget_list)
-                if key in ['combined', 'same_sample']:
-                    x = x + init_size
+                x = x + init_size
                 for training_method in self.ALL_TRAIN_METHODS:
                     for query_method in self.ALL_QUERY_METHODS:
                         for seed in self.ALL_DATASET_RAND_SEED:
@@ -872,12 +813,11 @@ class AnalysisMachine(object):
                                 plt.savefig(save_path)
                                 plt.close('all')
 
-    def _draw_perclass_plot(self, finished_exp, key, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
-        assert key in comparsion_dict
-        path = os.path.join(comparsion_dict[key]['path'], "compare_perclass")
+    def _draw_perclass_plot(self, finished_exp, comparsion_dict, total_size, regular_size, fewer_size, budget_ratio, draw_seen_line=True, error_bar=True):
+        path = os.path.join(comparsion_dict['path'], "compare_perclass")
         if not os.path.exists(path): os.makedirs(path)
-        fewer_b_list = comparsion_dict[key]['fewer_b_list']
-        regular_b_list = comparsion_dict[key]['regular_b_list']
+        fewer_b_list = comparsion_dict['fewer_b_list']
+        regular_b_list = comparsion_dict['regular_b_list']
         
         for data_config in self.ALL_DATA_CONFIGS:
             if data_config in 'regular':
@@ -887,8 +827,7 @@ class AnalysisMachine(object):
                 budget_list = fewer_b_list
                 init_size = fewer_size
             x = np.array(budget_list)
-            if key in ['combined', 'same_sample']:
-                x = x + init_size
+            x = x + init_size
             for training_method in self.ALL_TRAIN_METHODS:
                 for query_method in self.ALL_QUERY_METHODS:
                     for seed in self.ALL_DATASET_RAND_SEED:
@@ -1047,7 +986,7 @@ class AnalysisMachine(object):
     
     def _get_exp_name(self, data_config, training_method, query_method, b, data_rand_seed, silent=False):
         script_prefix = (f"python start_open_active_learning.py {self.data} --data_download_path {self.data_download_path} --data_save_path {self.data_save_path} --data_rand_seed {data_rand_seed}"
-                        f" --data_config {data_config} --training_method {training_method} --train_mode {self.train_mode} --trainer_save_dir {self.trainer_save_dir}"
+                        f" --data_config {data_config} --training_method {training_method} --train_mode {self.train_mode} --open_active_save_dir {self.open_active_save_dir}"
                         f" --query_method {query_method} --budget {b}"
                         f" --verbose {str(not silent)}")
         return script_prefix
@@ -1058,27 +997,28 @@ class AnalysisMachine(object):
         total_query_sample_size = len(trainset_info.query_samples)
         
         if self.data in ['CIFAR100', 'CUB200', 'Cars', 'CIFAR10']:
-            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular'].num_init_classes * DATASET_CONFIG_DICT[self.data]['regular'].sample_per_class
-            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_class'].sample_per_class
-            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_sample'].sample_per_class
+            cfg = DATASET_CONFIG_DICT[self.data]
+            regular_init_sample_size = cfg['regular'].num_init_classes * cfg['regular'].sample_per_class
+            fewer_init_sample_size = cfg['fewer_class'].num_init_classes * cfg['fewer_class'].sample_per_class
+            assert fewer_init_sample_size == cfg['fewer_sample'].num_init_classes * cfg['fewer_sample'].sample_per_class
         return total_query_sample_size, regular_init_sample_size, fewer_init_sample_size, list(map(float, self.budget_mode.split("_")))
  
 
-    def _get_budget_candidates(self, analysis_mode=None):
+    def _get_budget_candidates(self):
         """Returns:
             budget_list_regular : List of budget for regular setting
             budget_list_fewer : List of budget for fewer class/sample setting
             sample_diff : The difference between the number of starting samples
         """
-        assert analysis_mode in ['same_sample', 'same_budget']
         from utils import get_trainset_info_path
         trainset_info = torch.load(get_trainset_info_path(self.data_save_path, self.data))
         total_query_sample_size = len(trainset_info.query_samples)
         
         if self.data in ['CIFAR100', 'CUB200', 'Cars', 'CIFAR10']:
-            regular_init_sample_size = DATASET_CONFIG_DICT[self.data]['regular'].num_init_classes * DATASET_CONFIG_DICT[self.data]['regular'].sample_per_class
-            fewer_init_sample_size = DATASET_CONFIG_DICT[self.data]['fewer_class'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_class'].sample_per_class
-            assert fewer_init_sample_size == DATASET_CONFIG_DICT[self.data]['fewer_sample'].num_init_classes * DATASET_CONFIG_DICT[self.data]['fewer_sample'].sample_per_class
+            cfg = DATASET_CONFIG_DICT[self.data]
+            regular_init_sample_size = cfg['regular'].num_init_classes * cfg['regular'].sample_per_class
+            fewer_init_sample_size = cfg['fewer_class'].num_init_classes * cfg['fewer_class'].sample_per_class
+            assert fewer_init_sample_size == cfg['fewer_sample'].num_init_classes * cfg['fewer_sample'].sample_per_class
             
             regular_unlabeled_pool_size = total_query_sample_size - regular_init_sample_size
             fewer_unlabeled_pool_size = total_query_sample_size - fewer_init_sample_size
@@ -1091,15 +1031,12 @@ class AnalysisMachine(object):
         else:
             raise NotImplementedError()
         
-        if analysis_mode == 'same_budget':
-            return budget_list, budget_list
-        elif analysis_mode == 'same_sample':
-            return budget_list, list(
-                                    map(
-                                         lambda x: int(min(fewer_unlabeled_pool_size, x + sample_diff)),
-                                         budget_list
-                                    )
+        return budget_list, list(
+                                map(
+                                        lambda x: int(min(fewer_unlabeled_pool_size, x + sample_diff)),
+                                        budget_list
                                 )
+                            )
             
 
 
@@ -1119,10 +1056,6 @@ if __name__ == "__main__":
         # Cosine network
         TRAINING_METHODS = ['cosine_network']
         QUERY_METHODS = ['random', 'entropy', 'softmax', 'uldr_norm_cosine', 'coreset_norm_cosine']
-    elif config.analysis_trainer == 'deep_metric':
-        # Cosine network
-        TRAINING_METHODS = ['deep_metric']
-        QUERY_METHODS = ['random', 'entropy', 'softmax', 'uldr', 'coreset']
     
     # QUERY_METHODS = ['uldr', 'coreset']
     analysis_machine = AnalysisMachine(config.analysis_save_dir,
@@ -1130,7 +1063,7 @@ if __name__ == "__main__":
                                        config.budget_mode,
                                        config.data_download_path,
                                        config.data_save_path,
-                                       config.trainer_save_dir,
+                                       config.open_active_save_dir,
                                        config.data,
                                        DATASET_RAND_SEED_LIST,
                                        TRAINING_METHODS,
