@@ -1,3 +1,5 @@
+"""Analyze the results for closed set active learning experiments
+"""
 import json, argparse, os
 import numpy as np
 from glob import glob
