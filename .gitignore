@@ -21,6 +21,7 @@ open_active_results_new/
 old_open_active_results/
 open_active_results_*/
 open_active_results_*/
+.vscode
 paper_plots*/
 temp_*/
 *.pt
