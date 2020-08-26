@@ -14,6 +14,8 @@ import random
 import utils
 from tabulate import tabulate
 
+import global_setting
+
 SMALL_SIZE = 8
 MEDIUM_SIZE = 15
 BIGGER_SIZE = 20
@@ -358,7 +360,7 @@ class ActiveAnalysisMachine(object):
         from utils import get_trainset_info_path
         trainset_info = torch.load(get_trainset_info_path(self.active_save_path, self.data))
         if self.data in ['CIFAR100', 'CIFAR10']:
-            init_size = DATASET_CONFIG_DICT[self.data][self.data_config]['num_init_classes'] * DATASET_CONFIG_DICT[self.data][self.data_config]['sample_per_class']
+            init_size = DATASET_CONFIG_DICT[self.data][self.data_config].num_init_classes * DATASET_CONFIG_DICT[self.data][self.data_config].sample_per_class
 
         color_dict = {}
         color_list = ['r','b','g', 'c', 'm', 'y', 'black', 'darkblue', 'skyblue', 'steelblue', 'olive', 'deeppink', 'crimson']
@@ -371,7 +373,6 @@ class ActiveAnalysisMachine(object):
                 color_dict[s] = c
             return color_dict[s]
 
-        from analysis import TITLE_SIZE, LABEL_SIZE, LEGEND_SIZE
         plt.figure(figsize=(15,12))
         plt.title(f'Multi-class classification accuracy plot', fontsize=TITLE_SIZE)
         plt.xlabel("Total number of labeled samples", fontsize=LABEL_SIZE)
@@ -453,7 +454,7 @@ class ActiveAnalysisMachine(object):
 
 if __name__ == "__main__":
     from config import get_config
-    from global_setting import DATASET_CONFIG_DICT
+    from dataset_factory import DATASET_CONFIG_DICT
     from utils import prepare_save_dir
     config = get_config()
 
@@ -470,7 +471,7 @@ if __name__ == "__main__":
     # QUERY_METHODS = ['coreset']
     RANDOM_SEEDS = [None, 1, 10, 100, 1000, 2000]
 
-    budget_list = utils.get_budget_list_from_config(config)
+    budget_list = global_setting.get_budget_list_from_config(config)
 
     # QUERY_METHODS = ['uldr', 'coreset']
     analysis_machine = ActiveAnalysisMachine(config.active_analysis_save_dir,

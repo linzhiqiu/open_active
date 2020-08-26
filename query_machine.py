@@ -22,8 +22,6 @@ def get_query_machine(query_method, dataset_info, trainer_config):
         query_machine_class = ULDRQuery
     elif query_method == 'uldr_norm_cosine':
         query_machine_class = ULDRNormCosQuery
-    elif query_method == 'learnloss':
-        query_machine_class = LearnLossQuery
     elif query_method == 'coreset':
         query_machine_class = CoresetQuery
     elif query_method == 'coreset_norm_cosine':
@@ -33,7 +31,7 @@ def get_query_machine(query_method, dataset_info, trainer_config):
     return query_machine_class(dataset_info, trainer_config)
 
 class QueryMachine(object):
-    """Abstract class for query algorithms"""
+    """Template class for query algorithms"""
 
     def __init__(self, dataset_info, trainer_config):
         """Template class for all active querying methods
@@ -311,7 +309,7 @@ class CoresetNormCosQuery(CoresetQuery):
     
 def distance_matrix(A, B):
     # A is m x d pytorch matrix, B is n x d pytorch matrix.
-    # Result is m x n pytorch matrix
+    # Result is m x n pytorch euclidean distance matrix
     A_2 = (A**2).sum(dim=1)
     B_2 = (B**2).sum(dim=1)
     A_B_2 = A_2.view(A.shape[0], 1) + B_2
@@ -319,7 +317,9 @@ def distance_matrix(A, B):
     return dists
 
 def cosine_distance(A, B):
-    # whether the A and B are normalized unit vectors
+    # A is m x d pytorch matrix, B is n x d pytorch matrix.
+    # Result is m x n pytorch matrix
+    # make A and B normalized unit vectors
     A_normalized = torch.nn.functional.normalize(A, p=2, dim=1, eps=1e-12)
     B_normalized = torch.nn.functional.normalize(B, p=2, dim=1, eps=1e-12)
     return 1. - torch.matmul(A_normalized, B_normalized.t())

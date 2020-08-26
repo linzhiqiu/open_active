@@ -9,6 +9,10 @@
 #       get_target_unmapping_dict: Dictionary map softmax index to real class label
 #       get_target_unmapping_func_for_list: Function map softmax index (list) to class label (list)
 # (3) training: Print mode, make dirs
+#       SetPrintMode: Enable printing globally
+#       makedirs: Make a directory
+#       set_random_seed: Set torch and numpy random seed
+# (4) making saving directory:
 #       SetPrintMode
 #       makedirs
 import os
@@ -22,6 +26,11 @@ import numpy as np
 import global_setting # include some constant value
 
 def set_random_seed(seed):
+    """Set random seed for both torch and numpy
+
+    Args:
+        seed (int): The random seed
+    """    
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
@@ -29,6 +38,8 @@ def set_random_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 class SetPrintMode:
+    """Enable/disable printing globally
+    """    
     def __init__(self, hidden=False):
         self.hidden = hidden
 
@@ -42,18 +53,24 @@ class SetPrintMode:
             sys.stdout.close()
             sys.stdout = self._original_stdout
 
-
 def makedirs(dir_name):
+    """Make a directory and make it accessible to all
+
+    Args:
+        dir_name (str): Directory to create
+    """    
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, mode=0o777)
         os.chmod(dir_name, 0o0777)
 
 def get_loader(dataset, target_transform, batch_size=1, shuffle=False, workers=0):
     """Returns a PyTorch Dataloader
-        Args:
-            target_transform (fun int -> int) : None if no need to change the output label.
-                                                Otherwise supply the label transform function.
-            The rest of the args follows spec in torch.utils.data.Dataloader
+    Args:
+        target_transform (fun int -> int) : None if no need to change the output label.
+                                            Otherwise supply the label transform function.
+        batch_size (int): Batch size
+        shuffle (bool): Shuffle the batch randomly if set True
+        workers (int): Number of workers for fetching batches from memory
     """
     dataset.target_transform = target_transform
     loader = DataLoader(
@@ -66,6 +83,19 @@ def get_loader(dataset, target_transform, batch_size=1, shuffle=False, workers=0
     return loader
 
 def get_subset_loader(dataset, samples, target_transform, batch_size=1, shuffle=False, workers=0):
+    """Get a pytorch dataloader using a subset of samples from the dataset
+
+    Args:
+        dataset (torch Dataset): PyTorch Dataset object
+        samples (list[int]): List of subset samples
+        target_transform (torch transform): PyTorch Transformation object
+        batch_size (int, optional): Batch size. Defaults to 1.
+        shuffle (bool, optional): Whether to shuffle the batches. Defaults to False.
+        workers (int, optional): Num of workers for fetching batches. Defaults to 0.
+
+    Returns:
+        [type]: [description]
+    """    
     subset = torch.utils.data.Subset(dataset, samples)
     subset.dataset.target_transform = target_transform
     loader = DataLoader(
@@ -78,15 +108,19 @@ def get_subset_loader(dataset, samples, target_transform, batch_size=1, shuffle=
     return loader
 
 def get_subset_dataloaders(dataset, train_samples, val_samples, target_transform, batch_size, workers=0, shuffle=True):
-    """ Return a dict of train/val dataloaders.
-            Returns:
-                dataloaders (dict) : dataloaders['train'] and dataloaders['val'] are the trainset/valset loader
-            Args:
-                dataset : The PyTorch dataset that contains both train and val set
-                train_samples (lst of int) : The indices of train set samples
-                val_samples (lst of int) : The indices of val set samples
-                target_transform (fun int -> int) : Label transform function (transform the actual label to softmax index)
-                other args follow specs of PyTorch
+    """Return a dict of train/val dataloaders.
+    
+    Args:
+        dataset : The PyTorch dataset that contains both train and val set
+        train_samples (lst of int) : The indices of train set samples
+        val_samples (lst of int) : The indices of val set samples
+        target_transform (fun int -> int) : Label transform function (transform the actual label to softmax index)
+        batch_size (int)
+        workers (int)
+        shuffle (bool)
+    
+    Returns:
+        dataloaders (dict) : dataloaders['train'] and dataloaders['val'] are the trainset/valset loader
     """
     dataloaders = {}
     if len(train_samples) > 0:
@@ -107,39 +141,25 @@ def get_subset_dataloaders(dataset, train_samples, val_samples, target_transform
 
     return dataloaders
 
-def get_dataloaders(dataset, batch_size=128, workers=4, shuffle=True):
-    """Return a dict of only train dataloader.
-            Returns:
-                dataloaders (dict) : dataloaders['train'] is the trainset loader
-    """
-    dataloaders = {}
-    dataloaders['train'] = DataLoader(
-                 dataset,
-                 batch_size=batch_size,
-                 shuffle=shuffle,
-                 num_workers=workers,
-                 pin_memory=True
-             )
-    return dataloaders
-
 def get_target_mapping_func(classes,
                             discovered_classes,
                             open_classes,
                             OPEN_CLASS_INDEX=global_setting.OPEN_CLASS_INDEX,
                             UNDISCOVERED_CLASS_INDEX=global_setting.UNDISCOVERED_CLASS_INDEX):
     """Return a function that map discovered_classes indices to 0-len(discovered_classes). 
-       If not in hold-out open classes, undiscovered classes
-       are mapped to UNDISCOVERED_CLASS_INDEX.
-       Hold-out open classes are mapped to OPEN_CLASS_INDEX.
-       Always return the same indices as long as discovered classes is the same.
-        Args:
-            classes (lst/set of int): The list/set of all classes
-            discovered_classes (set of int): The set of all discovered classes
-            open_classes (set of int): The set of all hold-out open classes
-            OPEN_CLASS_INDEX (int)
-            UNDISCOVERED_CLASS_INDEX (int)
-        Returns:
-            target_mapping_func (fun int -> int) : As described above.
+    If not in hold-out open classes, undiscovered classes
+    are mapped to UNDISCOVERED_CLASS_INDEX.
+    Hold-out open classes are mapped to OPEN_CLASS_INDEX.
+    Always return the same indices as long as discovered classes is the same.
+    
+    Args:
+        classes (Iterable[int]): The set of all classes
+        discovered_classes (set[int]): The set of all discovered classes
+        open_classes (set[int]): The set of all hold-out open classes
+        OPEN_CLASS_INDEX (int): Hold-out open classes will be mapped to this index
+        UNDISCOVERED_CLASS_INDEX (int): Yet to be discovered classes will be mapped to this index
+    Returns:
+        target_mapping_func (fun int -> int) : As described above.
     """
     discovered_classes = sorted(list(discovered_classes))
     open_classes = sorted(list(open_classes))
@@ -156,8 +176,8 @@ def get_target_mapping_func_for_tensor(classes,
                                        UNDISCOVERED_CLASS_INDEX=global_setting.UNDISCOVERED_CLASS_INDEX,
                                        device='cuda'):
     """Exactly the same as get_target_mapping_func but the returning function operates on tensor level
-        Returns:
-            target_mapping_func (fun tensor -> tensor) : As specified.
+    Returns:
+        target_mapping_func (fun tensor -> tensor) : As specified.
     """
     discovered_classes = sorted(list(discovered_classes))
     open_classes = sorted(list(open_classes))
@@ -174,12 +194,14 @@ def get_target_mapping_func_for_tensor(classes,
 
 def get_target_unmapping_dict(classes, discovered_classes):
     """Return a dictionary that map 0-len(discovered_classes) to true discovered_classes indices.
-        Args:
-            classes: The list of all classes
-            discovered_classes: The set of all discovered classes
-        Returns:
-            unmapping (dict int -> int) : It maps softmax indices to true class indices.
-                                          It is the inverse function of get_target_transform_func() (for discovered_classes).
+    
+    Args:
+        classes (set[int]): The list of all classes
+        discovered_classes (set[int]): The set of all discovered classes
+    
+    Returns:
+        unmapping (dict int -> int) : It maps softmax indices to true class indices.
+                                      It is the inverse function of get_target_transform_func() (for discovered_classes).
     """
     discovered_classes = sorted(list(discovered_classes))
     mapping = {idx : -1 if idx not in discovered_classes else
@@ -192,8 +214,13 @@ def get_target_unmapping_dict(classes, discovered_classes):
 
 def get_target_unmapping_func_for_list(classes, discovered_classes):
     """Sames as get_target_unmapping_dict, but the returned function operate on lists.
-        Returns:
-            unmapping (fun lst of int -> lst of int)
+
+    Args:
+        classes (set[int]): The list of all classes
+        discovered_classes (set[int]): The set of all discovered classes
+
+    Returns:
+        unmapping (fun lst of int -> lst of int)
     """
     discovered_classes = sorted(list(discovered_classes))
     mapping = {idx : -1 if idx not in discovered_classes else
@@ -205,20 +232,28 @@ def get_target_unmapping_func_for_list(classes, discovered_classes):
         return list(map(lambda x: unmapping_dict[x], lst))
     return unmapp_func
 
-
-def get_dataset_info_path(save_path, data, data_config, data_rand_seed):
+def _get_dataset_info_path(save_path, data, data_config, data_rand_seed):
+    # Returns: Where the dataset information will be saved
     dataset_info_dir = os.path.join(
-                            save_path,
-                            data,
-                            data_config,
-                        )
+                           save_path,
+                           data,
+                           data_config,
+                       )
     if not os.path.exists(dataset_info_dir):
         print(f"{dataset_info_dir} does not exists.")
         makedirs(dataset_info_dir)
     dataset_info_path = os.path.join(dataset_info_dir, f"seed_{data_rand_seed}.pt")
     return dataset_info_path
 
-def get_open_active_save_dir(open_active_save_dir, data, data_config, data_rand_seed, training_method, train_mode, makedir=True):
+def get_open_active_save_dir(open_active_save_dir,
+                             data,
+                             data_config,
+                             data_rand_seed,
+                             training_method,
+                             train_mode,
+                             makedir=True):
+    """Return main saving directory for logging the results of an open set active learning experiments.
+    """
     save_dir = os.path.join(open_active_save_dir,
                             data,
                             data_config,
@@ -231,12 +266,14 @@ def get_open_active_save_dir(open_active_save_dir, data, data_config, data_rand_
     return save_dir
 
 def get_open_save_dir(open_save_dir,
-                          data,
-                          data_config,
-                          data_rand_seed,
-                          training_method,
-                          train_mode,
-                          makedir=True):
+                      data,
+                      data_config,
+                      data_rand_seed,
+                      training_method,
+                      train_mode,
+                      makedir=True):
+    """Return main saving directory for logging the results of an open set learning experiments.
+    """
     save_dir = os.path.join(open_save_dir,
                             data,
                             data_config,
@@ -256,17 +293,13 @@ def get_active_save_dir(active_save_dir,
                         training_method,
                         train_mode,
                         active_query_scheme,
-                        # active_val_mode,
                         makedir=True):
-    # if active_val_mode == None:
-    #     training_method_str = training_method
-    # else:
-    #     training_method_str = "_".join([training_method, "val", active_val_mode])
+    """Return main saving directory for logging the results of an active learning experiments.
+    """
     save_dir = os.path.join(active_save_dir,
                             data,
                             data_config,
                             "seed_"+str(data_rand_seed),
-                            # training_method_str,
                             training_method,
                             train_mode,
                             active_query_scheme)
@@ -277,6 +310,15 @@ def get_active_save_dir(active_save_dir,
     return save_dir
 
 def get_trainset_info_path(data_save_path, data):
+    """Return where the training set information will be saved
+
+    Args:
+        data_save_path (str): Where dataset will be saved
+        data (str): Name of dataset
+
+    Returns:
+        str: Path to where it will be saved
+    """    
     trainset_info_dir = os.path.join(data_save_path, data)
     makedirs(trainset_info_dir)
     return os.path.join(trainset_info_dir, "trainset_info.pt")
@@ -296,7 +338,6 @@ def prepare_save_dir_from_config(config, makedir=True):
                             open_set_methods,
                             makedir=makedir)
 
-
 def prepare_save_dir(save_path,
                      download_path,
                      open_active_save_dir,
@@ -313,7 +354,7 @@ def prepare_save_dir(save_path,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['data_save_path'] = get_dataset_info_path(save_path,
+    paths_dict['data_save_path'] = _get_dataset_info_path(save_path,
                                                             data,
                                                             data_config,
                                                             data_rand_seed)
@@ -361,23 +402,6 @@ def prepare_save_dir(save_path,
         paths_dict['open_result_roc_paths'][key]   = os.path.join(paths_dict['test_dirs'][key],"roc.png")
         paths_dict['open_result_goscr_paths'][key] = os.path.join(paths_dict['test_dirs'][key],'goscr.png')
     return paths_dict
-
-def get_budget_list_from_config(config, makedir=True):
-    return get_budget_list(config.data)
-
-def get_budget_list(data):
-    """Return the list of budget candidates for active learning experiments.
-        Args:
-            data (str) - dataset name
-        Returns:
-            budget_list (list) : List of int
-    """
-    if data in ['CIFAR10']:
-        return [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
-    elif data in ['CIFAR100']:
-        return [0, 3000, 6000, 9000, 12000, 15000]
-    else:
-        raise NotImplementedError()
                            
 def prepare_active_learning_dir_from_config(config, budget_list, makedir=True):
     return prepare_active_learning_dir(budget_list,
@@ -410,10 +434,10 @@ def prepare_active_learning_dir(budget_list,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['data_save_path'] = get_dataset_info_path(active_save_path,
-                                                            data,
-                                                            data_config,
-                                                            data_rand_seed)
+    paths_dict['data_save_path'] = _get_dataset_info_path(active_save_path,
+                                                          data,
+                                                          data_config,
+                                                          data_rand_seed)
     paths_dict['trainset_info_path'] = get_trainset_info_path(active_save_path, data)
     
     # Where the training/testing results will be saved
@@ -474,7 +498,7 @@ def prepare_open_set_learning_dir(open_set_save_path,
     """
     paths_dict = {}
     paths_dict['data_download_path'] = download_path
-    paths_dict['data_save_path'] = get_dataset_info_path(open_set_save_path,
+    paths_dict['data_save_path'] = _get_dataset_info_path(open_set_save_path,
                                                             data,
                                                             data_config,
                                                             data_rand_seed)
