@@ -73,7 +73,7 @@ For open set evaluation, we provides two metrics:
 We may use area under ROC or OSCR to evaluate the performance of an algorithm in open set scenario.
 
 # Walkthrough
-- config.py
+- ```config.py```
   - An argparser for all training/testing configuration shared by all python scripts in this library.
   - You should modify the default arguments if you do not wish to save the outputs to current folder.
 - How to start an experiment:
@@ -88,23 +88,23 @@ We may use area under ROC or OSCR to evaluate the performance of an algorithm in
 - How to plot the results of a bunch of closed set active experiments, e.g. for different active query algorithms.
   - Run the below script
     - ```closed_set_active_analysis.py```
-- trainer.py
+- ```trainer.py```
   - Contains a Trainer class for performing training/querying/testing.
-- trainer_machine.py
+- ```trainer_machine.py```
   - Contains various training methods such as softmax-based and cosine-based networks.
-- query_machine.py
+- ```query_machine.py```
   - Contains various active query methods.
-- eval_machine.py
+- ```eval_machine.py```
   - Contains various open set learning methods.
-- dataset_factory.py
+- ```dataset_factory.py```
   - Prepare datasets for open set/active learning experiments.
-- trainer_config.py
+- ```trainer_config.py```
   - Configurations for optimizing the network (e.g., hyperparameters).
-- utils.py
+- ```utils.py```
   - Contains helper methods for all other modules
-- transform.py
+- ```transform.py```
   - Implements image preprocessing functions.
-- global_setting.py
+- ```global_setting.py```
   - Contains some global configuration
 
 
